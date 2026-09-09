@@ -1,0 +1,75 @@
+.shell {
+  min-height: 100svh;
+  background: var(--bg);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar__logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: block;
+}
+
+.topbar__name {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.topbar__user {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.topbar__who {
+  display: grid;
+  line-height: 1.25;
+  text-align: right;
+  font-size: 13.5px;
+  color: var(--text-strong);
+}
+
+.topbar__role {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.btn-ghost {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-strong);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.btn-ghost:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.shell__body {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
