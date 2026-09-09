@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,8 @@ using Microsoft.OpenApi;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Services.Llm;
+using RescueSriLanka.Api.Agents.IncidentAnalysisAgent;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +46,18 @@ builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+// Component A — incidents, map and safety zones.
+builder.Services.AddScoped<ISafetyZoneService, SafetyZoneService>();
+builder.Services.AddScoped<IIncidentService, IncidentService>();
+builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
+
+// Agentic AI — provider-agnostic client plus Component A's agent.
+builder.Services.AddHttpClient<ILlmClient, GoogleAiClient>(client =>
+    client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddScoped<IncidentAnalysisTools>();
+builder.Services.AddScoped<IIncidentAnalysisAgent, IncidentAnalysisAgent>();
+builder.Services.AddScoped<IAgentRunService, AgentRunService>();
+
 // ---------------------------------------------------------------- clients
 // React (Vite) and Flutter web during development. Tighten before deployment.
 const string CorsPolicy = "ClientApps";
@@ -56,7 +71,11 @@ builder.Services.AddCors(options =>
         .AllowAnyMethod()));
 
 // ---------------------------------------------------------------- api surface
-builder.Services.AddControllers();
+builder.Services
+    .AddControllers()
+    // Enums travel as readable strings ("Critical", not 3) in both directions.
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -108,12 +127,22 @@ if (app.Environment.IsDevelopment())
             db,
             services.GetRequiredService<IPasswordHasher<User>>(),
             logger);
+
+        // Sample incidents for the map/dashboard — off via configuration.
+        if (app.Configuration.GetValue("SeedSampleIncidents", false))
+        {
+            await IncidentSeeder.SeedAsync(db, logger);
+            await services.GetRequiredService<ISafetyZoneService>().RecomputeAsync();
+        }
     }
     catch (Exception ex)
     {
         logger.LogError(ex, "Database migration or seeding failed.");
     }
 }
+
+// Serves uploaded incident photos from wwwroot/uploads.
+app.UseStaticFiles();
 
 app.UseCors(CorsPolicy);
 app.UseAuthentication();

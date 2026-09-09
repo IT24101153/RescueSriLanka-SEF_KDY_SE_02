@@ -1,6 +1,7 @@
 import logoUrl from '../../assets/logo.jpg'
 import { ROLE_LABELS } from '../../auth/session'
 import type { Session } from '../../auth/session'
+import Dashboard from '../Dashboard/Dashboard'
 import './ConsoleShell.css'
 
 type ConsoleShellProps = {
@@ -31,7 +32,9 @@ export default function ConsoleShell({ session, onSignOut }: ConsoleShellProps) 
         </div>
       </header>
 
-      <main className="shell__body" />
+      <main className="shell__body">
+        <Dashboard />
+      </main>
     </div>
   )
 }

@@ -73,3 +73,44 @@
   margin: 0 auto;
   padding: 32px 24px 64px;
 }
+
+/* ---------- mobile ---------- */
+
+@media (max-width: 720px) {
+  .topbar {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .topbar__name {
+    font-size: 14px;
+  }
+
+  .topbar__user {
+    gap: 10px;
+  }
+
+  .topbar__who {
+    font-size: 12px;
+  }
+
+  .topbar__role {
+    font-size: 11px;
+  }
+
+  .btn-ghost {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12.5px;
+  }
+
+  .shell__body {
+    padding: 16px 14px 48px;
+  }
+}
+
+@media (max-width: 420px) {
+  .topbar__who {
+    display: none;
+  }
+}

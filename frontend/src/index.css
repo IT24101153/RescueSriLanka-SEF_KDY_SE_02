@@ -31,16 +31,26 @@
   --accent-ring: rgba(250, 167, 27, 0.32);
   --accent-shadow: rgba(250, 167, 27, 0.45);
 
-  /* ---- Severity scale — RESERVED ---- */
-  --safe: #16a34a; /* Low      / Safe zone      */
-  --caution: #e69100; /* Moderate / Caution zone   */
-  --high: #ea580c; /* High                      */
-  --critical: #dc2626; /* Critical / Danger zone    */
+  /* ---- Severity scale — RESERVED ----
+     Validated for colour-blind separation (protan/deutan/tritan) and for
+     normal-vision separation. Do not re-tune by eye: the amber/orange and
+     green/amber pairs fail CVD checks at the obvious values. Always pair a
+     severity colour with its text label — amber is below 3:1 on white. */
+  --safe: #12946a; /* Low      / Safe zone      */
+  --caution: #e5a800; /* Moderate / Caution zone   */
+  --high: #e35d0b; /* High                      */
+  --critical: #9c1c3d; /* Critical / Danger zone    */
 
-  --safe-soft: rgba(22, 163, 74, 0.12);
-  --caution-soft: rgba(230, 145, 0, 0.12);
-  --high-soft: rgba(234, 88, 12, 0.12);
-  --critical-soft: rgba(220, 38, 38, 0.12);
+  /* Darker steps for text sitting on a soft background. */
+  --safe-ink: #0b6b4c;
+  --caution-ink: #8a6500;
+  --high-ink: #a03f06;
+  --critical-ink: #7a1530;
+
+  --safe-soft: rgba(18, 148, 106, 0.12);
+  --caution-soft: rgba(229, 168, 0, 0.14);
+  --high-soft: rgba(227, 93, 11, 0.12);
+  --critical-soft: rgba(156, 28, 61, 0.1);
 
   /* Destructive / error states borrow the critical red */
   --danger: #dc2626;

@@ -1,7 +1,5 @@
+import { API_BASE } from '../api/client'
 import type { Session } from './session'
-
-/** Base URL of the ASP.NET Core API. Override with VITE_API_URL. */
-export const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:5093'
 
 export type SignInResult =
   | { ok: true; session: Session }
