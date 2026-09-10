@@ -13,6 +13,7 @@ namespace RescueSriLanka.Api.Controllers;
 public class SafetyZonesController(ISafetyZoneService zoneService) : ControllerBase
 {
     [HttpGet]
+    [AllowAnonymous]
     public async Task<ActionResult<IReadOnlyList<SafetyZoneDto>>> List(CancellationToken ct) =>
         Ok(await zoneService.GetActiveAsync(ct));
 
@@ -21,6 +22,7 @@ public class SafetyZonesController(ISafetyZoneService zoneService) : ControllerB
     /// travel advisory — treat the response shape as a published contract.
     /// </summary>
     [HttpGet("check")]
+    [AllowAnonymous]
     public async Task<ActionResult<ZoneCheckResultDto>> Check(
         [FromQuery] double lat, [FromQuery] double lng, CancellationToken ct)
     {

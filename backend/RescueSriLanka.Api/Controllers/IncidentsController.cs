@@ -11,6 +11,9 @@ namespace RescueSriLanka.Api.Controllers;
 /// <summary>Component A — incidents and the live disaster map.</summary>
 [ApiController]
 [Route("api/[controller]")]
+// Read endpoints are deliberately anonymous: a tourist must be able to see
+// active hazards and safety zones without creating an account first. Writes and
+// coordinator actions stay authenticated.
 [Authorize]
 public class IncidentsController(
     IIncidentService incidentService,
@@ -21,6 +24,7 @@ public class IncidentsController(
 
     /// <summary>Filtered incident list for the admin table.</summary>
     [HttpGet]
+    [AllowAnonymous]
     public async Task<ActionResult<IReadOnlyList<IncidentDto>>> List(
         [FromQuery] IncidentStatus? status,
         [FromQuery] IncidentSeverity? severity,
@@ -31,6 +35,7 @@ public class IncidentsController(
         Ok(await incidentService.QueryAsync(status, severity, type, district, activeOnly, ct));
 
     [HttpGet("{id:guid}")]
+    [AllowAnonymous]
     public async Task<ActionResult<IncidentDto>> Get(Guid id, CancellationToken ct)
     {
         var incident = await incidentService.GetAsync(id, ct);
@@ -39,6 +44,7 @@ public class IncidentsController(
 
     /// <summary>"What's near me" — the query the citizen map is built on.</summary>
     [HttpGet("nearby")]
+    [AllowAnonymous]
     public async Task<ActionResult<IReadOnlyList<IncidentDto>>> Nearby(
         [FromQuery] double lat,
         [FromQuery] double lng,
@@ -60,6 +66,7 @@ public class IncidentsController(
 
     /// <summary>Counts and breakdowns for the dashboard header.</summary>
     [HttpGet("statistics")]
+    [AllowAnonymous]
     public async Task<ActionResult<DashboardStatisticsDto>> Statistics(CancellationToken ct) =>
         Ok(await incidentService.GetStatisticsAsync(ct));
 

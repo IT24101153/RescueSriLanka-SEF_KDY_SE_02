@@ -62,13 +62,28 @@ builder.Services.AddScoped<IAgentRunService, AgentRunService>();
 // React (Vite) and Flutter web during development. Tighten before deployment.
 const string CorsPolicy = "ClientApps";
 builder.Services.AddCors(options =>
-    options.AddPolicy(CorsPolicy, policy => policy
-        .WithOrigins(
-            "http://localhost:5173",
-            "http://localhost:4173",
-            "http://localhost:3000")
-        .AllowAnyHeader()
-        .AllowAnyMethod()));
+    options.AddPolicy(CorsPolicy, policy =>
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            // Vite, Flutter web and any other local dev server pick their own
+            // ports, so allow any localhost origin while developing. Production
+            // gets an explicit list instead.
+            policy
+                .SetIsOriginAllowed(origin =>
+                    Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
+                    (uri.Host is "localhost" or "127.0.0.1" or "::1"))
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+            return;
+        }
+
+        var allowed = builder.Configuration
+            .GetSection("Cors:AllowedOrigins")
+            .Get<string[]>() ?? [];
+
+        policy.WithOrigins(allowed).AllowAnyHeader().AllowAnyMethod();
+    }));
 
 // ---------------------------------------------------------------- api surface
 builder.Services
