@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Agents.PlannerAgent;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +15,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 builder.Services.AddScoped<IHelpRequestService, HelpRequestService>();
 builder.Services.AddScoped<ITravelAdvisoryService, TravelAdvisoryService>();
+builder.Services.AddScoped<IPlannerAgentService, PlannerAgentService>();
+builder.Services.AddScoped<IHelpRequestServiceForAgent, HelpRequestServiceForAgent>();
 builder.Services.AddControllers();
 
 var app = builder.Build();
