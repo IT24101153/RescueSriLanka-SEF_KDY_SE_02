@@ -16,6 +16,8 @@ var builder = WebApplication.CreateBuilder(args);
 // ---------------------------------------------------------------- database
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // ---------------------------------------------------------------- auth
 var jwtSection = builder.Configuration.GetSection("Jwt");
@@ -57,6 +59,10 @@ builder.Services.AddHttpClient<ILlmClient, GoogleAiClient>(client =>
 builder.Services.AddScoped<IncidentAnalysisTools>();
 builder.Services.AddScoped<IIncidentAnalysisAgent, IncidentAnalysisAgent>();
 builder.Services.AddScoped<IAgentRunService, AgentRunService>();
+
+// Component B — help requests and travel advisories.
+builder.Services.AddScoped<IHelpRequestService, HelpRequestService>();
+builder.Services.AddScoped<ITravelAdvisoryService, TravelAdvisoryService>();
 
 // ---------------------------------------------------------------- clients
 // React (Vite) and Flutter web during development. Tighten before deployment.
