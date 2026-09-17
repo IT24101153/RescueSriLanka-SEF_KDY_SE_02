@@ -19,6 +19,10 @@ namespace RescueSriLanka.Api.Data
         public DbSet<AgentWorkflow> AgentWorkflows { get; set; }
         public DbSet<AgentStep> AgentSteps { get; set; }
 
+        // Auth — built locally to test login end-to-end; will be reconciled
+        // with the team's real Auth branch when branches are merged.
+        public DbSet<User> Users { get; set; }
+
         // NOTE: as your teammates add their entities, they'll add their own
         // DbSet<> lines here too — this file is shared, so coordinate merges
         // carefully to avoid overwriting each other's DbSets.
@@ -72,6 +76,10 @@ namespace RescueSriLanka.Api.Data
                 .Property(s => s.ValidationResultJson)
                 .HasColumnType("jsonb")
                 .HasColumnName("ValidationResult");
+
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.Email)
+                .IsUnique();
         }
     }
 }

@@ -1,12 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
+import { authFetch } from "../lib/api";
 import "./HelpRequestsReview.css";
-
-// Adjust this to match your project's actual API base URL config
-// (e.g. import.meta.env.VITE_API_BASE_URL if you have a .env set up).
-const API_BASE = "http://localhost:5093";
 
 const TYPE_LABELS = ["Water", "Food", "Medical", "Rescue", "Shelter", "Other"] as const;
 const STATUS_LABELS = ["Pending", "Assigned", "In Progress", "Resolved", "Cancelled"] as const;
+const VERIFICATION_LABELS = ["Pending Verification", "Verified", "Rejected (Fake)"] as const;
 
 type UrgencyTier = "danger" | "caution" | "safe";
 
@@ -19,6 +17,8 @@ interface HelpRequestDto {
   longitude: number;
   urgencyScore: number;
   status: number;
+  verificationStatus: number;
+  verificationNotes: string | null;
   imageUrl: string | null;
   createdAt: string;
   updatedAt: string;
@@ -59,7 +59,7 @@ export default function HelpRequestsReview() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/HelpRequests`);
+      const res = await authFetch(`/api/HelpRequests`);
       if (!res.ok) throw new Error(`Server responded ${res.status}`);
       const data: HelpRequestDto[] = await res.json();
       const sorted = [...data].sort((a, b) => b.urgencyScore - a.urgencyScore);
@@ -78,7 +78,7 @@ export default function HelpRequestsReview() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/api/HelpRequests/${id}/history`);
+      const res = await authFetch(`/api/HelpRequests/${id}/history`);
       if (!res.ok) throw new Error();
       setHistory(await res.json());
     } catch {
@@ -100,9 +100,8 @@ export default function HelpRequestsReview() {
     if (!selected) return;
     setUpdating(true);
     try {
-      const res = await fetch(`${API_BASE}/api/HelpRequests/${selected.id}/status`, {
+      const res = await authFetch(`/api/HelpRequests/${selected.id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           newStatus: newStatusIndex,
           notes: `Status set to ${STATUS_LABELS[newStatusIndex]} by coordinator`,
@@ -113,6 +112,26 @@ export default function HelpRequestsReview() {
       await loadHistory(selected.id);
     } catch {
       setError("Status update failed. Try again.");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function verify(isReal: boolean) {
+    if (!selected) return;
+    setUpdating(true);
+    try {
+      const res = await authFetch(`/api/HelpRequests/${selected.id}/verify`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          isReal,
+          notes: isReal ? "Verified by coordinator" : "Marked as fake by coordinator",
+        }),
+      });
+      if (!res.ok) throw new Error();
+      await loadRequests();
+    } catch {
+      setError("Verification update failed. Try again.");
     } finally {
       setUpdating(false);
     }
@@ -161,8 +180,30 @@ export default function HelpRequestsReview() {
               <div className={`hr-detail-urgency hr-detail-urgency--${urgencyTier(selected.urgencyScore)}`}>
                 Urgency {selected.urgencyScore} · {TYPE_LABELS[selected.type]}
               </div>
+              <div className={`hr-verify-badge hr-verify-badge--${selected.verificationStatus}`}>
+                {VERIFICATION_LABELS[selected.verificationStatus]}
+              </div>
 
               <p className="hr-detail-desc">{selected.description}</p>
+
+              {selected.verificationStatus === 0 && (
+                <div className="hr-verify-actions">
+                  <button
+                    className="hr-verify-btn hr-verify-btn--real"
+                    disabled={updating}
+                    onClick={() => verify(true)}
+                  >
+                    Mark as Real
+                  </button>
+                  <button
+                    className="hr-verify-btn hr-verify-btn--fake"
+                    disabled={updating}
+                    onClick={() => verify(false)}
+                  >
+                    Mark as Fake
+                  </button>
+                </div>
+              )}
 
               <dl className="hr-detail-meta">
                 <div>

@@ -1,4 +1,7 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Services;
 using RescueSriLanka.Api.Agents.PlannerAgent;
@@ -17,6 +20,7 @@ builder.Services.AddScoped<IHelpRequestService, HelpRequestService>();
 builder.Services.AddScoped<ITravelAdvisoryService, TravelAdvisoryService>();
 builder.Services.AddScoped<IPlannerAgentService, PlannerAgentService>();
 builder.Services.AddScoped<IHelpRequestServiceForAgent, HelpRequestServiceForAgent>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddControllers();
 
 builder.Services.AddCors(options =>
@@ -29,9 +33,42 @@ builder.Services.AddCors(options =>
     });
 });
 
+// JWT authentication
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? "local-dev-only-secret-change-before-merge-32chars-minimum";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "RescueSriLankaApi";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "RescueSriLankaClients";
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
+// Seed one admin account on startup (idempotent — safe to run every time)
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await AdminSeeder.SeedAdminAsync(db);
+}
+
 app.UseCors("AllowFrontend");
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 
