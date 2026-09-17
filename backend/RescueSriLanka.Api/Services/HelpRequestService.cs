@@ -16,6 +16,7 @@ namespace RescueSriLanka.Api.Services
         Task<List<HelpRequestResponseDto>> GetAllAsync();
         Task<HelpRequestResponseDto?> UpdateStatusAsync(Guid id, Guid changedByUserId, UpdateHelpRequestStatusDto dto);
         Task<List<StatusHistoryDto>> GetHistoryAsync(Guid id);
+        Task<HelpRequestResponseDto?> VerifyAsync(Guid id, Guid verifiedByUserId, VerifyHelpRequestDto dto);
     }
 
     public class HelpRequestService : IHelpRequestService
@@ -89,6 +90,31 @@ namespace RescueSriLanka.Api.Services
             return ToDto(entity);
         }
 
+        public async Task<HelpRequestResponseDto?> VerifyAsync(Guid id, Guid verifiedByUserId, VerifyHelpRequestDto dto)
+        {
+            var entity = await _db.HelpRequests.FindAsync(id);
+            if (entity is null) return null;
+
+            entity.VerificationStatus = dto.IsReal
+                ? Models.VerificationStatus.Verified
+                : Models.VerificationStatus.RejectedFake;
+            entity.VerifiedByUserId = verifiedByUserId;
+            entity.VerifiedAt = DateTime.UtcNow;
+            entity.VerificationNotes = dto.Notes;
+            entity.UpdatedAt = DateTime.UtcNow;
+
+            // A request rejected as fake should not remain actionable —
+            // ASSUMPTION: auto-cancel it. Confirm with team if a different
+            // behaviour is wanted (e.g. leave status untouched).
+            if (!dto.IsReal)
+            {
+                entity.Status = HelpRequestStatus.Cancelled;
+            }
+
+            await _db.SaveChangesAsync();
+            return ToDto(entity);
+        }
+
         public async Task<List<StatusHistoryDto>> GetHistoryAsync(Guid id)
         {
             var history = await _db.RequestStatusHistories
@@ -142,6 +168,8 @@ namespace RescueSriLanka.Api.Services
             Longitude = entity.Longitude,
             UrgencyScore = entity.UrgencyScore,
             Status = entity.Status,
+            VerificationStatus = entity.VerificationStatus,
+            VerificationNotes = entity.VerificationNotes,
             ImageUrl = entity.ImageUrl,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt

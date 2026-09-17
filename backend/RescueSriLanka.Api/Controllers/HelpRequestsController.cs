@@ -69,5 +69,18 @@ namespace RescueSriLanka.Api.Controllers
             var result = await _service.GetHistoryAsync(id);
             return Ok(result);
         }
+
+        // PATCH /api/helprequests/{id}/verify
+        // Admin marks a citizen report as real or fake before it's treated as legitimate.
+        [HttpPatch("{id}/verify")]
+        public async Task<ActionResult<HelpRequestResponseDto>> Verify(Guid id, [FromBody] VerifyHelpRequestDto dto)
+        {
+            // TODO once JWT auth is wired in the frontend: read the real admin user id from claims
+            var verifiedByUserId = Guid.NewGuid(); // placeholder until auth claims are read here
+
+            var result = await _service.VerifyAsync(id, verifiedByUserId, dto);
+            if (result is null) return NotFound();
+            return Ok(result);
+        }
     }
 }

@@ -21,6 +21,13 @@ namespace RescueSriLanka.Api.DTOs
         public string? Notes { get; set; }
     }
 
+    // What the admin sends when verifying a citizen report as real or fake
+    public class VerifyHelpRequestDto
+    {
+        public bool IsReal { get; set; }
+        public string? Notes { get; set; }
+    }
+
     // What the API returns to clients (React + Flutter)
     public class HelpRequestResponseDto
     {
@@ -32,6 +39,8 @@ namespace RescueSriLanka.Api.DTOs
         public double Longitude { get; set; }
         public int UrgencyScore { get; set; }
         public HelpRequestStatus Status { get; set; }
+        public VerificationStatus VerificationStatus { get; set; }
+        public string? VerificationNotes { get; set; }
         public string? ImageUrl { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

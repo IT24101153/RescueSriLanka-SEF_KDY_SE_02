@@ -26,6 +26,13 @@ namespace RescueSriLanka.Api.Models
 
         public HelpRequestStatus Status { get; set; } = HelpRequestStatus.Pending;
 
+        // Admin verification — separate from assignment Status above.
+        // A request can be "Pending" assignment-wise while still "PendingVerification" trust-wise.
+        public VerificationStatus VerificationStatus { get; set; } = VerificationStatus.PendingVerification;
+        public Guid? VerifiedByUserId { get; set; }
+        public DateTime? VerifiedAt { get; set; }
+        public string? VerificationNotes { get; set; }
+
         public string? ImageUrl { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
