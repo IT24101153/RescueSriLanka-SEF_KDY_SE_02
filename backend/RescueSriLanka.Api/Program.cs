@@ -1,8 +1,16 @@
+using Microsoft.EntityFrameworkCore;
+using RescueSriLanka.Api.Data;
+using RescueSriLanka.Api.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddControllers();
+builder.Services.AddDbContext<RescueSriLankaDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddScoped<IResourceManagementService, ResourceManagementService>();
 
 var app = builder.Build();
 
@@ -12,6 +20,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.MapControllers();
 app.UseHttpsRedirection();
 
 var summaries = new[]
