@@ -19,7 +19,20 @@ builder.Services.AddScoped<IPlannerAgentService, PlannerAgentService>();
 builder.Services.AddScoped<IHelpRequestServiceForAgent, HelpRequestServiceForAgent>();
 builder.Services.AddControllers();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 var app = builder.Build();
+
+app.UseCors("AllowFrontend");
+
 app.MapControllers();
 
 // Configure the HTTP request pipeline.
