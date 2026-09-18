@@ -1,8 +1,20 @@
+using Microsoft.EntityFrameworkCore;
+using RescueSriLanka.Api.Agents.SafetyValidation;
+using RescueSriLanka.Api.Data;
+using RescueSriLanka.Api.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddScoped<IRescueTeamService, RescueTeamService>();
+builder.Services.AddScoped<ITeamMatchingService, TeamMatchingService>();
+builder.Services.AddScoped<IAssignmentService, AssignmentService>();
+builder.Services.AddScoped<IDispatchService, DispatchService>();
+builder.Services.AddScoped<ISafetyValidationAgent, SafetyValidationAgent>();
 
 var app = builder.Build();
 
