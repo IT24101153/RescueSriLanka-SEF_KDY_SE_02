@@ -11,13 +11,25 @@ public interface IResourceManagementService
 
     Task<Shelter> CreateShelterAsync(CreateShelterRequest request, CancellationToken cancellationToken);
 
+    Task<Shelter?> UpdateShelterAsync(Guid id, UpdateShelterRequest request, CancellationToken cancellationToken);
+
+    Task<bool> DeleteShelterAsync(Guid id, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<MedicalSupply>> GetMedicalSuppliesAsync(CancellationToken cancellationToken);
 
     Task<MedicalSupply> CreateMedicalSupplyAsync(CreateMedicalSupplyRequest request, CancellationToken cancellationToken);
 
+    Task<MedicalSupply?> UpdateMedicalSupplyAsync(Guid id, UpdateMedicalSupplyRequest request, CancellationToken cancellationToken);
+
+    Task<bool> DeleteMedicalSupplyAsync(Guid id, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<FoodWaterStock>> GetFoodWaterStockAsync(CancellationToken cancellationToken);
 
     Task<FoodWaterStock> CreateFoodWaterStockAsync(CreateFoodWaterStockRequest request, CancellationToken cancellationToken);
+
+    Task<FoodWaterStock?> UpdateFoodWaterStockAsync(Guid id, UpdateFoodWaterStockRequest request, CancellationToken cancellationToken);
+
+    Task<bool> DeleteFoodWaterStockAsync(Guid id, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<ResourceAlertResponse>> GetLowStockAlertsAsync(CancellationToken cancellationToken);
 
@@ -66,6 +78,23 @@ public class ResourceManagementService(RescueSriLankaDbContext dbContext) : IRes
         return shelter;
     }
 
+    public async Task<Shelter?> UpdateShelterAsync(Guid id, UpdateShelterRequest request, CancellationToken cancellationToken)
+    {
+        ValidateShelter(request.Name, request.Address, request.Capacity);
+        var shelter = await dbContext.Shelters.SingleOrDefaultAsync(item => item.Id == id && item.IsActive, cancellationToken);
+        if (shelter is null) return null;
+        shelter.Name = request.Name.Trim();
+        shelter.Address = request.Address.Trim();
+        shelter.Latitude = request.Latitude;
+        shelter.Longitude = request.Longitude;
+        shelter.Capacity = request.Capacity;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return shelter;
+    }
+
+    public async Task<bool> DeleteShelterAsync(Guid id, CancellationToken cancellationToken) =>
+        await SoftDeleteAsync(dbContext.Shelters, id, cancellationToken);
+
     public async Task<IReadOnlyList<MedicalSupply>> GetMedicalSuppliesAsync(CancellationToken cancellationToken) =>
         await dbContext.MedicalSupplies
             .AsNoTracking()
@@ -101,6 +130,23 @@ public class ResourceManagementService(RescueSriLankaDbContext dbContext) : IRes
         return supply;
     }
 
+    public async Task<MedicalSupply?> UpdateMedicalSupplyAsync(Guid id, UpdateMedicalSupplyRequest request, CancellationToken cancellationToken)
+    {
+        ValidateSupply(request.Name, request.Unit, request.QuantityOnHand, request.LowStockThreshold);
+        var supply = await dbContext.MedicalSupplies.SingleOrDefaultAsync(item => item.Id == id && item.IsActive, cancellationToken);
+        if (supply is null) return null;
+        supply.Name = request.Name.Trim();
+        supply.Unit = request.Unit.Trim();
+        supply.QuantityOnHand = request.QuantityOnHand;
+        supply.LowStockThreshold = request.LowStockThreshold;
+        supply.UpdatedAtUtc = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return supply;
+    }
+
+    public async Task<bool> DeleteMedicalSupplyAsync(Guid id, CancellationToken cancellationToken) =>
+        await SoftDeleteAsync(dbContext.MedicalSupplies, id, cancellationToken);
+
     public async Task<IReadOnlyList<FoodWaterStock>> GetFoodWaterStockAsync(CancellationToken cancellationToken) =>
         await dbContext.FoodWaterStocks
             .AsNoTracking()
@@ -134,6 +180,49 @@ public class ResourceManagementService(RescueSriLankaDbContext dbContext) : IRes
         dbContext.FoodWaterStocks.Add(stock);
         await dbContext.SaveChangesAsync(cancellationToken);
         return stock;
+    }
+
+    public async Task<FoodWaterStock?> UpdateFoodWaterStockAsync(Guid id, UpdateFoodWaterStockRequest request, CancellationToken cancellationToken)
+    {
+        ValidateSupply(request.ItemName, request.Unit, request.QuantityOnHand, request.LowStockThreshold);
+        var stock = await dbContext.FoodWaterStocks.SingleOrDefaultAsync(item => item.Id == id && item.IsActive, cancellationToken);
+        if (stock is null) return null;
+        stock.ItemName = request.ItemName.Trim();
+        stock.Unit = request.Unit.Trim();
+        stock.QuantityOnHand = request.QuantityOnHand;
+        stock.LowStockThreshold = request.LowStockThreshold;
+        stock.UpdatedAtUtc = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return stock;
+    }
+
+    public async Task<bool> DeleteFoodWaterStockAsync(Guid id, CancellationToken cancellationToken) =>
+        await SoftDeleteAsync(dbContext.FoodWaterStocks, id, cancellationToken);
+
+    private static void ValidateShelter(string name, string address, int capacity)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(address))
+            throw new ArgumentException("Shelter name and address are required.");
+        if (capacity < 0) throw new ArgumentException("Shelter capacity cannot be negative.");
+    }
+
+    private static void ValidateSupply(string name, string unit, decimal quantity, decimal threshold)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(unit))
+            throw new ArgumentException("Resource name and unit are required.");
+        if (quantity < 0 || threshold < 0) throw new ArgumentException("Resource quantities cannot be negative.");
+    }
+
+    private async Task<bool> SoftDeleteAsync<TEntity>(DbSet<TEntity> resources, Guid id, CancellationToken cancellationToken)
+        where TEntity : class
+    {
+        var resource = await resources.FindAsync([id], cancellationToken);
+        if (resource is null) return false;
+        var activeProperty = typeof(TEntity).GetProperty(nameof(Shelter.IsActive));
+        if (activeProperty is null) return false;
+        activeProperty.SetValue(resource, false);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<IReadOnlyList<ResourceAlertResponse>> GetLowStockAlertsAsync(CancellationToken cancellationToken)

@@ -28,6 +28,21 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         }
     }
 
+    [HttpPut("shelters/{id:guid}")]
+    public async Task<IActionResult> UpdateShelter(Guid id, UpdateShelterRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var shelter = await resourceService.UpdateShelterAsync(id, request, cancellationToken);
+            return shelter is null ? NotFound(new { error = "Shelter was not found." }) : Ok(shelter);
+        }
+        catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
+    }
+
+    [HttpDelete("shelters/{id:guid}")]
+    public async Task<IActionResult> DeleteShelter(Guid id, CancellationToken cancellationToken) =>
+        await resourceService.DeleteShelterAsync(id, cancellationToken) ? NoContent() : NotFound(new { error = "Shelter was not found." });
+
     [HttpGet("medical-supplies")]
     public async Task<IActionResult> GetMedicalSupplies(CancellationToken cancellationToken) =>
         Ok(await resourceService.GetMedicalSuppliesAsync(cancellationToken));
@@ -48,6 +63,21 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         }
     }
 
+    [HttpPut("medical-supplies/{id:guid}")]
+    public async Task<IActionResult> UpdateMedicalSupply(Guid id, UpdateMedicalSupplyRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var supply = await resourceService.UpdateMedicalSupplyAsync(id, request, cancellationToken);
+            return supply is null ? NotFound(new { error = "Medical supply was not found." }) : Ok(supply);
+        }
+        catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
+    }
+
+    [HttpDelete("medical-supplies/{id:guid}")]
+    public async Task<IActionResult> DeleteMedicalSupply(Guid id, CancellationToken cancellationToken) =>
+        await resourceService.DeleteMedicalSupplyAsync(id, cancellationToken) ? NoContent() : NotFound(new { error = "Medical supply was not found." });
+
     [HttpGet("food-water-stock")]
     public async Task<IActionResult> GetFoodWaterStock(CancellationToken cancellationToken) =>
         Ok(await resourceService.GetFoodWaterStockAsync(cancellationToken));
@@ -67,6 +97,21 @@ public class ResourcesController(IResourceManagementService resourceService) : C
             return BadRequest(new { error = exception.Message });
         }
     }
+
+    [HttpPut("food-water-stock/{id:guid}")]
+    public async Task<IActionResult> UpdateFoodWaterStock(Guid id, UpdateFoodWaterStockRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var stock = await resourceService.UpdateFoodWaterStockAsync(id, request, cancellationToken);
+            return stock is null ? NotFound(new { error = "Food/water stock was not found." }) : Ok(stock);
+        }
+        catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
+    }
+
+    [HttpDelete("food-water-stock/{id:guid}")]
+    public async Task<IActionResult> DeleteFoodWaterStock(Guid id, CancellationToken cancellationToken) =>
+        await resourceService.DeleteFoodWaterStockAsync(id, cancellationToken) ? NoContent() : NotFound(new { error = "Food/water stock was not found." });
 
     [HttpGet("alerts/low-stock")]
     public async Task<IActionResult> GetLowStockAlerts(CancellationToken cancellationToken) =>

@@ -19,6 +19,25 @@ public record CreateFoodWaterStockRequest(
     decimal QuantityOnHand,
     decimal LowStockThreshold);
 
+public record UpdateShelterRequest(
+    string Name,
+    string Address,
+    decimal Latitude,
+    decimal Longitude,
+    int Capacity);
+
+public record UpdateMedicalSupplyRequest(
+    string Name,
+    string Unit,
+    int QuantityOnHand,
+    int LowStockThreshold);
+
+public record UpdateFoodWaterStockRequest(
+    string ItemName,
+    string Unit,
+    decimal QuantityOnHand,
+    decimal LowStockThreshold);
+
 public record AllocateResourceRequest(
     string ResourceType,
     Guid ResourceId,
