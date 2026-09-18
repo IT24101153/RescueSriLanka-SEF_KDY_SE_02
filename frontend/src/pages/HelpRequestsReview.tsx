@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { authFetch } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 import "./HelpRequestsReview.css";
 
 const TYPE_LABELS = ["Water", "Food", "Medical", "Rescue", "Shelter", "Other"] as const;
@@ -37,6 +38,22 @@ function urgencyTier(score: number): UrgencyTier {
   return "safe";
 }
 
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3.5 8.3 6.2 11 12.5 4.7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function formatTime(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString(undefined, {
@@ -48,6 +65,7 @@ function formatTime(iso: string): string {
 }
 
 export default function HelpRequestsReview() {
+  const { user } = useAuth();
   const [requests, setRequests] = useState<HelpRequestDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [history, setHistory] = useState<StatusHistoryDto[]>([]);
@@ -139,17 +157,26 @@ export default function HelpRequestsReview() {
 
   return (
     <div className="hr-console">
-      <header className="hr-header">
+      <div className="hr-topbar">
+        <div className="hr-breadcrumb">
+          Dashboard <span>/</span> <strong>Help Requests</strong>
+        </div>
+        <div className="hr-topbar-avatar" title={user?.name ?? "Admin"}>
+          {(user?.name ?? "A").charAt(0)}
+        </div>
+      </div>
+
+      <div className="hr-page-head">
         <h1>Help Requests</h1>
         <p className="hr-subtitle">
           {requests.length} active request{requests.length === 1 ? "" : "s"}, ranked by urgency
         </p>
-      </header>
+      </div>
 
       {error && <div className="hr-banner">{error}</div>}
 
       <div className="hr-body">
-        <div className="hr-list" role="list">
+        <div className="hr-list">
           {loading && <div className="hr-empty">Loading requests…</div>}
           {!loading && requests.length === 0 && (
             <div className="hr-empty">No help requests yet. New submissions will appear here.</div>
@@ -162,12 +189,13 @@ export default function HelpRequestsReview() {
               }`}
               onClick={() => setSelectedId(r.id)}
             >
+              <span className="hr-row-accent" />
               <span className="hr-row-score">{r.urgencyScore}</span>
               <span className="hr-row-main">
                 <span className="hr-row-type">{TYPE_LABELS[r.type]}</span>
                 <span className="hr-row-desc">{r.description}</span>
               </span>
-              <span className="hr-row-status">{STATUS_LABELS[r.status]}</span>
+              <span className={`hr-row-status hr-row-status--${r.status}`}>{STATUS_LABELS[r.status]}</span>
             </button>
           ))}
         </div>
@@ -177,58 +205,65 @@ export default function HelpRequestsReview() {
 
           {selected && (
             <>
-              <div className={`hr-detail-urgency hr-detail-urgency--${urgencyTier(selected.urgencyScore)}`}>
-                Urgency {selected.urgencyScore} · {TYPE_LABELS[selected.type]}
-              </div>
-              <div className={`hr-verify-badge hr-verify-badge--${selected.verificationStatus}`}>
-                {VERIFICATION_LABELS[selected.verificationStatus]}
+              <div className="hr-detail-head">
+                <div className="hr-detail-badges">
+                  <span className={`hr-pill hr-pill--${urgencyTier(selected.urgencyScore)}`}>
+                    Urgency {selected.urgencyScore}
+                  </span>
+                  <span className="hr-pill hr-pill--neutral">{TYPE_LABELS[selected.type]}</span>
+                  <span className={`hr-pill hr-pill--verify-${selected.verificationStatus}`}>
+                    {VERIFICATION_LABELS[selected.verificationStatus]}
+                  </span>
+                </div>
               </div>
 
               <p className="hr-detail-desc">{selected.description}</p>
 
               {selected.verificationStatus === 0 && (
-                <div className="hr-verify-actions">
-                  <button
-                    className="hr-verify-btn hr-verify-btn--real"
-                    disabled={updating}
-                    onClick={() => verify(true)}
-                  >
-                    Mark as Real
-                  </button>
-                  <button
-                    className="hr-verify-btn hr-verify-btn--fake"
-                    disabled={updating}
-                    onClick={() => verify(false)}
-                  >
-                    Mark as Fake
-                  </button>
+                <div className="hr-verify-prompt">
+                  <span className="hr-verify-prompt-text">This report needs verification</span>
+                  <div className="hr-verify-prompt-actions">
+                    <button
+                      className="hr-verify-btn hr-verify-btn--real"
+                      disabled={updating}
+                      onClick={() => verify(true)}
+                    >
+                      <CheckIcon /> Verify
+                    </button>
+                    <button
+                      className="hr-verify-btn hr-verify-btn--fake"
+                      disabled={updating}
+                      onClick={() => verify(false)}
+                    >
+                      <XIcon /> Reject
+                    </button>
+                  </div>
                 </div>
               )}
-
-              <dl className="hr-detail-meta">
-                <div>
-                  <dt>Location</dt>
-                  <dd className="hr-mono">
+              <div className="hr-detail-meta">
+                <div className="hr-meta-item">
+                  <span className="hr-meta-label">Location</span>
+                  <span className="hr-mono">
                     {selected.latitude.toFixed(4)}, {selected.longitude.toFixed(4)}
-                  </dd>
+                  </span>
                 </div>
-                <div>
-                  <dt>Submitted</dt>
-                  <dd className="hr-mono">{formatTime(selected.createdAt)}</dd>
+                <div className="hr-meta-item">
+                  <span className="hr-meta-label">Submitted</span>
+                  <span className="hr-mono">{formatTime(selected.createdAt)}</span>
                 </div>
-                <div>
-                  <dt>Status</dt>
-                  <dd>{STATUS_LABELS[selected.status]}</dd>
+                <div className="hr-meta-item">
+                  <span className="hr-meta-label">Status</span>
+                  <span>{STATUS_LABELS[selected.status]}</span>
                 </div>
-              </dl>
+              </div>
 
               <div className="hr-actions">
                 <span className="hr-actions-label">Set status</span>
-                <div className="hr-actions-buttons">
+                <div className="hr-segmented">
                   {STATUS_LABELS.map((label, idx) => (
                     <button
                       key={label}
-                      className={`hr-status-btn ${selected.status === idx ? "hr-status-btn--current" : ""}`}
+                      className={`hr-segment ${selected.status === idx ? "hr-segment--current" : ""}`}
                       disabled={updating || selected.status === idx}
                       onClick={() => changeStatus(idx)}
                     >
@@ -244,11 +279,16 @@ export default function HelpRequestsReview() {
                 <ul className="hr-timeline">
                   {history.map((h, i) => (
                     <li key={i}>
-                      <span className="hr-mono">{formatTime(h.changedAt)}</span>
-                      <span>
-                        {STATUS_LABELS[h.oldStatus]} → {STATUS_LABELS[h.newStatus]}
-                      </span>
-                      {h.notes && <span className="hr-history-note">{h.notes}</span>}
+                      <span className="hr-timeline-dot" />
+                      <div className="hr-timeline-content">
+                        <div className="hr-timeline-top">
+                          <span>
+                            {STATUS_LABELS[h.oldStatus]} → {STATUS_LABELS[h.newStatus]}
+                          </span>
+                          <span className="hr-mono hr-timeline-time">{formatTime(h.changedAt)}</span>
+                        </div>
+                        {h.notes && <div className="hr-history-note">{h.notes}</div>}
+                      </div>
                     </li>
                   ))}
                 </ul>

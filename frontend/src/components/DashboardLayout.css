@@ -1,103 +1,152 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
 
 .dash-shell {
-  --ink: #1e1b2e;
-  --muted: #6b6480;
-  --bg: #f7f6fb;
+  --ink: #14161c;
+  --muted: #7a7d89;
+  --bg: #fafafb;
   --card: #ffffff;
-  --line: #e8e6f2;
-  --brand: #5b4fe8;
-  --brand-dark: #4338ca;
-  --shadow: rgba(91, 79, 232, 0.14);
+  --line: #e9e9ee;
+  --brand: #e8960b;
+  --brand-light: #f7bd5f;
 
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 232px 1fr;
   min-height: 100vh;
   font-family: 'Inter', -apple-system, sans-serif;
 }
 
 .dash-sidebar {
-  background: linear-gradient(180deg, #1e1b2e 0%, #241f3d 100%);
-  color: #d8d5e8;
+  background: #14161c;
+  color: #9a9ca8;
   display: flex;
   flex-direction: column;
-  padding: 1.5rem 1.1rem;
+  padding: 1.4rem 1rem;
   box-sizing: border-box;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .dash-brand {
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: -0.01em;
-  padding: 0 0.5rem 1.75rem;
+  padding: 0.3rem 0.6rem 1.5rem;
   color: white;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dash-brand::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex: none;
 }
 
 .dash-sidebar nav {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.15rem;
   flex: 1;
 }
 
 .dash-nav-link {
-  color: #b3aecb;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: #82848f;
   text-decoration: none;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   font-weight: 500;
-  padding: 0.65rem 0.75rem;
-  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
+.dash-nav-icon {
+  display: flex;
+  opacity: 0.75;
+}
+
 .dash-nav-link:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: white;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d4d5db;
 }
 
 .dash-nav-link--active {
-  background: linear-gradient(135deg, #5b4fe8, #7c6ff0);
-  color: white;
-  box-shadow: 0 4px 14px rgba(91, 79, 232, 0.4);
+  background: rgba(232, 150, 11, 0.12);
+  color: var(--brand-light);
+}
+
+.dash-nav-link--active .dash-nav-icon {
+  opacity: 1;
 }
 
 .dash-user {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 1rem;
   margin-top: 1rem;
 }
 
+.dash-user-avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #f7bd5f, #e8960b);
+  color: #1a1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.dash-user-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .dash-user-name {
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  color: white;
-  padding: 0 0.6rem;
+  color: #e2e3e8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dash-user-role {
-  font-size: 0.74rem;
-  color: #948da8;
-  padding: 0 0.6rem;
-  margin-bottom: 0.7rem;
+  font-size: 0.7rem;
+  color: #6c6e79;
 }
 
 .dash-logout {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #d8d5e8;
-  padding: 0.5rem 0.6rem;
-  border-radius: 10px;
-  font-size: 0.8rem;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #9a9ca8;
+  border-radius: 8px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.15s ease;
 }
 
 .dash-logout:hover {
-  background: #e5484d;
   border-color: #e5484d;
-  color: white;
+  color: #e5484d;
+  background: rgba(229, 72, 77, 0.08);
 }
 
 .dash-main {
