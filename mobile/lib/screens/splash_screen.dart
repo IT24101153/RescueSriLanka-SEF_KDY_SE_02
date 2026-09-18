@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
+import '../services/auth_service.dart';
 import 'home_shell.dart';
 
 /// Brand splash. Holds briefly, then goes straight to the map — no login gate.
+///
+/// The pause also covers restoring any stored session, so a returning user
+/// lands on the map already signed in.
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  const SplashScreen({super.key, required this.auth});
+
+  final AuthService auth;
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -29,7 +35,8 @@ class _SplashScreenState extends State<SplashScreen>
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 350),
-        pageBuilder: (context, animation, secondaryAnimation) => const HomeShell(),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            HomeShell(auth: widget.auth),
         transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             FadeTransition(opacity: animation, child: child),
       ),

@@ -31,6 +31,7 @@ public interface IIncidentService
 public class IncidentService(
     AppDbContext db,
     ISafetyZoneService zoneService,
+    IIncidentAnalysisQueue analysisQueue,
     ILogger<IncidentService> logger) : IIncidentService
 {
     public async Task<IReadOnlyList<IncidentDto>> QueryAsync(
@@ -116,6 +117,11 @@ public class IncidentService(
 
         // A new incident changes the map's zone layer immediately.
         await zoneService.RecomputeAsync(ct);
+
+        // The agent scores it in the background so the coordinator finds a
+        // proposal waiting rather than a button to press. Nothing it produces
+        // is applied without approval.
+        analysisQueue.Enqueue(incident.Id);
 
         logger.LogInformation("Incident {Id} created ({Type}, {Severity})",
             incident.Id, incident.Type, incident.Severity);

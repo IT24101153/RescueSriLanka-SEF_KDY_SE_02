@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -32,10 +33,16 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
   /// fit inside it. CameraConstraint.contain has no valid solution on a wide
   /// window — the visible area is simply bigger than Sri Lanka — and asserts.
   /// Built once: a fresh instance each rebuild re-triggers camera validation.
-  static final CameraConstraint _constraint =
-      CameraConstraint.containCenter(bounds: _sriLanka);
+  static final CameraConstraint _constraint = CameraConstraint.containCenter(
+    bounds: _sriLanka,
+  );
 
   static const LatLng _islandCentre = LatLng(7.85, 80.75);
+
+  /// One source of truth for the zoom limits — MapOptions and the zoom buttons
+  /// both read these, so they cannot drift apart.
+  static const double _minZoom = 6.5;
+  static const double _maxZoom = 16;
 
   final ApiClient _api = ApiClient();
   final MapController _map = MapController();
@@ -131,6 +138,31 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
     }
   }
 
+  /// Steps the zoom, holding the current centre.
+  ///
+  /// Clamped to the same limits MapOptions declares — moving outside them is
+  /// silently ignored by flutter_map, which reads as a dead button.
+  void _zoomBy(double delta) {
+    final camera = _map.camera;
+    final target = (camera.zoom + delta).clamp(_minZoom, _maxZoom);
+
+    if (target == camera.zoom) {
+      if (kDebugMode) {
+        debugPrint('Zoom: already at the limit (${camera.zoom}).');
+      }
+      return;
+    }
+
+    final accepted = _map.move(camera.center, target);
+
+    if (kDebugMode) {
+      debugPrint(
+        'Zoom: ${camera.zoom} -> $target '
+        '(move accepted: $accepted, now ${_map.camera.zoom})',
+      );
+    }
+  }
+
   void _toast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -168,37 +200,40 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
   }
 
   Widget _errorState() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.cloud_off, size: 42, color: AppColors.body),
-              const SizedBox(height: 14),
-              const Text(
-                'Cannot load the disaster map',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ink),
-              ),
-              const SizedBox(height: 8),
-              Text(_error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, height: 1.45)),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _load,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  foregroundColor: AppColors.brandInk,
-                ),
-                child: const Text('Try again'),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off, size: 42, color: AppColors.body),
+          const SizedBox(height: 14),
+          const Text(
+            'Cannot load the disaster map',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink,
+            ),
           ),
-        ),
-      );
+          const SizedBox(height: 8),
+          Text(
+            _error!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, height: 1.45),
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: _load,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.brand,
+              foregroundColor: AppColors.brandInk,
+            ),
+            child: const Text('Try again'),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _content() {
     return Column(
@@ -216,21 +251,53 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
                     child: Center(child: CircularProgressIndicator()),
                   ),
                 ),
-              Positioned(left: 12, bottom: 12, child: MapLegend(showZones: _showZones)),
+              Positioned(
+                left: 12,
+                bottom: 12,
+                child: MapLegend(showZones: _showZones),
+              ),
               Positioned(
                 right: 12,
                 bottom: 12,
-                child: FloatingActionButton.small(
-                  heroTag: 'locate',
-                  onPressed: _locating ? null : _locateMe,
-                  backgroundColor: AppColors.surface,
-                  foregroundColor: AppColors.ink,
-                  child: _locating
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.my_location, size: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Pinch-to-zoom works on a real device but is awkward on an
+                    // emulator and impossible one-handed, so the map carries
+                    // explicit controls like the web console does.
+                    FloatingActionButton.small(
+                      heroTag: 'zoom-in',
+                      onPressed: () => _zoomBy(1),
+                      backgroundColor: AppColors.surface,
+                      foregroundColor: AppColors.ink,
+                      tooltip: 'Zoom in',
+                      child: const Icon(Icons.add, size: 20),
+                    ),
+                    const SizedBox(height: 8),
+                    FloatingActionButton.small(
+                      heroTag: 'zoom-out',
+                      onPressed: () => _zoomBy(-1),
+                      backgroundColor: AppColors.surface,
+                      foregroundColor: AppColors.ink,
+                      tooltip: 'Zoom out',
+                      child: const Icon(Icons.remove, size: 20),
+                    ),
+                    const SizedBox(height: 8),
+                    FloatingActionButton.small(
+                      heroTag: 'locate',
+                      onPressed: _locating ? null : _locateMe,
+                      backgroundColor: AppColors.surface,
+                      foregroundColor: AppColors.ink,
+                      tooltip: 'Show my location',
+                      child: _locating
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.my_location, size: 20),
+                    ),
+                  ],
                 ),
               ),
               if (_zoneCheck != null)
@@ -253,8 +320,7 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
 
   Widget _summaryBar() {
     final active = _incidents.length;
-    final critical =
-        _incidents.where((i) => i.severity == 'Critical').length;
+    final critical = _incidents.where((i) => i.severity == 'Critical').length;
     final danger = _zones.where((z) => z.status == 'Danger').length;
 
     return Container(
@@ -274,16 +340,21 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
   }
 
   Widget _stat(String value, String label, Color color) => Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(value,
-                style: TextStyle(
-                    fontSize: 19, fontWeight: FontWeight.w700, color: color)),
-            Text(label, style: const TextStyle(fontSize: 11.5)),
-          ],
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
         ),
-      );
+        Text(label, style: const TextStyle(fontSize: 11.5)),
+      ],
+    ),
+  );
 
   Widget _filterBar() {
     const options = ['All', 'Critical', 'High', 'Moderate', 'Low'];
@@ -325,13 +396,21 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
         initialZoom: 7.2,
         // Panning away from Sri Lanka is never useful here.
         cameraConstraint: _constraint,
-        minZoom: 6.5,
-        maxZoom: 16,
+        minZoom: _minZoom,
+        maxZoom: _maxZoom,
       ),
       children: [
+        // OpenStreetMap, not the Mapbox tiles the React console uses — see
+        // docs/adr/0003-map-tile-provider.md. Free, keyless, and it works on
+        // the emulator, which the Mapbox tiles did not.
         TileLayer(
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'lk.rescuesrilanka.mobile',
+          // A tile that fails to load is otherwise just a grey square, which
+          // hides the reason.
+          errorTileCallback: (tile, error, stackTrace) {
+            debugPrint('Map tile failed: $error');
+          },
         ),
         if (_showZones)
           CircleLayer(
@@ -374,9 +453,7 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
           ],
         ),
         const RichAttributionWidget(
-          attributions: [
-            TextSourceAttribution('OpenStreetMap contributors'),
-          ],
+          attributions: [TextSourceAttribution('OpenStreetMap contributors')],
         ),
       ],
     );
@@ -441,16 +518,18 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
           Expanded(
             child: visible.isEmpty && !_loading
                 ? const Center(
-                    child: Text('No incidents match this filter.',
-                        style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      'No incidents match this filter.',
+                      style: TextStyle(fontSize: 13),
+                    ),
                   )
                 : ListView.separated(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
                     itemCount: visible.length,
-                    separatorBuilder: (context, index) => const SizedBox(width: 10),
-                    itemBuilder: (context, index) =>
-                        _card(visible[index]),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 10),
+                    itemBuilder: (context, index) => _card(visible[index]),
                   ),
           ),
         ],

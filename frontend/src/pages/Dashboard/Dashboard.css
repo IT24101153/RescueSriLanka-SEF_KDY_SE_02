@@ -1314,3 +1314,137 @@
   background: var(--critical-soft);
   color: var(--critical-ink);
 }
+
+/* ---------- report triage ---------- */
+/* Sits above the agent panel in the drawer: the human decision about whether
+   the report itself is real, kept visually distinct from the AI proposal. */
+.review {
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+}
+
+.review__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.review__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.review__state {
+  padding: 3px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.review__confirm p {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+/* ---------- incident photos ---------- */
+.photos {
+  margin-bottom: 14px;
+}
+
+.photos__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.photos__count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.photos__strip {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 4px;
+  overflow-x: auto;
+  list-style: none;
+}
+
+.photos__thumb {
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.photos__thumb:hover {
+  border-color: var(--accent);
+}
+
+.photos__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  background: rgb(8 11 15 / 82%);
+  cursor: zoom-out;
+}
+
+.lightbox img {
+  max-width: min(92vw, 1100px);
+  max-height: 82vh;
+  border-radius: var(--radius);
+  object-fit: contain;
+}
+
+.lightbox__caption {
+  margin: 0;
+  max-width: 60ch;
+  text-align: center;
+  font-size: 13px;
+  color: rgb(255 255 255 / 86%);
+}

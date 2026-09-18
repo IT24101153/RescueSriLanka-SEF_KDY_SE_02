@@ -14,6 +14,8 @@ import ZonesSection from './sections/ZonesSection'
 import IncidentTable from './sections/IncidentTable'
 import AgentPanel from './sections/AgentPanel'
 import AgentActivity from './sections/AgentActivity'
+import ReviewPanel from './sections/ReviewPanel'
+import IncidentPhotos from './sections/IncidentPhotos'
 import { SEVERITY_TOKEN, STATUS_LABEL, timeAgo } from './severity'
 import './Dashboard.css'
 
@@ -96,6 +98,20 @@ export default function Dashboard() {
   function reload() {
     setLoading(true)
     setReloadToken((token) => token + 1)
+  }
+
+  /**
+   * After a coordinator decides something: refresh the list, and re-fetch the
+   * open incident so the drawer shows the new state instead of closing and
+   * making them find their place again.
+   */
+  async function refreshAfterDecision(id: string) {
+    reload()
+    try {
+      setSelected(await apiFetch<Incident>(`/api/incidents/${id}`))
+    } catch {
+      setSelected(null)
+    }
   }
 
   function changeFilter<T>(setter: (value: T) => void) {
@@ -315,12 +331,16 @@ export default function Dashboard() {
               </div>
             </dl>
 
+            <IncidentPhotos images={selected.images ?? []} />
+
+            <ReviewPanel
+              incident={selected}
+              onChanged={() => void refreshAfterDecision(selected.id)}
+            />
+
             <AgentPanel
               incident={selected}
-              onChanged={() => {
-                reload()
-                setSelected(null)
-              }}
+              onChanged={() => void refreshAfterDecision(selected.id)}
             />
           </aside>
         </>

@@ -22,6 +22,18 @@ export const SEVERITY_ORDER: IncidentSeverity[] = [
   'Critical',
 ]
 
+export type IncidentImage = {
+  id: string
+  incidentId: string
+  /** Absolute (Cloudinary) or API-relative (local disk) — resolve before use. */
+  url: string
+  fileName: string | null
+  contentType: string | null
+  sizeBytes: number
+  caption: string | null
+  uploadedAt: string
+}
+
 export type Incident = {
   id: string
   title: string
@@ -45,6 +57,7 @@ export type Incident = {
   reportedAt: string
   resolvedAt: string | null
   imageCount: number
+  images: IncidentImage[]
   distanceKm: number | null
 }
 

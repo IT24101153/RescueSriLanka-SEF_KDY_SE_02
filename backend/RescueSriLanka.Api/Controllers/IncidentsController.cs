@@ -129,6 +129,12 @@ public class IncidentsController(
         {
             return BadRequest(new { message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            // The storage backend rejected it — report the failure rather than
+            // recording an image row that points at nothing.
+            return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+        }
     }
 
     /// <summary>

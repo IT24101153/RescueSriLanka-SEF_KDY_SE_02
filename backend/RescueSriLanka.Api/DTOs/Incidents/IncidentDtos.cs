@@ -29,6 +29,12 @@ public record IncidentDto
     public DateTime? ResolvedAt { get; init; }
     public int ImageCount { get; init; }
 
+    /// <summary>
+    /// The attached photos, so a coordinator can see what was reported without
+    /// a second round trip. Empty unless the incident was loaded with Images.
+    /// </summary>
+    public IReadOnlyList<IncidentImageDto> Images { get; init; } = [];
+
     /// <summary>Distance from the caller, in km. Only set by the nearby query.</summary>
     public double? DistanceKm { get; init; }
 
@@ -56,6 +62,10 @@ public record IncidentDto
         ReportedAt = incident.ReportedAt,
         ResolvedAt = incident.ResolvedAt,
         ImageCount = incident.Images.Count,
+        Images = incident.Images
+            .OrderBy(image => image.UploadedAt)
+            .Select(IncidentImageDto.FromImage)
+            .ToList(),
         DistanceKm = distanceKm
     };
 }

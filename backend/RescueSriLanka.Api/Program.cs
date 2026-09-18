@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using CloudinaryDotNet;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,7 @@ using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services;
 using RescueSriLanka.Api.Services.Llm;
+using RescueSriLanka.Api.Services.Storage;
 using RescueSriLanka.Api.Agents.IncidentAnalysisAgent;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,12 +53,56 @@ builder.Services.AddScoped<ISafetyZoneService, SafetyZoneService>();
 builder.Services.AddScoped<IIncidentService, IncidentService>();
 builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
 
-// Agentic AI — provider-agnostic client plus Component A's agent.
+// ---------------------------------------------------------------- photo storage
+// Cloudinary when credentials are present, local disk otherwise. A deployed
+// container's disk does not survive a restart, so uploads written there would
+// disappear — but requiring an account to run the project locally would be
+// worse, hence the fallback rather than a hard failure.
+var cloudinarySection = builder.Configuration.GetSection("Cloudinary");
+var cloudName = cloudinarySection["CloudName"];
+var cloudinaryApiKey = cloudinarySection["ApiKey"];
+var cloudinaryApiSecret = cloudinarySection["ApiSecret"];
+
+if (!string.IsNullOrWhiteSpace(cloudName) &&
+    !string.IsNullOrWhiteSpace(cloudinaryApiKey) &&
+    !string.IsNullOrWhiteSpace(cloudinaryApiSecret))
+{
+    builder.Services.AddSingleton(
+        new Cloudinary(new Account(cloudName, cloudinaryApiKey, cloudinaryApiSecret))
+        {
+            Api = { Secure = true }
+        });
+
+    builder.Services.AddHttpClient(nameof(CloudinaryImageStore), client =>
+        client.Timeout = TimeSpan.FromSeconds(20));
+
+    builder.Services.AddScoped<IImageStore, CloudinaryImageStore>();
+}
+else
+{
+    builder.Services.AddScoped<IImageStore, LocalDiskImageStore>();
+}
+
+// ---------------------------------------------------------------- agentic AI
+// The agents depend on ILlmClient, never on a concrete provider. Google AI
+// (Gemini) is the one implementation — see docs/adr/0001-llm-provider.md for
+// why, and for the deviation from the proposal that choice represents.
+//
+// An unconfigured or unreachable model is not a failure: the agent falls back
+// to its deterministic rule engine and records that it did.
 builder.Services.AddHttpClient<ILlmClient, GoogleAiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(30));
+
 builder.Services.AddScoped<IncidentAnalysisTools>();
 builder.Services.AddScoped<IIncidentAnalysisAgent, IncidentAnalysisAgent>();
 builder.Services.AddScoped<IAgentRunService, AgentRunService>();
+
+// New reports are scored in the background — the citizen filing one never
+// waits on a model, and the coordinator's queue fills with proposals.
+builder.Services.AddSingleton<IncidentAnalysisQueue>();
+builder.Services.AddSingleton<IIncidentAnalysisQueue>(
+    provider => provider.GetRequiredService<IncidentAnalysisQueue>());
+builder.Services.AddHostedService<IncidentAnalysisWorker>();
 
 // ---------------------------------------------------------------- clients
 // React (Vite) and Flutter web during development. Tighten before deployment.
@@ -118,6 +164,22 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+// Which photo backend is live should never be a guess when a demo misbehaves.
+using (var startupScope = app.Services.CreateScope())
+{
+    var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+
+    startupLogger.LogInformation(
+        "Incident photos are stored via {Store}.",
+        startupScope.ServiceProvider.GetRequiredService<IImageStore>().Name);
+
+    var llm = startupScope.ServiceProvider.GetRequiredService<ILlmClient>();
+    startupLogger.LogInformation(
+        "Agents use {Model}{Unconfigured}.",
+        llm.ModelName,
+        llm.IsConfigured ? string.Empty : " — NOT configured, rule engine will run");
+}
 
 // ---------------------------------------------------------------- start-up
 if (app.Environment.IsDevelopment())

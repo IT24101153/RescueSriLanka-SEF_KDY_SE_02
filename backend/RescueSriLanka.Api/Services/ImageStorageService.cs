@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Services.Storage;
 
 namespace RescueSriLanka.Api.Services;
 
@@ -15,12 +16,13 @@ public interface IImageStorageService
 }
 
 /// <summary>
-/// Stores incident photos on disk under wwwroot so they can be served back by
-/// URL, and reads them for the Incident Analysis Agent.
+/// Validation and bookkeeping for incident photos. Where the bytes go is the
+/// <see cref="IImageStore"/>'s business — Cloudinary when it is configured,
+/// local disk otherwise — so the rules below hold whichever backend is active.
 /// </summary>
 public class ImageStorageService(
     AppDbContext db,
-    IWebHostEnvironment environment,
+    IImageStore store,
     ILogger<ImageStorageService> logger) : IImageStorageService
 {
     private static readonly string[] AllowedTypes =
@@ -49,25 +51,12 @@ public class ImageStorageService(
                 $"Unsupported image type '{file.ContentType}'. Allowed: {string.Join(", ", AllowedTypes)}.");
         }
 
-        // Never trust the client's filename — generate our own.
-        var extension = Path.GetExtension(file.FileName);
-        extension = extension.Length is > 0 and <= 6 ? extension.ToLowerInvariant() : ".jpg";
-        var storedName = $"{Guid.NewGuid():N}{extension}";
-
-        var root = environment.WebRootPath ?? Path.Combine(environment.ContentRootPath, "wwwroot");
-        var folder = Path.Combine(root, "uploads", "incidents", incidentId.ToString());
-        Directory.CreateDirectory(folder);
-
-        var fullPath = Path.Combine(folder, storedName);
-        await using (var stream = File.Create(fullPath))
-        {
-            await file.CopyToAsync(stream, ct);
-        }
+        var stored = await store.SaveAsync(incidentId, file, ct);
 
         var image = new IncidentImage
         {
             IncidentId = incidentId,
-            StoragePath = $"/uploads/incidents/{incidentId}/{storedName}",
+            StoragePath = stored.Location,
             FileName = Path.GetFileName(file.FileName),
             ContentType = contentType,
             SizeBytes = file.Length,
@@ -78,7 +67,10 @@ public class ImageStorageService(
         db.IncidentImages.Add(image);
         await db.SaveChangesAsync(ct);
 
-        logger.LogInformation("Stored image {Id} for incident {IncidentId}", image.Id, incidentId);
+        logger.LogInformation(
+            "Stored image {Id} for incident {IncidentId} via {Store}",
+            image.Id, incidentId, store.Name);
+
         return image;
     }
 
@@ -92,22 +84,13 @@ public class ImageStorageService(
             .Take(Math.Clamp(maxImages, 1, 8))
             .ToListAsync(ct);
 
-        var root = environment.WebRootPath ?? Path.Combine(environment.ContentRootPath, "wwwroot");
         var results = new List<(string, byte[])>();
         long total = 0;
 
         foreach (var record in records)
         {
-            var relative = record.StoragePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-            var path = Path.Combine(root, relative);
-
-            if (!File.Exists(path))
-            {
-                logger.LogWarning("Image file missing on disk: {Path}", record.StoragePath);
-                continue;
-            }
-
-            var bytes = await File.ReadAllBytesAsync(path, ct);
+            var bytes = await store.ReadAsync(record.StoragePath, ct);
+            if (bytes is null) continue;
 
             // Stop before the request grows large enough to be rejected.
             if (total + bytes.Length > maxTotalBytes) break;

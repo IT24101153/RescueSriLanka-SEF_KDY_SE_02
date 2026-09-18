@@ -10,6 +10,12 @@ import {
 import type { LatLngBoundsExpression } from 'leaflet'
 import type { Incident, SafetyZone } from '../../../types/incidents'
 import { SEVERITY_HEX, SEVERITY_RADIUS, ZONE_HEX, timeAgo } from '../severity'
+import {
+  TILE_ATTRIBUTION,
+  TILE_SIZE,
+  TILE_URL,
+  TILE_ZOOM_OFFSET,
+} from '../../../config/tiles'
 import 'leaflet/dist/leaflet.css'
 
 type IncidentMapProps = {
@@ -83,8 +89,10 @@ export default function IncidentMap({
         className="map__canvas"
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={TILE_ATTRIBUTION}
+          url={TILE_URL}
+          tileSize={TILE_SIZE}
+          zoomOffset={TILE_ZOOM_OFFSET}
           bounds={SRI_LANKA_BOUNDS}
         />
 
