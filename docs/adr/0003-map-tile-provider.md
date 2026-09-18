@@ -22,13 +22,14 @@ through flutter_map. This ADR records replacing that provider.
 
 ## Decision
 
-**Mapbox replaces OpenStreetMap in the React console. The Flutter app stays on
-OpenStreetMap.**
+**Mapbox in the React console, CARTO Voyager in the Flutter app.** Neither
+client draws raw OpenStreetMap tiles any more, though both still render
+OpenStreetMap *data*.
 
 | Client | Tile source | Details | Where |
 | --- | --- | --- | --- |
 | React (coordinator) | Mapbox `streets-v12`, OSM without a token | 512 @2x, `zoomOffset -1` | `src/config/tiles.ts` |
-| Flutter (citizen) | OpenStreetMap | 256, keyless | `disaster_map_screen.dart` |
+| Flutter (citizen) | CARTO Voyager | 256 @2x, **keyless** | `disaster_map_screen.dart` |
 
 Both were switched to Mapbox initially. The Flutter map then rendered grey — no
 tiles — on the development emulator, while the React map worked from the same
@@ -36,7 +37,18 @@ token. The tile URL itself was verified good at every zoom level the app
 requests (HTTP 200, real PNGs, 58–87 KB), so the fault lay between the emulator
 and Mapbox rather than in the URL or the credential. Rather than spend the
 remaining days before the deadline on an emulator networking problem, the mobile
-client was returned to OpenStreetMap, which works there.
+client was moved off Mapbox.
+
+It went to CARTO Voyager rather than back to raw OpenStreetMap. CARTO renders
+OpenStreetMap data with considerably better cartography and still requires no
+API key, so the citizen app gains legibility without gaining a credential — the
+property that made the keyless option attractive in the first place. Tiles were
+verified at the zoom levels the app uses (HTTP 200, 20–39 KB PNGs).
+
+The root cause of the Mapbox failure on the emulator was never established. A
+stale Flutter build is as plausible as an emulator networking fault, and the
+`errorTileCallback` added to diagnose it was never read before the provider was
+switched. This is recorded as an unresolved question rather than a finding.
 
 Leaflet and flutter_map are unchanged throughout — only the tile URL moved. The
 mapping libraries the proposal names are still the mapping libraries in use.
@@ -51,7 +63,8 @@ basemap is not. Had these been two views for the same user, the split would not
 have been acceptable.
 
 It also leaves the citizen-facing app entirely free and keyless, which is the
-half of the system the proposal's no-cost argument was really about.
+half of the system the proposal's no-cost argument was really about. Nothing
+sensitive ships in the APK.
 
 The style is `streets-v12` by default because legible road names are what a
 coordinator routing a team actually needs. `outdoors-v12` (terrain contours, of
@@ -119,9 +132,9 @@ token at all, so nothing ships in the APK.
 
 **Neutral**
 
-- OpenStreetMap data still underlies Mapbox's street tiles, and the OSM credit
-  is retained in the console's attribution alongside Mapbox's, as the Mapbox
-  terms of service require. The Flutter app credits OpenStreetMap alone.
+- OpenStreetMap data underlies both providers' tiles, and the OSM credit is
+  retained in both clients' attribution — alongside Mapbox's in the console and
+  CARTO's in the app, as both providers' terms require.
 - OSRM routing is untouched by this. It remains free and keyless, and belongs to
   Component C's Resource & Logistics Planning Agent.
 
@@ -152,6 +165,6 @@ done, the token works from anywhere it is copied to.
 ## Related
 
 - `frontend/src/config/tiles.ts` — React tile source, Mapbox or OSM by env
-- `mobile/lib/screens/map/disaster_map_screen.dart` — Flutter tile layer (OpenStreetMap)
+- `mobile/lib/screens/map/disaster_map_screen.dart` — Flutter tile layer (CARTO Voyager)
 - [ADR 0001](0001-llm-provider.md), [ADR 0002](0002-incident-photo-storage.md) —
   the project's other two deviations from the no-external-services commitment

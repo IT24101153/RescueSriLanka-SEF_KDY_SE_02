@@ -400,11 +400,14 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
         maxZoom: _maxZoom,
       ),
       children: [
-        // OpenStreetMap, not the Mapbox tiles the React console uses — see
-        // docs/adr/0003-map-tile-provider.md. Free, keyless, and it works on
-        // the emulator, which the Mapbox tiles did not.
+        // CARTO Voyager — OpenStreetMap data, better cartography, and still
+        // keyless, so nothing sensitive ships in the APK. The React console
+        // uses Mapbox instead; see docs/adr/0003-map-tile-provider.md.
+        //
+        // @2x serves retina tiles, which phones need and flutter_map scales
+        // into its default 256px slots without further configuration.
         TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          urlTemplate: 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
           userAgentPackageName: 'lk.rescuesrilanka.mobile',
           // A tile that fails to load is otherwise just a grey square, which
           // hides the reason.
@@ -452,8 +455,13 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
               ),
           ],
         ),
+        // CARTO's terms require their credit; the OpenStreetMap credit stays
+        // because the underlying data is theirs.
         const RichAttributionWidget(
-          attributions: [TextSourceAttribution('OpenStreetMap contributors')],
+          attributions: [
+            TextSourceAttribution('OpenStreetMap contributors'),
+            TextSourceAttribution('CARTO'),
+          ],
         ),
       ],
     );
