@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Services;
@@ -6,6 +7,7 @@ namespace RescueSriLanka.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class DispatchesController : ControllerBase
     {
         private readonly IDispatchService _service;
@@ -29,6 +31,7 @@ namespace RescueSriLanka.Api.Controllers
         // Creating a dispatch immediately runs the Safety Validation Agent.
         // The response includes both the created record and the agent's
         // findings, so the frontend can show them together.
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPost]
         public async Task<IActionResult> Create(CreateDispatchDto dto)
         {
@@ -42,6 +45,7 @@ namespace RescueSriLanka.Api.Controllers
 
         // Emergency Coordinator approves/rejects — required before the
         // dispatch can move out of Pending (see DispatchService).
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPost("{id:guid}/approve")]
         public async Task<ActionResult<DispatchDto>> Approve(Guid id, ApproveDispatchDto dto)
         {
@@ -50,6 +54,7 @@ namespace RescueSriLanka.Api.Controllers
         }
 
         // Business-specific operation: dispatch status workflow.
+        [Authorize(Roles = "EmergencyCoordinator,RescueTeam")]
         [HttpPatch("{id:guid}/status")]
         public async Task<ActionResult<DispatchDto>> TransitionStatus(Guid id, TransitionDispatchStatusDto dto)
         {

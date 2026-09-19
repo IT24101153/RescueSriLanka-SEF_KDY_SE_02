@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Services;
@@ -6,6 +7,7 @@ namespace RescueSriLanka.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class RescueTeamsController : ControllerBase
     {
         private readonly IRescueTeamService _service;
@@ -26,6 +28,7 @@ namespace RescueSriLanka.Api.Controllers
             return team is null ? NotFound() : Ok(team);
         }
 
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPost]
         public async Task<ActionResult<RescueTeamDto>> Create(CreateRescueTeamDto dto)
         {
@@ -33,6 +36,7 @@ namespace RescueSriLanka.Api.Controllers
             return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
         }
 
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPut("{id:guid}")]
         public async Task<ActionResult<RescueTeamDto>> Update(Guid id, UpdateRescueTeamDto dto)
         {
@@ -40,6 +44,7 @@ namespace RescueSriLanka.Api.Controllers
             return updated is null ? NotFound() : Ok(updated);
         }
 
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpDelete("{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
@@ -47,6 +52,7 @@ namespace RescueSriLanka.Api.Controllers
             return deleted ? NoContent() : NotFound();
         }
 
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPost("{id:guid}/members")]
         public async Task<ActionResult<TeamMemberDto>> AddMember(Guid id, CreateTeamMemberDto dto)
         {
@@ -54,6 +60,7 @@ namespace RescueSriLanka.Api.Controllers
             return member is null ? NotFound("Team not found.") : Ok(member);
         }
 
+        [Authorize(Roles = "EmergencyCoordinator,RescueTeam")]
         [HttpPatch("{teamId:guid}/members/{memberId:guid}/availability")]
         public async Task<IActionResult> SetMemberAvailability(Guid teamId, Guid memberId, UpdateTeamMemberAvailabilityDto dto)
         {
@@ -61,6 +68,7 @@ namespace RescueSriLanka.Api.Controllers
             return success ? NoContent() : NotFound();
         }
 
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPost("{id:guid}/vehicles")]
         public async Task<ActionResult<VehicleDto>> AddVehicle(Guid id, CreateVehicleDto dto)
         {
@@ -68,6 +76,7 @@ namespace RescueSriLanka.Api.Controllers
             return vehicle is null ? NotFound("Team not found.") : Ok(vehicle);
         }
 
+        [Authorize(Roles = "EmergencyCoordinator,RescueTeam")]
         [HttpPatch("{teamId:guid}/vehicles/{vehicleId:guid}/status")]
         public async Task<IActionResult> SetVehicleStatus(Guid teamId, Guid vehicleId, UpdateVehicleStatusDto dto)
         {

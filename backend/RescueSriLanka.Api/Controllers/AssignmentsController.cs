@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Services;
@@ -6,6 +7,7 @@ namespace RescueSriLanka.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class AssignmentsController : ControllerBase
     {
         private readonly IAssignmentService _assignmentService;
@@ -31,10 +33,12 @@ namespace RescueSriLanka.Api.Controllers
         // Business-specific operation: skill/availability-based team matching.
         // Called by the Coordinator/Planner Agent (or directly from React)
         // to get ranked candidate teams before creating an Assignment.
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPost("match")]
         public async Task<ActionResult<List<TeamMatchResultDto>>> Match(MatchRequestDto request)
             => Ok(await _matchingService.FindMatchesAsync(request));
 
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPost]
         public async Task<ActionResult<AssignmentDto>> Create(CreateAssignmentDto dto)
         {
