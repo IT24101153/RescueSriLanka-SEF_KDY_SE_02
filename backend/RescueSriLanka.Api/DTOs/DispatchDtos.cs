@@ -3,6 +3,23 @@ using RescueSriLanka.Api.Models;
 
 namespace RescueSriLanka.Api.DTOs
 {
+    public enum CoordinatorDecision { APPROVE, REVISE, REJECT }
+
+    public record CoordinatorDecisionDto(
+        Guid WorkflowId,
+        int PlanVersion,
+        CoordinatorDecision Decision,
+        [property: MaxLength(500)] string? Notes);
+
+    public record CoordinatorDecisionResultDto(
+        bool Success,
+        bool Idempotent,
+        string? Error,
+        DispatchDto? Dispatch,
+        AssignmentStatus AssignmentStatus,
+        TeamStatus? TeamStatus,
+        VehicleStatus? VehicleStatus);
+
     public record CreateDispatchDto(
         Guid AssignmentId,
         [property: MaxLength(500)] string? Notes);

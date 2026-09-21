@@ -37,26 +37,14 @@ namespace RescueSriLanka.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(CreateDispatchDto dto)
         {
-            var (dispatch, validation, error) = await _service.CreateAsync(dto);
-            if (dispatch is null)
-                return BadRequest(new { error });
-
-            return CreatedAtAction(nameof(GetById), new { id = dispatch.Id },
-                new { dispatch, validation });
+            return Conflict(new { error = "Legacy dispatch creation is disabled. Use POST /api/assignments/{id}/decision with a validated workflow." });
         }
 
         [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPost("{id:guid}/approve")]
         public async Task<ActionResult<DispatchDto>> Approve(Guid id, ApproveDispatchDto dto)
         {
-            var approvedByUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User.FindFirst("sub")?.Value
-                ?? User.Identity?.Name;
-            if (string.IsNullOrWhiteSpace(approvedByUserId))
-                return Unauthorized(new { error = "Authenticated coordinator identity is missing." });
-
-            var result = await _service.ApproveAsync(id, approvedByUserId, dto);
-            return result is null ? NotFound() : Ok(result);
+            return Conflict(new { error = "Legacy dispatch approval is disabled. Use POST /api/assignments/{id}/decision." });
         }
 
         [Authorize(Roles = "EmergencyCoordinator,RescueTeam")]

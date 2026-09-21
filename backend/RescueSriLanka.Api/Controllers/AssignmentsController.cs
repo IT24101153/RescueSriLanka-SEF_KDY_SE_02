@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Agents.SafetyValidation;
+using System.Security.Claims;
 using RescueSriLanka.Api.Services;
 
 namespace RescueSriLanka.Api.Controllers
@@ -69,5 +70,18 @@ namespace RescueSriLanka.Api.Controllers
         [HttpPost("{id:guid}/validate")]
         public async Task<ActionResult<SafetyValidationWorkflowResultDto>> Validate(Guid id, CancellationToken cancellationToken)
             => Ok(await _safetyValidationAgent.ValidateAsync(id, cancellationToken));
+
+        [Authorize(Roles = "EmergencyCoordinator")]
+        [HttpPost("{id:guid}/decision")]
+        public async Task<IActionResult> Decide(Guid id, CoordinatorDecisionDto dto, [FromServices] IDispatchService dispatchService)
+        {
+            var coordinatorId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value ?? User.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(coordinatorId))
+                return Unauthorized(new { error = "Authenticated coordinator identity is missing." });
+
+            var result = await dispatchService.DecideAsync(id, coordinatorId, dto);
+            return result.Success ? Ok(result) : Conflict(result);
+        }
     }
 }

@@ -12,25 +12,25 @@ namespace RescueSriLanka.Api.Tests
     public class DispatchesControllerTests
     {
         [Fact]
-        public async Task ApproveUsesAuthenticatedUserIdInsteadOfRequestBody()
+        public async Task LegacyApproveCannotBypassSafeDecisionWorkflow()
         {
             var service = new CapturingDispatchService();
             var controller = CreateController(service, new Claim(ClaimTypes.NameIdentifier, "jwt-coordinator"));
 
             var result = await controller.Approve(Guid.NewGuid(), new ApproveDispatchDto(true, null));
 
-            Assert.Equal("jwt-coordinator", service.ApprovedByUserId);
-            Assert.IsType<OkObjectResult>(result.Result);
+            Assert.Null(service.ApprovedByUserId);
+            Assert.IsType<ConflictObjectResult>(result.Result);
         }
 
         [Fact]
-        public async Task ApproveRejectsRequestWhenAuthenticatedIdentityIsMissing()
+        public async Task LegacyApproveIsDisabledEvenWhenIdentityIsMissing()
         {
             var controller = CreateController(new CapturingDispatchService());
 
             var result = await controller.Approve(Guid.NewGuid(), new ApproveDispatchDto(true, null));
 
-            Assert.IsType<UnauthorizedObjectResult>(result.Result);
+            Assert.IsType<ConflictObjectResult>(result.Result);
         }
 
         private static DispatchesController CreateController(CapturingDispatchService service, params Claim[] claims)
@@ -60,6 +60,7 @@ namespace RescueSriLanka.Api.Tests
             public Task<(DispatchDto? Dispatch, SafetyValidationResultDto Validation, string? Error)> CreateAsync(CreateDispatchDto dto) => throw new NotImplementedException();
             public Task<List<DispatchDto>> GetAllAsync() => throw new NotImplementedException();
             public Task<DispatchDto?> GetByIdAsync(Guid id) => throw new NotImplementedException();
+            public Task<CoordinatorDecisionResultDto> DecideAsync(Guid assignmentId, string coordinatorId, CoordinatorDecisionDto dto) => throw new NotImplementedException();
             public Task<(bool Success, string? Error, DispatchDto? Dispatch)> TransitionStatusAsync(Guid dispatchId, TransitionDispatchStatusDto dto) => throw new NotImplementedException();
         }
     }

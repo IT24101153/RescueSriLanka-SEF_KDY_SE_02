@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using System.Data;
+using System.Text.Json;
 using RescueSriLanka.Api.Agents.SafetyValidation;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.DTOs;
@@ -12,6 +14,7 @@ namespace RescueSriLanka.Api.Services
         Task<List<DispatchDto>> GetAllAsync();
         Task<(DispatchDto? Dispatch, SafetyValidationResultDto Validation, string? Error)> CreateAsync(CreateDispatchDto dto);
         Task<DispatchDto?> ApproveAsync(Guid dispatchId, string approvedByUserId, ApproveDispatchDto dto);
+        Task<CoordinatorDecisionResultDto> DecideAsync(Guid assignmentId, string coordinatorId, CoordinatorDecisionDto dto);
         Task<(bool Success, string? Error, DispatchDto? Dispatch)> TransitionStatusAsync(Guid dispatchId, TransitionDispatchStatusDto dto);
     }
 
@@ -140,10 +143,110 @@ namespace RescueSriLanka.Api.Services
             return ToDto(dispatch);
         }
 
+        public async Task<CoordinatorDecisionResultDto> DecideAsync(Guid assignmentId, string coordinatorId, CoordinatorDecisionDto dto)
+        {
+            await using var transaction = _db.Database.IsRelational()
+                ? await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+                : null;
+            try
+            {
+                var assignment = await _db.Assignments.Include(a => a.RescueTeam).ThenInclude(t => t!.Members)
+                    .Include(a => a.Vehicle).Include(a => a.Dispatch).SingleOrDefaultAsync(a => a.Id == assignmentId);
+                if (assignment is null) return DecisionFailure("Assignment not found.");
+                var workflow = await _db.AgentWorkflows.SingleOrDefaultAsync(w => w.Id == dto.WorkflowId);
+                if (workflow is null) return DecisionFailure("Safety validation workflow not found.", assignment);
+
+                if (!TryGetApprovedValidation(workflow, assignment, dto.PlanVersion, out var validationError))
+                    return DecisionFailure(validationError, assignment);
+
+                workflow.ApprovedByUserId = Guid.TryParse(coordinatorId, out var id) ? id : null;
+                workflow.ApprovalDecisionAt = DateTime.UtcNow;
+                workflow.ApprovalNotes = dto.Notes;
+
+                if (dto.Decision == CoordinatorDecision.REJECT)
+                {
+                    assignment.Status = AssignmentStatus.Rejected;
+                    workflow.Status = Models.Agents.WorkflowStatus.Rejected;
+                    await _db.SaveChangesAsync();
+                    if (transaction is not null) await transaction.CommitAsync();
+                    return new(true, false, null, null, assignment.Status, assignment.RescueTeam?.Status, assignment.Vehicle?.Status);
+                }
+                if (dto.Decision == CoordinatorDecision.REVISE)
+                {
+                    assignment.Status = AssignmentStatus.Proposed;
+                    workflow.Status = Models.Agents.WorkflowStatus.AwaitingApproval;
+                    await _db.SaveChangesAsync();
+                    if (transaction is not null) await transaction.CommitAsync();
+                    return new(true, false, null, null, assignment.Status, assignment.RescueTeam?.Status, assignment.Vehicle?.Status);
+                }
+
+                if (assignment.Dispatch is not null)
+                {
+                    if (assignment.Dispatch.ApprovalStatus == ApprovalStatus.Approved)
+                        return new(true, true, null, ToDto(assignment.Dispatch), assignment.Status, assignment.RescueTeam?.Status, assignment.Vehicle?.Status);
+                    return DecisionFailure("Assignment already has a dispatch.", assignment);
+                }
+                if (assignment.Status is not AssignmentStatus.Proposed and not AssignmentStatus.PendingApproval)
+                    return DecisionFailure("Assignment is not in an approvable state.", assignment);
+
+                var live = await _safetyAgent.ValidateAsync(assignment.Id);
+                if (!live.Passed || assignment.PlanVersion != dto.PlanVersion)
+                    return DecisionFailure("Live deterministic safety validation failed; revalidation is required.", assignment);
+
+                if (assignment.RescueTeam is null || assignment.Vehicle is null
+                    || assignment.RescueTeam.Status != TeamStatus.Available || assignment.Vehicle.Status != VehicleStatus.Available)
+                    return DecisionFailure("Team or vehicle is no longer available.", assignment);
+
+                var dispatch = new Dispatch { AssignmentId = assignment.Id, Status = DispatchStatus.Dispatched,
+                    ApprovalStatus = ApprovalStatus.Approved, ApprovedByUserId = coordinatorId, ApprovedAt = DateTime.UtcNow,
+                    DispatchedAt = DateTime.UtcNow, Notes = dto.Notes };
+                _db.Dispatches.Add(dispatch);
+                assignment.Status = AssignmentStatus.Approved;
+                assignment.RescueTeam.Status = TeamStatus.OnMission;
+                assignment.Vehicle.Status = VehicleStatus.InUse;
+                workflow.Status = Models.Agents.WorkflowStatus.Executing;
+                workflow.FinalOutcomeJson = JsonSerializer.Serialize(new { assignmentId, planVersion = dto.PlanVersion, coordinatorDecision = "APPROVE", dispatchId = dispatch.Id });
+                await _db.SaveChangesAsync();
+                if (transaction is not null) await transaction.CommitAsync();
+                return new(true, false, null, ToDto(dispatch), assignment.Status, assignment.RescueTeam.Status, assignment.Vehicle.Status);
+            }
+            catch (DbUpdateException)
+            {
+                if (transaction is not null) await transaction.RollbackAsync();
+                return DecisionFailure("Concurrent or duplicate dispatch commit detected; retry safely.");
+            }
+            catch
+            {
+                if (transaction is not null) await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        private static bool TryGetApprovedValidation(Models.Agents.AgentWorkflow workflow, Assignment assignment, int planVersion, out string error)
+        {
+            error = "Safety validation is invalid or stale.";
+            if (workflow.Status != Models.Agents.WorkflowStatus.AwaitingApproval) return false;
+            try
+            {
+                var validation = JsonSerializer.Deserialize<SafetyValidationWorkflowResultDto>(workflow.FinalOutcomeJson ?? "{}");
+                if (validation is null || validation.Decision != SafetyValidationDecision.APPROVE || validation.IsStale
+                    || validation.AssignmentId != assignment.Id || validation.PlanVersion != planVersion
+                    || validation.Checks.Count != 10 || validation.Checks.Any(c => !c.Passed)) return false;
+                return true;
+            }
+            catch (JsonException) { return false; }
+        }
+
+        private static CoordinatorDecisionResultDto DecisionFailure(string error, Assignment? assignment = null) => new(false, false, error, null,
+            assignment?.Status ?? AssignmentStatus.Proposed, assignment?.RescueTeam?.Status, assignment?.Vehicle?.Status);
+
         public async Task<(bool Success, string? Error, DispatchDto? Dispatch)> TransitionStatusAsync(
             Guid dispatchId, TransitionDispatchStatusDto dto)
         {
-            var dispatch = await _db.Dispatches.FirstOrDefaultAsync(d => d.Id == dispatchId);
+            await using var transaction = _db.Database.IsRelational()
+                ? await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable) : null;
+            var dispatch = await _db.Dispatches.Include(d => d.Assignment).ThenInclude(a => a!.RescueTeam)
+                .Include(d => d.Assignment).ThenInclude(a => a!.Vehicle).FirstOrDefaultAsync(d => d.Id == dispatchId);
             if (dispatch is null) return (false, "Dispatch not found.", null);
 
             if (dispatch.Status == DispatchStatus.Pending
@@ -171,7 +274,28 @@ namespace RescueSriLanka.Api.Services
                 case DispatchStatus.Cancelled: dispatch.CancelledAt = now; break;
             }
 
+            if (dto.NewStatus is DispatchStatus.Resolved or DispatchStatus.Cancelled)
+            {
+                if (dispatch.Assignment?.RescueTeam?.Status == TeamStatus.OnMission)
+                    dispatch.Assignment.RescueTeam.Status = TeamStatus.Available;
+                if (dispatch.Assignment?.Vehicle?.Status == VehicleStatus.InUse)
+                    dispatch.Assignment.Vehicle.Status = VehicleStatus.Available;
+
+                if (dto.NewStatus == DispatchStatus.Resolved)
+                {
+                    var matchingWorkflows = await _db.AgentWorkflows
+                        .Where(w => w.Status == Models.Agents.WorkflowStatus.Executing && w.FinalOutcomeJson != null)
+                        .ToListAsync();
+                    var workflow = matchingWorkflows.SingleOrDefault(w => w.FinalOutcomeJson!.Contains(dispatch.Id.ToString(), StringComparison.Ordinal));
+                    if (workflow is not null)
+                    {
+                        workflow.Status = Models.Agents.WorkflowStatus.Completed;
+                        workflow.UpdatedAt = now;
+                    }
+                }
+            }
             await _db.SaveChangesAsync();
+            if (transaction is not null) await transaction.CommitAsync();
             return (true, null, ToDto(dispatch));
         }
 
