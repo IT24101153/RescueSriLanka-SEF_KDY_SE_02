@@ -14,6 +14,7 @@ namespace RescueSriLanka.Api.Services
         Task<HelpRequestResponseDto> CreateAsync(Guid citizenId, CreateHelpRequestDto dto);
         Task<HelpRequestResponseDto?> GetByIdAsync(Guid id);
         Task<List<HelpRequestResponseDto>> GetAllAsync();
+        Task<List<HelpRequestResponseDto>> GetByCitizenAsync(Guid citizenId);
         Task<HelpRequestResponseDto?> UpdateStatusAsync(Guid id, Guid changedByUserId, UpdateHelpRequestStatusDto dto);
         Task<List<StatusHistoryDto>> GetHistoryAsync(Guid id);
         Task<HelpRequestResponseDto?> VerifyAsync(Guid id, Guid verifiedByUserId, VerifyHelpRequestDto dto);
@@ -62,6 +63,16 @@ namespace RescueSriLanka.Api.Services
             var entities = await _db.HelpRequests
                 .OrderByDescending(r => r.UrgencyScore)
                 .ThenByDescending(r => r.CreatedAt)
+                .ToListAsync();
+
+            return entities.Select(ToDto).ToList();
+        }
+
+        public async Task<List<HelpRequestResponseDto>> GetByCitizenAsync(Guid citizenId)
+        {
+            var entities = await _db.HelpRequests
+                .Where(r => r.CitizenId == citizenId)
+                .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
             return entities.Select(ToDto).ToList();

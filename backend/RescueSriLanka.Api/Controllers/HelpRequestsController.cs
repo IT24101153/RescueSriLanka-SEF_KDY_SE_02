@@ -1,5 +1,7 @@
 using System;
+using System.Security.Claims;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Services;
@@ -18,15 +20,15 @@ namespace RescueSriLanka.Api.Controllers
         }
 
         // POST /api/helprequests
-        // Citizen/tourist submits a new help request (Flutter app)
+        // Citizen/tourist submits a new help request (Flutter app). Requires login.
         [HttpPost]
+        [Authorize]
         public async Task<ActionResult<HelpRequestResponseDto>> Create([FromBody] CreateHelpRequestDto dto)
         {
-            // TODO once JWT auth is wired up: read the real citizen id from the authenticated user's claims
-            // e.g. var citizenId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var citizenId = Guid.NewGuid(); // placeholder until auth is in place
+            var citizenId = GetUserId();
+            if (citizenId is null) return Unauthorized();
 
-            var result = await _service.CreateAsync(citizenId, dto);
+            var result = await _service.CreateAsync(citizenId.Value, dto);
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
 
@@ -37,6 +39,25 @@ namespace RescueSriLanka.Api.Controllers
         {
             var result = await _service.GetAllAsync();
             return Ok(result);
+        }
+
+        // GET /api/helprequests/mine
+        // Citizen's own tracking screen (Flutter) — only their own requests
+        [HttpGet("mine")]
+        [Authorize]
+        public async Task<ActionResult<List<HelpRequestResponseDto>>> GetMine()
+        {
+            var citizenId = GetUserId();
+            if (citizenId is null) return Unauthorized();
+
+            var result = await _service.GetByCitizenAsync(citizenId.Value);
+            return Ok(result);
+        }
+
+        private Guid? GetUserId()
+        {
+            var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            return Guid.TryParse(idClaim, out var id) ? id : null;
         }
 
         // GET /api/helprequests/{id}
