@@ -22,9 +22,23 @@ namespace RescueSriLanka.Api.Models
         [ForeignKey(nameof(RescueTeamId))]
         public RescueTeam? RescueTeam { get; set; }
 
+        // Nullable for existing persisted assignments created before a
+        // vehicle was selected. New/revised operational assignments must
+        // provide this value through AssignmentService validation.
+        public Guid? VehicleId { get; set; }
+
+        [ForeignKey(nameof(VehicleId))]
+        public Vehicle? Vehicle { get; set; }
+
         // The skill the plan required — used by the Safety Validation Agent
         // to confirm the assigned team actually has this skill available.
         public SkillType RequiredSkill { get; set; }
+
+        public int RequiredCapacity { get; set; } = 1;
+
+        public AssignmentStatus Status { get; set; } = AssignmentStatus.Proposed;
+
+        public int PlanVersion { get; set; } = 1;
 
         public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
 

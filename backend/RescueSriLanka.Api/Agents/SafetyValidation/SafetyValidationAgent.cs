@@ -3,85 +3,77 @@ using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Models;
 
-namespace RescueSriLanka.Api.Agents.SafetyValidation
+namespace RescueSriLanka.Api.Agents.SafetyValidation;
+
+public interface ISafetyValidationAgent
 {
-    // This is Component D's agent from the Agentic AI subsystem.
-    // Deliberately NOT calling an LLM: the rubric requires "deterministic
-    // validation" as a distinct step from the AI-generated plan, so this
-    // agent is plain rule-based code. It's still wired in as a step the
-    // Coordinator/Planner Agent (Student B) delegates to.
-    public interface ISafetyValidationAgent
+    Task<SafetyValidationResultDto> ValidateAsync(Guid assignmentId);
+}
+
+// Deterministic guardrail for a persisted Component D assignment plan.
+public class SafetyValidationAgent : ISafetyValidationAgent
+{
+    private readonly ComponentDDbContext _db;
+
+    public SafetyValidationAgent(ComponentDDbContext db)
     {
-        Task<SafetyValidationResultDto> ValidateAsync(Guid assignmentId);
+        _db = db;
     }
 
-    public class SafetyValidationAgent : ISafetyValidationAgent
+    public async Task<SafetyValidationResultDto> ValidateAsync(Guid assignmentId)
     {
-        private readonly ComponentDDbContext _db;
+        var issues = new List<string>();
 
-        public SafetyValidationAgent(ComponentDDbContext db)
+        var assignment = await _db.Assignments
+            .Include(a => a.RescueTeam)
+                .ThenInclude(t => t!.Members)
+            .Include(a => a.Vehicle)
+            .FirstOrDefaultAsync(a => a.Id == assignmentId);
+
+        if (assignment is null || assignment.RescueTeam is null)
         {
-            _db = db;
+            issues.Add("Assignment or its rescue team could not be found.");
+            return new SafetyValidationResultDto(false, issues, DateTime.UtcNow);
         }
 
-        public async Task<SafetyValidationResultDto> ValidateAsync(Guid assignmentId)
+        var team = assignment.RescueTeam;
+        if (!team.Members.Any(m => m.IsAvailable && m.Skill == assignment.RequiredSkill))
+            issues.Add($"No available team member with required skill '{assignment.RequiredSkill}'.");
+
+        if (team.Status != TeamStatus.Available)
+            issues.Add("Rescue team is not currently available.");
+
+        var hasTeamConflict = await _db.Dispatches
+            .Where(d => d.Assignment != null
+                        && d.Assignment.RescueTeamId == team.Id
+                        && d.AssignmentId != assignment.Id)
+            .AnyAsync(d => d.Status != DispatchStatus.Resolved && d.Status != DispatchStatus.Cancelled);
+        if (hasTeamConflict)
+            issues.Add("Rescue team already has an active dispatch in progress (double-booking).");
+
+        var vehicle = assignment.Vehicle;
+        if (vehicle is null)
         {
-            var issues = new List<string>();
+            issues.Add("Assignment has no selected vehicle.");
+        }
+        else
+        {
+            if (vehicle.RescueTeamId != team.Id)
+                issues.Add("Selected vehicle does not belong to the rescue team.");
+            if (vehicle.Status != VehicleStatus.Available)
+                issues.Add("Selected vehicle is not available.");
+            if (vehicle.Capacity < assignment.RequiredCapacity)
+                issues.Add("Selected vehicle does not meet the required capacity.");
 
-            var assignment = await _db.Assignments
-                .Include(a => a.RescueTeam)
-                    .ThenInclude(t => t!.Members)
-                .Include(a => a.RescueTeam)
-                    .ThenInclude(t => t!.Vehicles)
-                .FirstOrDefaultAsync(a => a.Id == assignmentId);
-
-            if (assignment is null || assignment.RescueTeam is null)
-            {
-                issues.Add("Assignment or its rescue team could not be found.");
-                return new SafetyValidationResultDto(false, issues, DateTime.UtcNow);
-            }
-
-            var team = assignment.RescueTeam;
-
-            // Check 1: Required-skill match — the team must have at least
-            // one currently available member with the required skill.
-            var skilledAvailable = team.Members
-                .Count(m => m.IsAvailable && m.Skill == assignment.RequiredSkill);
-            if (skilledAvailable == 0)
-            {
-                issues.Add($"No available team member with required skill '{assignment.RequiredSkill}'.");
-            }
-
-            // Check 2: Team capacity — team must not be OffDuty.
-            if (team.Status == TeamStatus.OffDuty)
-            {
-                issues.Add("Rescue team is currently off duty.");
-            }
-
-            // Check 3: No double-booking — the team should not already have
-            // an active (non-resolved/cancelled) dispatch tied to a
-            // DIFFERENT assignment. Compared by AssignmentId rather than
-            // assignment.Dispatch (which isn't loaded here and may not
-            // exist yet at validation time).
-            var hasActiveDispatch = await _db.Dispatches
+            var hasVehicleConflict = await _db.Dispatches
                 .Where(d => d.Assignment != null
-                            && d.Assignment.RescueTeamId == team.Id
+                            && d.Assignment.VehicleId == vehicle.Id
                             && d.AssignmentId != assignment.Id)
                 .AnyAsync(d => d.Status != DispatchStatus.Resolved && d.Status != DispatchStatus.Cancelled);
-
-            if (hasActiveDispatch)
-            {
-                issues.Add("Rescue team already has an active dispatch in progress (double-booking).");
-            }
-
-            // Check 4: At least one available vehicle exists for the team.
-            var hasAvailableVehicle = team.Vehicles.Any(v => v.Status == VehicleStatus.Available);
-            if (!hasAvailableVehicle)
-            {
-                issues.Add("No available vehicle assigned to this team.");
-            }
-
-            return new SafetyValidationResultDto(issues.Count == 0, issues, DateTime.UtcNow);
+            if (hasVehicleConflict)
+                issues.Add("Selected vehicle already has an active dispatch in progress (double-booking).");
         }
+
+        return new SafetyValidationResultDto(issues.Count == 0, issues, DateTime.UtcNow);
     }
 }

@@ -42,10 +42,19 @@ namespace RescueSriLanka.Api.Controllers
         [HttpPost]
         public async Task<ActionResult<AssignmentDto>> Create(CreateAssignmentDto dto)
         {
-            var created = await _assignmentService.CreateAsync(dto);
+            var (created, error) = await _assignmentService.CreateAsync(dto);
             return created is null
-                ? NotFound("Rescue team not found.")
+                ? ValidationProblem(error)
                 : CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        }
+
+        [Authorize(Roles = "EmergencyCoordinator")]
+        [HttpPost("{id:guid}/revise")]
+        public async Task<ActionResult<AssignmentDto>> Revise(Guid id, ReviseAssignmentDto dto)
+        {
+            var (revised, error) = await _assignmentService.ReviseAsync(id, dto);
+            if (revised is not null) return Ok(revised);
+            return error == "Assignment not found." ? NotFound(error) : ValidationProblem(error);
         }
     }
 }

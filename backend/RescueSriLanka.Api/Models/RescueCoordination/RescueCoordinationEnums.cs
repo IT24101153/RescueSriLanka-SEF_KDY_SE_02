@@ -52,3 +52,11 @@ public enum ApprovalStatus
     Rejected = 2,
     Revised = 3
 }
+
+public enum AssignmentStatus
+{
+    Proposed = 0,
+    PendingApproval = 1,
+    Approved = 2,
+    Rejected = 3
+}

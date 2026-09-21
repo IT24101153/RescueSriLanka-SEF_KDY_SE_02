@@ -25,6 +25,20 @@ public class ComponentDDbContext(DbContextOptions<ComponentDDbContext> options) 
             .HasIndex(d => d.AssignmentId)
             .IsUnique();
 
+        modelBuilder.Entity<Assignment>()
+            .HasOne(a => a.Vehicle)
+            .WithMany(v => v.Assignments)
+            .HasForeignKey(a => a.VehicleId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Assignment>()
+            .Property(a => a.RequiredCapacity)
+            .HasDefaultValue(1);
+
+        modelBuilder.Entity<Assignment>()
+            .Property(a => a.PlanVersion)
+            .HasDefaultValue(1);
+
         modelBuilder.Entity<AgentWorkflow>(entity =>
         {
             entity.ToTable("AgentWorkflows", table => table.ExcludeFromMigrations());

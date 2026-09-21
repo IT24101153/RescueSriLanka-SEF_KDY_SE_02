@@ -23,5 +23,7 @@ namespace RescueSriLanka.Api.Models
 
         [ForeignKey(nameof(RescueTeamId))]
         public RescueTeam? RescueTeam { get; set; }
+
+        public ICollection<Assignment> Assignments { get; set; } = new List<Assignment>();
     }
 }

@@ -13,10 +13,11 @@ namespace RescueSriLanka.Api.Tests
 
             var team = new RescueTeam { Name = "Echo", Status = TeamStatus.Available };
             team.Members.Add(new TeamMember { FullName = "A", Phone = "1", Skill = SkillType.Logistics, IsAvailable = true });
-            team.Vehicles.Add(new Vehicle { PlateNumber = "V1", Type = VehicleType.Truck, Status = VehicleStatus.Available, Capacity = 3 });
+            var vehicle = new Vehicle { PlateNumber = "V1", Type = VehicleType.Truck, Status = VehicleStatus.Available, Capacity = 3 };
+            team.Vehicles.Add(vehicle);
             db.RescueTeams.Add(team);
 
-            var assignment = new Assignment { RescueTeamId = team.Id, RequiredSkill = SkillType.Logistics };
+            var assignment = new Assignment { RescueTeamId = team.Id, VehicleId = vehicle.Id, RequiredSkill = SkillType.Logistics };
             db.Assignments.Add(assignment);
             await db.SaveChangesAsync();
 
@@ -34,10 +35,11 @@ namespace RescueSriLanka.Api.Tests
 
             var team = new RescueTeam { Name = "Foxtrot", Status = TeamStatus.Available };
             team.Members.Add(new TeamMember { FullName = "A", Phone = "1", Skill = SkillType.Driving, IsAvailable = true });
-            team.Vehicles.Add(new Vehicle { PlateNumber = "V2", Type = VehicleType.Truck, Status = VehicleStatus.Available, Capacity = 3 });
+            var vehicle = new Vehicle { PlateNumber = "V2", Type = VehicleType.Truck, Status = VehicleStatus.Available, Capacity = 3 };
+            team.Vehicles.Add(vehicle);
             db.RescueTeams.Add(team);
 
-            var assignment = new Assignment { RescueTeamId = team.Id, RequiredSkill = SkillType.Paramedic };
+            var assignment = new Assignment { RescueTeamId = team.Id, VehicleId = vehicle.Id, RequiredSkill = SkillType.Paramedic };
             db.Assignments.Add(assignment);
             await db.SaveChangesAsync();
 
@@ -55,10 +57,11 @@ namespace RescueSriLanka.Api.Tests
 
             var team = new RescueTeam { Name = "Golf", Status = TeamStatus.OffDuty };
             team.Members.Add(new TeamMember { FullName = "A", Phone = "1", Skill = SkillType.FirstAid, IsAvailable = true });
-            team.Vehicles.Add(new Vehicle { PlateNumber = "V3", Type = VehicleType.Ambulance, Status = VehicleStatus.Available, Capacity = 2 });
+            var vehicle = new Vehicle { PlateNumber = "V3", Type = VehicleType.Ambulance, Status = VehicleStatus.Available, Capacity = 2 };
+            team.Vehicles.Add(vehicle);
             db.RescueTeams.Add(team);
 
-            var assignment = new Assignment { RescueTeamId = team.Id, RequiredSkill = SkillType.FirstAid };
+            var assignment = new Assignment { RescueTeamId = team.Id, VehicleId = vehicle.Id, RequiredSkill = SkillType.FirstAid };
             db.Assignments.Add(assignment);
             await db.SaveChangesAsync();
 
@@ -66,7 +69,7 @@ namespace RescueSriLanka.Api.Tests
             var result = await agent.ValidateAsync(assignment.Id);
 
             Assert.False(result.Passed);
-            Assert.Contains(result.Issues, i => i.Contains("off duty"));
+            Assert.Contains(result.Issues, i => i.Contains("not currently available"));
         }
 
         [Fact]
@@ -76,10 +79,11 @@ namespace RescueSriLanka.Api.Tests
 
             var team = new RescueTeam { Name = "Hotel", Status = TeamStatus.Available };
             team.Members.Add(new TeamMember { FullName = "A", Phone = "1", Skill = SkillType.FireResponse, IsAvailable = true });
-            team.Vehicles.Add(new Vehicle { PlateNumber = "V4", Type = VehicleType.FireTruck, Status = VehicleStatus.UnderMaintenance, Capacity = 5 });
+            var vehicle = new Vehicle { PlateNumber = "V4", Type = VehicleType.FireTruck, Status = VehicleStatus.UnderMaintenance, Capacity = 5 };
+            team.Vehicles.Add(vehicle);
             db.RescueTeams.Add(team);
 
-            var assignment = new Assignment { RescueTeamId = team.Id, RequiredSkill = SkillType.FireResponse };
+            var assignment = new Assignment { RescueTeamId = team.Id, VehicleId = vehicle.Id, RequiredSkill = SkillType.FireResponse };
             db.Assignments.Add(assignment);
             await db.SaveChangesAsync();
 
@@ -97,11 +101,12 @@ namespace RescueSriLanka.Api.Tests
 
             var team = new RescueTeam { Name = "India", Status = TeamStatus.Available };
             team.Members.Add(new TeamMember { FullName = "A", Phone = "1", Skill = SkillType.WaterRescue, IsAvailable = true });
-            team.Vehicles.Add(new Vehicle { PlateNumber = "V5", Type = VehicleType.Boat, Status = VehicleStatus.Available, Capacity = 4 });
+            var vehicle = new Vehicle { PlateNumber = "V5", Type = VehicleType.Boat, Status = VehicleStatus.Available, Capacity = 4 };
+            team.Vehicles.Add(vehicle);
             db.RescueTeams.Add(team);
 
-            var existingAssignment = new Assignment { RescueTeamId = team.Id, RequiredSkill = SkillType.WaterRescue };
-            var newAssignment = new Assignment { RescueTeamId = team.Id, RequiredSkill = SkillType.WaterRescue };
+            var existingAssignment = new Assignment { RescueTeamId = team.Id, VehicleId = vehicle.Id, RequiredSkill = SkillType.WaterRescue };
+            var newAssignment = new Assignment { RescueTeamId = team.Id, VehicleId = vehicle.Id, RequiredSkill = SkillType.WaterRescue };
             db.Assignments.AddRange(existingAssignment, newAssignment);
             await db.SaveChangesAsync();
 

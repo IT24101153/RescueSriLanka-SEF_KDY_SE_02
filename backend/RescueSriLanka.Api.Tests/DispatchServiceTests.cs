@@ -14,13 +14,15 @@ namespace RescueSriLanka.Api.Tests
 
             var team = new RescueTeam { Name = "Delta", Status = TeamStatus.Available };
             team.Members.Add(new TeamMember { FullName = "X", Phone = "1", Skill = SkillType.StructuralCollapse, IsAvailable = true });
-            team.Vehicles.Add(new Vehicle { PlateNumber = "XYZ-1", Type = VehicleType.Truck, Status = VehicleStatus.Available, Capacity = 4 });
+            var vehicle = new Vehicle { PlateNumber = "XYZ-1", Type = VehicleType.Truck, Status = VehicleStatus.Available, Capacity = 4 };
+            team.Vehicles.Add(vehicle);
             db.RescueTeams.Add(team);
             await db.SaveChangesAsync();
 
             var assignment = new Assignment
             {
                 RescueTeamId = team.Id,
+                VehicleId = vehicle.Id,
                 RequiredSkill = SkillType.StructuralCollapse
             };
             db.Assignments.Add(assignment);

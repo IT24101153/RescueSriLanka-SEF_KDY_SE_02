@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Agents.SafetyValidation;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.DTOs;
+using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Models.Agents;
 using RescueSriLanka.Api.Services;
 
@@ -91,20 +92,32 @@ public class AgentOrchestrator : IAgentOrchestrator
             return await FailWorkflowAsync(workflow, reason);
         }
 
-        var assignment = await _assignmentService.CreateAsync(new CreateAssignmentDto(
+        var vehicle = await _db.Vehicles
+            .Where(v => v.RescueTeamId == recommendation.RescueTeamId!.Value
+                        && v.Status == VehicleStatus.Available
+                        && v.Capacity >= 1)
+            .OrderBy(v => v.Capacity)
+            .FirstOrDefaultAsync();
+        if (vehicle is null)
+            return await FailWorkflowAsync(workflow, "The recommended team has no available vehicle for the proposed response.");
+
+        var (assignment, assignmentError) = await _assignmentService.CreateAsync(new CreateAssignmentDto(
             IncidentId: dto.ObjectiveType == WorkflowObjectiveType.Incident ? dto.ObjectiveId : null,
             HelpRequestId: dto.ObjectiveType == WorkflowObjectiveType.HelpRequest ? dto.ObjectiveId : null,
             RescueTeamId: recommendation.RescueTeamId!.Value,
+            VehicleId: vehicle.Id,
             RequiredSkill: dto.RequiredSkill,
+            RequiredCapacity: 1,
             Notes: $"Agent recommendation: {recommendation.Reasoning}"));
 
         if (assignment is null)
-            return await FailWorkflowAsync(workflow, "Failed to create assignment for the recommended team.");
+            return await FailWorkflowAsync(workflow, assignmentError ?? "Failed to create assignment for the recommended team.");
 
         workflow.PlanJson = JsonSerializer.Serialize(new
         {
             requiredSkill = dto.RequiredSkill.ToString(),
             recommendedTeamId = recommendation.RescueTeamId,
+            vehicleId = vehicle.Id,
             assignmentId = assignment.Id
         });
         workflow.UpdatedAt = DateTime.UtcNow;
@@ -136,6 +149,7 @@ public class AgentOrchestrator : IAgentOrchestrator
         {
             requiredSkill = dto.RequiredSkill.ToString(),
             recommendedTeamId = recommendation.RescueTeamId,
+            vehicleId = vehicle.Id,
             assignmentId = assignment.Id,
             dispatchId = dispatch.Id
         });

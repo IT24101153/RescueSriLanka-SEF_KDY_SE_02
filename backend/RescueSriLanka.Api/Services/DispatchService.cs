@@ -91,6 +91,11 @@ namespace RescueSriLanka.Api.Services
                 }
             }
 
+            if (assignment.Status is not AssignmentStatus.Proposed and not AssignmentStatus.Rejected)
+            {
+                return (null, EmptyValidation(), "Assignment is not in a state that can be submitted for approval.");
+            }
+
             var dispatch = new Dispatch
             {
                 AssignmentId = assignment.Id,
@@ -100,6 +105,7 @@ namespace RescueSriLanka.Api.Services
             };
 
             _db.Dispatches.Add(dispatch);
+            assignment.Status = AssignmentStatus.PendingApproval;
             await _db.SaveChangesAsync();
 
             return (ToDto(dispatch), validation, null);
@@ -107,7 +113,9 @@ namespace RescueSriLanka.Api.Services
 
         public async Task<DispatchDto?> ApproveAsync(Guid dispatchId, string approvedByUserId, ApproveDispatchDto dto)
         {
-            var dispatch = await _db.Dispatches.FirstOrDefaultAsync(d => d.Id == dispatchId);
+            var dispatch = await _db.Dispatches
+                .Include(d => d.Assignment)
+                .FirstOrDefaultAsync(d => d.Id == dispatchId);
             if (dispatch is null) return null;
 
             dispatch.ApprovalStatus = dto.Approve ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
@@ -119,6 +127,13 @@ namespace RescueSriLanka.Api.Services
             {
                 dispatch.Status = DispatchStatus.Cancelled;
                 dispatch.CancelledAt = DateTime.UtcNow;
+            }
+
+            if (dispatch.Assignment is not null)
+            {
+                dispatch.Assignment.Status = dto.Approve
+                    ? AssignmentStatus.Approved
+                    : AssignmentStatus.Rejected;
             }
 
             await _db.SaveChangesAsync();
