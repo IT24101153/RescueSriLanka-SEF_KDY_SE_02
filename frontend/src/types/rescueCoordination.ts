@@ -26,6 +26,9 @@ export type DispatchStatus =
   | "Cancelled";
 
 export type ApprovalStatus = "PendingApproval" | "Approved" | "Rejected" | "Revised";
+export type AssignmentStatus = "Proposed" | "PendingApproval" | "Approved" | "Rejected";
+export type SafetyValidationDecision = "APPROVE" | "REVISE" | "REJECT";
+export type WorkflowStatus = "Planning" | "AwaitingApproval" | "Approved" | "Rejected" | "Executing" | "Completed" | "Failed";
 
 // ---- Entities ----
 
@@ -61,7 +64,12 @@ export interface AssignmentDto {
   helpRequestId: string | null;
   rescueTeamId: string;
   rescueTeamName: string;
+  vehicleId: string | null;
+  vehiclePlateNumber: string;
   requiredSkill: SkillType;
+  requiredCapacity: number;
+  status: AssignmentStatus;
+  planVersion: number;
   assignedAt: string;
   notes: string | null;
   dispatchId: string | null;
@@ -127,9 +135,28 @@ export interface CreateAssignmentRequest {
   incidentId?: string | null;
   helpRequestId?: string | null;
   rescueTeamId: string;
+  vehicleId: string;
   requiredSkill: SkillType;
+  requiredCapacity: number;
   notes?: string | null;
 }
+
+export interface ReviseAssignmentRequest {
+  rescueTeamId: string;
+  vehicleId: string;
+  requiredSkill: SkillType;
+  requiredCapacity: number;
+  notes?: string | null;
+}
+
+export interface SafetyValidationCheckDto { name: string; passed: boolean; reason: string; details?: unknown }
+export interface SafetyValidationWorkflowResultDto {
+  workflowId: string | null; assignmentId: string; planVersion: number | null;
+  decision: SafetyValidationDecision; summary: string; checks: SafetyValidationCheckDto[];
+  failedChecks: string[]; suggestedActions: string[]; workflowStatus: WorkflowStatus; isStale: boolean;
+}
+export interface CoordinatorDecisionRequest { workflowId: string; planVersion: number; decision: SafetyValidationDecision; notes?: string | null }
+export interface CoordinatorDecisionResultDto { success: boolean; idempotent: boolean; error: string | null; dispatch: DispatchDto | null; assignmentStatus: AssignmentStatus; teamStatus: TeamStatus | null; vehicleStatus: VehicleStatus | null }
 
 export interface CreateDispatchRequest {
   assignmentId: string;

@@ -6,5 +6,5 @@ import Dashboard from './pages/Dashboard/Dashboard'
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(() => getSession())
-  return session ? <Dashboard /> : <LoginPage onSignedIn={setSession} />
+  return session ? <Dashboard role={session.user.role} /> : <LoginPage onSignedIn={setSession} />
 }

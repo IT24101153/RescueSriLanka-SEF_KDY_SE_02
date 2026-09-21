@@ -19,6 +19,7 @@ import IncidentPhotos from './sections/IncidentPhotos'
 import RescueCoordinationSection from './sections/RescueCoordinationSection'
 import { SEVERITY_TOKEN, STATUS_LABEL, timeAgo } from './severity'
 import './Dashboard.css'
+import type { Role } from '../../auth/session'
 
 const SEVERITIES: IncidentSeverity[] = ['Low', 'Moderate', 'High', 'Critical']
 const STATUSES: IncidentStatus[] = ['Reported', 'Verified', 'InProgress']
@@ -43,7 +44,7 @@ const TABS: { id: TabId; label: string; hint: string }[] = [
   { id: 'rescue', label: 'Rescue coordination', hint: 'Teams, assignments & dispatch' },
 ]
 
-export default function Dashboard() {
+export default function Dashboard({ role }: { role: Role }) {
   const [tab, setTab] = useState<TabId>('overview')
 
   const [stats, setStats] = useState<DashboardStatistics | null>(null)
@@ -268,7 +269,7 @@ export default function Dashboard() {
       )}
 
       {tab === 'agent' && <AgentActivity />}
-      {tab === 'rescue' && <RescueCoordinationSection />}
+      {tab === 'rescue' && <RescueCoordinationSection canCoordinate={role === 'EmergencyCoordinator'} />}
 
       {tab === 'queue' && (
         <section className="panel" aria-label="Incident queue">
