@@ -16,7 +16,7 @@ public interface IAgentOrchestrator
 
 public class AgentOrchestrator : IAgentOrchestrator
 {
-    private readonly ApplicationDbContext _db;
+    private readonly ComponentDDbContext _db;
     private readonly IIncidentAnalysisAgent _incidentAnalysisAgent;
     private readonly IDispatchRecommendationAgent _recommendationAgent;
     private readonly IAssignmentService _assignmentService;
@@ -24,7 +24,7 @@ public class AgentOrchestrator : IAgentOrchestrator
     private readonly ISafetyValidationAgent _safetyAgent;
 
     public AgentOrchestrator(
-        ApplicationDbContext db,
+        ComponentDDbContext db,
         IIncidentAnalysisAgent incidentAnalysisAgent,
         IDispatchRecommendationAgent recommendationAgent,
         IAssignmentService assignmentService,

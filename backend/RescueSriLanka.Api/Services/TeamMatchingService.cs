@@ -15,9 +15,9 @@ namespace RescueSriLanka.Api.Services
 
     public class TeamMatchingService : ITeamMatchingService
     {
-        private readonly ApplicationDbContext _db;
+        private readonly ComponentDDbContext _db;
 
-        public TeamMatchingService(ApplicationDbContext db)
+        public TeamMatchingService(ComponentDDbContext db)
         {
             _db = db;
         }

@@ -14,9 +14,9 @@ namespace RescueSriLanka.Api.Services
 
     public class AssignmentService : IAssignmentService
     {
-        private readonly ApplicationDbContext _db;
+        private readonly ComponentDDbContext _db;
 
-        public AssignmentService(ApplicationDbContext db)
+        public AssignmentService(ComponentDDbContext db)
         {
             _db = db;
         }

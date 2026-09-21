@@ -11,7 +11,7 @@ using RescueSriLanka.Api.Data;
 
 namespace RescueSriLanka.Api.Migrations
 {
-    [DbContext(typeof(ApplicationDbContext))]
+    [DbContext(typeof(ComponentDDbContext))]
     [Migration("20260918131705_AddComponentD")]
     partial class AddComponentD
     {

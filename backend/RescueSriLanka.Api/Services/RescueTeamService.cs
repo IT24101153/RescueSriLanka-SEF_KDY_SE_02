@@ -22,9 +22,9 @@ namespace RescueSriLanka.Api.Services
 
     public class RescueTeamService : IRescueTeamService
     {
-        private readonly ApplicationDbContext _db;
+        private readonly ComponentDDbContext _db;
 
-        public RescueTeamService(ApplicationDbContext db)
+        public RescueTeamService(ComponentDDbContext db)
         {
             _db = db;
         }
@@ -175,4 +175,3 @@ namespace RescueSriLanka.Api.Services
             t.Vehicles.Select(v => new VehicleDto(v.Id, v.PlateNumber, v.Type, v.Status, v.Capacity)).ToList());
     }
 }
-

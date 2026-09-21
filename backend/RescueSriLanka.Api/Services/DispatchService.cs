@@ -17,7 +17,7 @@ namespace RescueSriLanka.Api.Services
 
     public class DispatchService : IDispatchService
     {
-        private readonly ApplicationDbContext _db;
+        private readonly ComponentDDbContext _db;
         private readonly ISafetyValidationAgent _safetyAgent;
 
         private static readonly Dictionary<DispatchStatus, DispatchStatus[]> AllowedTransitions = new()
@@ -30,7 +30,7 @@ namespace RescueSriLanka.Api.Services
             [DispatchStatus.Cancelled] = Array.Empty<DispatchStatus>()
         };
 
-        public DispatchService(ApplicationDbContext db, ISafetyValidationAgent safetyAgent)
+        public DispatchService(ComponentDDbContext db, ISafetyValidationAgent safetyAgent)
         {
             _db = db;
             _safetyAgent = safetyAgent;

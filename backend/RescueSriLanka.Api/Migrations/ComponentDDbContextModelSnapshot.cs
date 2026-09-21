@@ -10,8 +10,8 @@ using RescueSriLanka.Api.Data;
 
 namespace RescueSriLanka.Api.Migrations
 {
-    [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [DbContext(typeof(ComponentDDbContext))]
+    partial class ComponentDDbContextModelSnapshot : ModelSnapshot
     {
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
@@ -67,7 +67,7 @@ namespace RescueSriLanka.Api.Migrations
 
                     b.HasIndex("AgentWorkflowId");
 
-                    b.ToTable("AgentSteps");
+                    b.ToTable("AgentSteps", t => t.ExcludeFromMigrations());
                 });
 
             modelBuilder.Entity("RescueSriLanka.Api.Models.Agents.AgentWorkflow", b =>
@@ -116,7 +116,7 @@ namespace RescueSriLanka.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AgentWorkflows");
+                    b.ToTable("AgentWorkflows", t => t.ExcludeFromMigrations());
                 });
 
             modelBuilder.Entity("RescueSriLanka.Api.Models.Assignment", b =>

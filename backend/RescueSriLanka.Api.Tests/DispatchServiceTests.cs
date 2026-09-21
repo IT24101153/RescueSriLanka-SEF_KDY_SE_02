@@ -8,7 +8,7 @@ namespace RescueSriLanka.Api.Tests
 {
     public class DispatchServiceTests
     {
-        private static async Task<(Data.ApplicationDbContext Db, Assignment Assignment)> SeedAssignmentAsync()
+        private static async Task<(Data.ComponentDDbContext Db, Assignment Assignment)> SeedAssignmentAsync()
         {
             var db = TestDbFactory.Create();
 

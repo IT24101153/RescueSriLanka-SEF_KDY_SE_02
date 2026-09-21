@@ -17,9 +17,9 @@ namespace RescueSriLanka.Api.Agents.SafetyValidation
 
     public class SafetyValidationAgent : ISafetyValidationAgent
     {
-        private readonly ApplicationDbContext _db;
+        private readonly ComponentDDbContext _db;
 
-        public SafetyValidationAgent(ApplicationDbContext db)
+        public SafetyValidationAgent(ComponentDDbContext db)
         {
             _db = db;
         }

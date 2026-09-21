@@ -7,13 +7,13 @@ namespace RescueSriLanka.Api.Tests
     {
         // Each test gets its own isolated in-memory database by using a
         // unique Guid as the database name — no real Postgres needed.
-        public static ApplicationDbContext Create()
+        public static ComponentDDbContext Create()
         {
-            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            var options = new DbContextOptionsBuilder<ComponentDDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
                 .Options;
 
-            return new ApplicationDbContext(options);
+            return new ComponentDDbContext(options);
         }
     }
 }
