@@ -156,6 +156,8 @@ namespace RescueSriLanka.Api.Services
                 var workflow = await _db.AgentWorkflows.SingleOrDefaultAsync(w => w.Id == dto.WorkflowId);
                 if (workflow is null) return DecisionFailure("Safety validation workflow not found.", assignment);
 
+                if (assignment.Dispatch is not null && assignment.Dispatch.ApprovalStatus == ApprovalStatus.Approved)
+                    return new(true, true, null, ToDto(assignment.Dispatch), assignment.Status, assignment.RescueTeam?.Status, assignment.Vehicle?.Status);
                 if (!TryGetApprovedValidation(workflow, assignment, dto.PlanVersion, out var validationError))
                     return DecisionFailure(validationError, assignment);
 
@@ -182,8 +184,6 @@ namespace RescueSriLanka.Api.Services
 
                 if (assignment.Dispatch is not null)
                 {
-                    if (assignment.Dispatch.ApprovalStatus == ApprovalStatus.Approved)
-                        return new(true, true, null, ToDto(assignment.Dispatch), assignment.Status, assignment.RescueTeam?.Status, assignment.Vehicle?.Status);
                     return DecisionFailure("Assignment already has a dispatch.", assignment);
                 }
                 if (assignment.Status is not AssignmentStatus.Proposed and not AssignmentStatus.PendingApproval)
