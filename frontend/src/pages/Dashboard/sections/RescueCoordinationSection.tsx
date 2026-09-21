@@ -569,7 +569,6 @@ function DispatchRow({
     setErr(null);
     try {
       const body: ApproveDispatchRequest = {
-        approvedByUserId: "current-coordinator", // TODO: wire to real signed-in user id
         approve,
       };
       await apiFetch<DispatchDto>(`/api/dispatches/${dispatch.id}/approve`, {

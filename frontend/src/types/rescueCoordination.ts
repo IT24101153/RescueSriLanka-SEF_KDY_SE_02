@@ -137,7 +137,6 @@ export interface CreateDispatchRequest {
 }
 
 export interface ApproveDispatchRequest {
-  approvedByUserId: string;
   approve: boolean;
   notes?: string | null;
 }
