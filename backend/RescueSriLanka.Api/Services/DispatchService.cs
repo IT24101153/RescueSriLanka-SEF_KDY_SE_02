@@ -10,8 +10,8 @@ namespace RescueSriLanka.Api.Services
     {
         Task<DispatchDto?> GetByIdAsync(Guid id);
         Task<List<DispatchDto>> GetAllAsync();
-        Task<(DispatchDto? Dispatch, SafetyValidationResultDto Validation)> CreateAsync(CreateDispatchDto dto);
-        Task<DispatchDto?> ApproveAsync(Guid dispatchId, ApproveDispatchDto dto);
+        Task<(DispatchDto? Dispatch, SafetyValidationResultDto Validation, string? Error)> CreateAsync(CreateDispatchDto dto);
+        Task<DispatchDto?> ApproveAsync(Guid dispatchId, string approvedByUserId, ApproveDispatchDto dto);
         Task<(bool Success, string? Error, DispatchDto? Dispatch)> TransitionStatusAsync(Guid dispatchId, TransitionDispatchStatusDto dto);
     }
 
@@ -20,8 +20,6 @@ namespace RescueSriLanka.Api.Services
         private readonly ApplicationDbContext _db;
         private readonly ISafetyValidationAgent _safetyAgent;
 
-        // Allowed forward transitions for the dispatch status workflow.
-        // Cancellation is allowed from any non-terminal state.
         private static readonly Dictionary<DispatchStatus, DispatchStatus[]> AllowedTransitions = new()
         {
             [DispatchStatus.Pending] = new[] { DispatchStatus.Dispatched, DispatchStatus.Cancelled },
@@ -50,11 +48,17 @@ namespace RescueSriLanka.Api.Services
             return d is null ? null : ToDto(d);
         }
 
-        // Creating a dispatch always runs the Safety Validation Agent first.
-        // The dispatch record is created either way (for auditability), but
-        // it starts PendingApproval and the validation result is returned
-        // so the Coordinator sees exactly why it did/didn't pass.
-        public async Task<(DispatchDto? Dispatch, SafetyValidationResultDto Validation)> CreateAsync(CreateDispatchDto dto)
+        // FIX: previously, ANY existing dispatch (including a Cancelled
+        // one) permanently blocked creating a new dispatch for the same
+        // assignment. That meant a rejected dispatch could never be
+        // retried — e.g. a team becomes unavailable, the coordinator
+        // rejects, the team frees up later, but the assignment is stuck
+        // forever. Now: only a non-terminal-Cancelled existing dispatch
+        // blocks a new one. Resolved still blocks (the work is done).
+        // If the existing dispatch is Cancelled, it's removed and
+        // replaced, preserving the 1:1 invariant enforced by the unique
+        // index on Dispatch.AssignmentId.
+        public async Task<(DispatchDto? Dispatch, SafetyValidationResultDto Validation, string? Error)> CreateAsync(CreateDispatchDto dto)
         {
             var assignment = await _db.Assignments
                 .Include(a => a.Dispatch)
@@ -62,17 +66,30 @@ namespace RescueSriLanka.Api.Services
 
             if (assignment is null)
             {
-                return (null, new SafetyValidationResultDto(false,
-                    new List<string> { "Assignment not found." }, DateTime.UtcNow));
+                return (null, EmptyValidation(), "Assignment not found.");
+            }
+
+            var validation = await _safetyAgent.ValidateAsync(assignment.Id);
+            if (!validation.Passed)
+            {
+                return (null, validation, "Safety validation failed: " + string.Join(" ", validation.Issues));
             }
 
             if (assignment.Dispatch is not null)
             {
-                return (null, new SafetyValidationResultDto(false,
-                    new List<string> { "This assignment already has a dispatch." }, DateTime.UtcNow));
+                if (assignment.Dispatch.Status == DispatchStatus.Cancelled)
+                {
+                    _db.Dispatches.Remove(assignment.Dispatch);
+                    await _db.SaveChangesAsync();
+                }
+                else
+                {
+                    var reason = assignment.Dispatch.Status == DispatchStatus.Resolved
+                        ? "This assignment has already been resolved."
+                        : "This assignment already has an active dispatch.";
+                    return (null, EmptyValidation(), reason);
+                }
             }
-
-            var validation = await _safetyAgent.ValidateAsync(assignment.Id);
 
             var dispatch = new Dispatch
             {
@@ -85,18 +102,16 @@ namespace RescueSriLanka.Api.Services
             _db.Dispatches.Add(dispatch);
             await _db.SaveChangesAsync();
 
-            return (ToDto(dispatch), validation);
+            return (ToDto(dispatch), validation, null);
         }
 
-        // Human-approval step — an Emergency Coordinator approves or
-        // rejects after seeing the Safety Validation Agent's result.
-        public async Task<DispatchDto?> ApproveAsync(Guid dispatchId, ApproveDispatchDto dto)
+        public async Task<DispatchDto?> ApproveAsync(Guid dispatchId, string approvedByUserId, ApproveDispatchDto dto)
         {
             var dispatch = await _db.Dispatches.FirstOrDefaultAsync(d => d.Id == dispatchId);
             if (dispatch is null) return null;
 
             dispatch.ApprovalStatus = dto.Approve ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
-            dispatch.ApprovedByUserId = dto.ApprovedByUserId;
+            dispatch.ApprovedByUserId = approvedByUserId;
             dispatch.ApprovedAt = DateTime.UtcNow;
             if (dto.Notes is not null) dispatch.Notes = dto.Notes;
 
@@ -116,9 +131,6 @@ namespace RescueSriLanka.Api.Services
             var dispatch = await _db.Dispatches.FirstOrDefaultAsync(d => d.Id == dispatchId);
             if (dispatch is null) return (false, "Dispatch not found.", null);
 
-            // Can't move a dispatch out of Pending into an active state
-            // without coordinator approval — enforces the human-in-the-loop
-            // requirement at the workflow level, not just the UI.
             if (dispatch.Status == DispatchStatus.Pending
                 && dto.NewStatus != DispatchStatus.Cancelled
                 && dispatch.ApprovalStatus != ApprovalStatus.Approved)
@@ -147,6 +159,9 @@ namespace RescueSriLanka.Api.Services
             await _db.SaveChangesAsync();
             return (true, null, ToDto(dispatch));
         }
+
+        private static SafetyValidationResultDto EmptyValidation() =>
+            new(false, new List<string>(), DateTime.UtcNow);
 
         private static DispatchDto ToDto(Dispatch d) => new(
             d.Id, d.AssignmentId, d.Status, d.ApprovalStatus, d.ApprovedByUserId, d.ApprovedAt,

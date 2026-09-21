@@ -1,10 +1,13 @@
+using System.ComponentModel.DataAnnotations;
 using RescueSriLanka.Api.Models;
 
 namespace RescueSriLanka.Api.DTOs
 {
-    // Request to find the best team(s) for a piece of work — the
-    // skill/availability-based matching operation.
-    public record MatchRequestDto(SkillType RequiredSkill, double? Latitude, double? Longitude, int? MinCapacity);
+    public record MatchRequestDto(
+        SkillType RequiredSkill,
+        double? Latitude,
+        double? Longitude,
+        [property: Range(1, 100, ErrorMessage = "Minimum capacity must be at least 1.")] int? MinCapacity);
 
     public record TeamMatchResultDto(
         Guid RescueTeamId,
@@ -18,7 +21,7 @@ namespace RescueSriLanka.Api.DTOs
         Guid? HelpRequestId,
         Guid RescueTeamId,
         SkillType RequiredSkill,
-        string? Notes);
+        [property: MaxLength(500)] string? Notes);
 
     public record AssignmentDto(
         Guid Id,
@@ -31,3 +34,4 @@ namespace RescueSriLanka.Api.DTOs
         string? Notes,
         Guid? DispatchId);
 }
+

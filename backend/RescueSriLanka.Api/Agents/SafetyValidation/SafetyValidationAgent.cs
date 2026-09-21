@@ -59,11 +59,14 @@ namespace RescueSriLanka.Api.Agents.SafetyValidation
             }
 
             // Check 3: No double-booking — the team should not already have
-            // an active (non-resolved/cancelled) dispatch in progress.
+            // an active (non-resolved/cancelled) dispatch tied to a
+            // DIFFERENT assignment. Compared by AssignmentId rather than
+            // assignment.Dispatch (which isn't loaded here and may not
+            // exist yet at validation time).
             var hasActiveDispatch = await _db.Dispatches
-                .Include(d => d.Assignment)
-                .Where(d => d.Assignment != null && d.Assignment.RescueTeamId == team.Id)
-                .Where(d => d.Id != assignment.Dispatch!.Id || assignment.Dispatch == null)
+                .Where(d => d.Assignment != null
+                            && d.Assignment.RescueTeamId == team.Id
+                            && d.AssignmentId != assignment.Id)
                 .AnyAsync(d => d.Status != DispatchStatus.Resolved && d.Status != DispatchStatus.Cancelled);
 
             if (hasActiveDispatch)

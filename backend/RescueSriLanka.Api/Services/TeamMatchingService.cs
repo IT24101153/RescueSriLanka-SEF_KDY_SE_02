@@ -27,7 +27,7 @@ namespace RescueSriLanka.Api.Services
             var teams = await _db.RescueTeams
                 .Include(t => t.Members)
                 .Include(t => t.Vehicles)
-                .Where(t => t.Status != TeamStatus.OffDuty)
+                .Where(t => t.Status == TeamStatus.Available)
                 .ToListAsync();
 
             var results = new List<TeamMatchResultDto>();
@@ -58,10 +58,9 @@ namespace RescueSriLanka.Api.Services
                 }
 
                 // Simple scoring: more available skilled members is better,
-                // an idle (Available) team beats a currently-busy one,
                 // and closer is better when distance is known.
                 int score = matchingAvailable * 10;
-                score += team.Status == TeamStatus.Available ? 5 : 0;
+                score += 5;
                 if (distanceKm is double d)
                 {
                     score += d switch

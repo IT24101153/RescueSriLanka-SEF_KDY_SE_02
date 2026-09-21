@@ -11,7 +11,7 @@ namespace RescueSriLanka.Api.Services
         Task<RescueTeamDto?> GetByIdAsync(Guid id);
         Task<RescueTeamDto> CreateAsync(CreateRescueTeamDto dto);
         Task<RescueTeamDto?> UpdateAsync(Guid id, UpdateRescueTeamDto dto);
-        Task<bool> DeleteAsync(Guid id);
+        Task<(bool Success, string? Error)> DeleteAsync(Guid id);
 
         Task<TeamMemberDto?> AddMemberAsync(Guid teamId, CreateTeamMemberDto dto);
         Task<bool> SetMemberAvailabilityAsync(Guid teamId, Guid memberId, bool isAvailable);
@@ -81,14 +81,26 @@ namespace RescueSriLanka.Api.Services
             return ToDto(team);
         }
 
-        public async Task<bool> DeleteAsync(Guid id)
+        // FIX: previously this let EF Core attempt the delete regardless
+        // of existing Assignments/Dispatches referencing the team, which
+        // throws an unhandled foreign-key violation (a raw 500) instead
+        // of a clean, explainable error. Now it checks first and returns
+        // a clear reason so the controller can respond with 409 Conflict.
+        public async Task<(bool Success, string? Error)> DeleteAsync(Guid id)
         {
             var team = await _db.RescueTeams.FindAsync(id);
-            if (team is null) return false;
+            if (team is null) return (false, "Team not found.");
+
+            var hasAssignments = await _db.Assignments.AnyAsync(a => a.RescueTeamId == id);
+            if (hasAssignments)
+            {
+                return (false, "Cannot delete a team with existing assignments. " +
+                                "Reassign or remove its assignments first.");
+            }
 
             _db.RescueTeams.Remove(team);
             await _db.SaveChangesAsync();
-            return true;
+            return (true, null);
         }
 
         public async Task<TeamMemberDto?> AddMemberAsync(Guid teamId, CreateTeamMemberDto dto)
@@ -163,3 +175,4 @@ namespace RescueSriLanka.Api.Services
             t.Vehicles.Select(v => new VehicleDto(v.Id, v.PlateNumber, v.Type, v.Status, v.Capacity)).ToList());
     }
 }
+

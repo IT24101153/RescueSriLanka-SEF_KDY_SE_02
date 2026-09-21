@@ -44,12 +44,18 @@ namespace RescueSriLanka.Api.Controllers
             return updated is null ? NotFound() : Ok(updated);
         }
 
+        // FIX: now distinguishes "not found" (404) from "blocked because
+        // the team has active assignments" (409 Conflict) instead of
+        // letting a foreign-key violation surface as an unhandled 500.
         [Authorize(Roles = "EmergencyCoordinator")]
         [HttpDelete("{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
-            var deleted = await _service.DeleteAsync(id);
-            return deleted ? NoContent() : NotFound();
+            var (success, error) = await _service.DeleteAsync(id);
+            if (success) return NoContent();
+            return error == "Team not found."
+                ? NotFound(error)
+                : Conflict(new { error });
         }
 
         [Authorize(Roles = "EmergencyCoordinator")]
@@ -85,3 +91,4 @@ namespace RescueSriLanka.Api.Controllers
         }
     }
 }
+

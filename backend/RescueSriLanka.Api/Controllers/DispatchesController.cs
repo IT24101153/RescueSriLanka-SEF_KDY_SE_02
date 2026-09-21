@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RescueSriLanka.Api.DTOs;
@@ -28,32 +29,36 @@ namespace RescueSriLanka.Api.Controllers
             return d is null ? NotFound() : Ok(d);
         }
 
-        // Creating a dispatch immediately runs the Safety Validation Agent.
-        // The response includes both the created record and the agent's
-        // findings, so the frontend can show them together.
+        // FIX: now surfaces a specific error message (assignment not
+        // found / already resolved / already has an active dispatch)
+        // instead of a generic validation-issues blob, so the frontend
+        // can show the coordinator exactly why creation was blocked.
         [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPost]
         public async Task<IActionResult> Create(CreateDispatchDto dto)
         {
-            var (dispatch, validation) = await _service.CreateAsync(dto);
+            var (dispatch, validation, error) = await _service.CreateAsync(dto);
             if (dispatch is null)
-                return BadRequest(new { validation.Issues });
+                return BadRequest(new { error });
 
             return CreatedAtAction(nameof(GetById), new { id = dispatch.Id },
                 new { dispatch, validation });
         }
 
-        // Emergency Coordinator approves/rejects — required before the
-        // dispatch can move out of Pending (see DispatchService).
         [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPost("{id:guid}/approve")]
         public async Task<ActionResult<DispatchDto>> Approve(Guid id, ApproveDispatchDto dto)
         {
-            var result = await _service.ApproveAsync(id, dto);
+            var approvedByUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? User.FindFirst("sub")?.Value
+                ?? User.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(approvedByUserId))
+                return Unauthorized(new { error = "Authenticated coordinator identity is missing." });
+
+            var result = await _service.ApproveAsync(id, approvedByUserId, dto);
             return result is null ? NotFound() : Ok(result);
         }
 
-        // Business-specific operation: dispatch status workflow.
         [Authorize(Roles = "EmergencyCoordinator,RescueTeam")]
         [HttpPatch("{id:guid}/status")]
         public async Task<ActionResult<DispatchDto>> TransitionStatus(Guid id, TransitionDispatchStatusDto dto)

@@ -1,13 +1,19 @@
+using System.ComponentModel.DataAnnotations;
 using RescueSriLanka.Api.Models;
 
 namespace RescueSriLanka.Api.DTOs
 {
-    public record CreateDispatchDto(Guid AssignmentId, string? Notes);
+    public record CreateDispatchDto(
+        Guid AssignmentId,
+        [property: MaxLength(500)] string? Notes);
 
-    // Used to move the dispatch through the state machine
-    public record TransitionDispatchStatusDto(DispatchStatus NewStatus, string? Notes);
+    public record TransitionDispatchStatusDto(
+        DispatchStatus NewStatus,
+        [property: MaxLength(500)] string? Notes);
 
-    public record ApproveDispatchDto(string ApprovedByUserId, bool Approve, string? Notes);
+    public record ApproveDispatchDto(
+        bool Approve,
+        [property: MaxLength(500)] string? Notes);
 
     public record DispatchDto(
         Guid Id,
@@ -23,7 +29,6 @@ namespace RescueSriLanka.Api.DTOs
         DateTime? CancelledAt,
         string? Notes);
 
-    // Result returned by the Safety Validation Agent
     public record SafetyValidationResultDto(
         bool Passed,
         List<string> Issues,

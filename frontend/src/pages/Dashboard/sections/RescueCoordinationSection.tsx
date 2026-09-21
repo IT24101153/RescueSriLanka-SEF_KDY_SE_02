@@ -8,6 +8,15 @@
 // a non-OK response, and returns the parsed JSON body as T. If the real
 // api/client.ts has a different signature, adjust the calls below —
 // nothing else in this file depends on its internals.
+//
+// REFINEMENT PASS: fixed two bugs —
+// 1. AddVehicleForm now validates capacity >= 1 before allowing submit
+//    (previously only the plate number was checked, so 0 or an empty
+//    field could be sent to the API).
+// 2. CreateDispatchForm now only excludes assignments whose dispatch is
+//    NOT Cancelled — previously ANY existing dispatch (including a
+//    cancelled/rejected one) permanently blocked ever dispatching that
+//    assignment again, matching the backend fix in DispatchService.
 
 import { useEffect, useState, useCallback } from "react";
 import { apiFetch } from "../../../api/client";
@@ -326,12 +335,19 @@ function AddMemberForm({ teamId, onDone }: { teamId: string; onDone: () => void 
 function AddVehicleForm({ teamId, onDone }: { teamId: string; onDone: () => void }) {
   const [plateNumber, setPlateNumber] = useState("");
   const [type, setType] = useState<VehicleType>("Ambulance");
-  const [capacity, setCapacity] = useState(4);
+  // FIX: keep capacity as a string while editing so an empty field isn't
+  // silently coerced to 0 — validity is checked explicitly below instead
+  // of relying on the <input min="1"> attribute, which the browser does
+  // not strictly enforce on programmatic/pasted input.
+  const [capacityInput, setCapacityInput] = useState("4");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const capacity = Number(capacityInput);
+  const isCapacityValid = Number.isInteger(capacity) && capacity >= 1 && capacity <= 100;
+
   const submit = async () => {
-    if (!plateNumber.trim()) return;
+    if (!plateNumber.trim() || !isCapacityValid) return;
     setBusy(true);
     setErr(null);
     try {
@@ -360,13 +376,17 @@ function AddVehicleForm({ teamId, onDone }: { teamId: string; onDone: () => void
       <input
         type="number"
         min={1}
+        max={100}
         placeholder="Capacity"
-        value={capacity}
-        onChange={(e) => setCapacity(Number(e.target.value))}
+        value={capacityInput}
+        onChange={(e) => setCapacityInput(e.target.value)}
       />
-      <button className="btn-small" onClick={submit} disabled={busy || !plateNumber.trim()}>
+      <button className="btn-small" onClick={submit} disabled={busy || !plateNumber.trim() || !isCapacityValid}>
         {busy ? "Adding…" : "Add"}
       </button>
+      {!isCapacityValid && capacityInput !== "" && (
+        <div className="alert">Capacity must be a whole number between 1 and 100.</div>
+      )}
       {err && <div className="alert">{err}</div>}
     </div>
   );
@@ -631,8 +651,14 @@ function CreateDispatchForm({
   dispatches: DispatchDto[];
   onCreated: () => void;
 }) {
-  const dispatchedAssignmentIds = new Set(dispatches.map((d) => d.assignmentId));
-  const available = assignments.filter((a) => !dispatchedAssignmentIds.has(a.id));
+  // FIX: previously excluded an assignment if it had ANY dispatch record
+  // at all — including a Cancelled one — permanently blocking re-dispatch
+  // after a rejection. Now only a non-cancelled dispatch blocks it,
+  // matching the backend's DispatchService.CreateAsync fix.
+  const blockedAssignmentIds = new Set(
+    dispatches.filter((d) => d.status !== "Cancelled").map((d) => d.assignmentId)
+  );
+  const available = assignments.filter((a) => !blockedAssignmentIds.has(a.id));
 
   const [selected, setSelected] = useState<string>("");
   const [busy, setBusy] = useState(false);
