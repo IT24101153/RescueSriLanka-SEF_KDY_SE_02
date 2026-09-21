@@ -9,24 +9,28 @@ namespace RescueSriLanka.Api.DTOs
         SkillType RequiredSkill);
 
     public record AgentStepDto(
-        int StepOrder,
-        string AgentName,
-        AgentStepStatus Status,
-        string? InputJson,
-        string? OutputJson,
-        string? ErrorMessage,
-        DateTime? StartedAt,
+        int StepNumber,
+        AgentType TargetAgent,
+        string Action,
+        StepStatus Status,
+        string InputParamsJson,
+        string? ToolResultJson,
+        string? ValidationResultJson,
+        DateTime CreatedAt,
         DateTime? CompletedAt);
 
     public record AgentWorkflowDto(
         Guid Id,
         WorkflowObjectiveType ObjectiveType,
         Guid ObjectiveId,
-        SkillType RequiredSkill,
+        string ObjectiveSnapshotJson,
+        string PlanJson,
         WorkflowStatus Status,
-        Guid? DispatchId,
-        string? FinalOutcome,
+        Guid? ApprovedByUserId,
+        DateTime? ApprovalDecisionAt,
+        string? ApprovalNotes,
+        string? FinalOutcomeJson,
         DateTime CreatedAt,
-        DateTime? CompletedAt,
+        DateTime UpdatedAt,
         List<AgentStepDto> Steps);
 }

@@ -34,6 +34,42 @@ namespace RescueSriLanka.Api.Data
                 .HasIndex(d => d.AssignmentId)
                 .IsUnique();
 
+            modelBuilder.Entity<AgentWorkflow>()
+                .Property(w => w.ObjectiveSnapshotJson)
+                .HasColumnType("jsonb")
+                .HasColumnName("ObjectiveSnapshot");
+
+            modelBuilder.Entity<AgentWorkflow>()
+                .Property(w => w.PlanJson)
+                .HasColumnType("jsonb")
+                .HasColumnName("Plan");
+
+            modelBuilder.Entity<AgentWorkflow>()
+                .Property(w => w.FinalOutcomeJson)
+                .HasColumnType("jsonb")
+                .HasColumnName("FinalOutcome");
+
+            modelBuilder.Entity<AgentStep>()
+                .Property(s => s.InputParamsJson)
+                .HasColumnType("jsonb")
+                .HasColumnName("InputParams");
+
+            modelBuilder.Entity<AgentStep>()
+                .Property(s => s.ToolResultJson)
+                .HasColumnType("jsonb")
+                .HasColumnName("ToolResult");
+
+            modelBuilder.Entity<AgentStep>()
+                .Property(s => s.ValidationResultJson)
+                .HasColumnType("jsonb")
+                .HasColumnName("ValidationResult");
+
+            modelBuilder.Entity<AgentStep>()
+                .HasOne(s => s.Workflow)
+                .WithMany(w => w.Steps)
+                .HasForeignKey(s => s.AgentWorkflowId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // NOTE for teammates: add your own entity configuration below
             // this line rather than replacing the method — keep this file
             // additive since it's shared across all four components.

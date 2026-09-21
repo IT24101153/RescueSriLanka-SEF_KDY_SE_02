@@ -28,35 +28,40 @@ namespace RescueSriLanka.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("AgentName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<Guid>("AgentWorkflowId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("InputJson")
-                        .HasColumnType("text");
-
-                    b.Property<string>("OutputJson")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("StartedAt")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InputParamsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("InputParams");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
-                    b.Property<int>("StepOrder")
+                    b.Property<int>("StepNumber")
                         .HasColumnType("integer");
+
+                    b.Property<int>("TargetAgent")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ToolResultJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ToolResult");
+
+                    b.Property<string>("ValidationResultJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ValidationResult");
 
                     b.HasKey("Id");
 
@@ -71,18 +76,21 @@ namespace RescueSriLanka.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("CompletedAt")
+                    b.Property<DateTime?>("ApprovalDecisionAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ApprovalNotes")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("DispatchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("FinalOutcome")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                    b.Property<string>("FinalOutcomeJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("FinalOutcome");
 
                     b.Property<Guid>("ObjectiveId")
                         .HasColumnType("uuid");
@@ -90,11 +98,21 @@ namespace RescueSriLanka.Api.Migrations
                     b.Property<int>("ObjectiveType")
                         .HasColumnType("integer");
 
-                    b.Property<int>("RequiredSkill")
-                        .HasColumnType("integer");
+                    b.Property<string>("ObjectiveSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ObjectiveSnapshot");
+
+                    b.Property<string>("PlanJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("Plan");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 

@@ -18,12 +18,15 @@ namespace RescueSriLanka.Api.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     ObjectiveType = table.Column<int>(type: "integer", nullable: false),
                     ObjectiveId = table.Column<Guid>(type: "uuid", nullable: false),
-                    RequiredSkill = table.Column<int>(type: "integer", nullable: false),
+                    ObjectiveSnapshot = table.Column<string>(type: "jsonb", nullable: false),
+                    Plan = table.Column<string>(type: "jsonb", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
+                    ApprovedByUserId = table.Column<Guid>(type: "uuid", nullable: true),
+                    ApprovalDecisionAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ApprovalNotes = table.Column<string>(type: "text", nullable: true),
+                    FinalOutcome = table.Column<string>(type: "jsonb", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    DispatchId = table.Column<Guid>(type: "uuid", nullable: true),
-                    FinalOutcome = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true)
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -36,13 +39,14 @@ namespace RescueSriLanka.Api.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     AgentWorkflowId = table.Column<Guid>(type: "uuid", nullable: false),
-                    StepOrder = table.Column<int>(type: "integer", nullable: false),
-                    AgentName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    StepNumber = table.Column<int>(type: "integer", nullable: false),
+                    TargetAgent = table.Column<int>(type: "integer", nullable: false),
+                    Action = table.Column<string>(type: "text", nullable: false),
+                    InputParams = table.Column<string>(type: "jsonb", nullable: false),
+                    ToolResult = table.Column<string>(type: "jsonb", nullable: true),
+                    ValidationResult = table.Column<string>(type: "jsonb", nullable: true),
                     Status = table.Column<int>(type: "integer", nullable: false),
-                    InputJson = table.Column<string>(type: "text", nullable: true),
-                    OutputJson = table.Column<string>(type: "text", nullable: true),
-                    ErrorMessage = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    StartedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
