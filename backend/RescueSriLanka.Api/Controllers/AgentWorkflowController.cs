@@ -17,9 +17,9 @@ namespace RescueSriLanka.Api.Controllers
             _orchestrator = orchestrator;
         }
 
-        // Triggers the full multi-step plan: analysis -> resource match ->
-        // safety validation -> dispatch created (Pending, awaiting the
-        // existing POST /api/dispatches/{id}/approve to proceed further).
+        // Triggers analysis, resource recommendation, and safety validation.
+        // The workflow produces a recommendation only; dispatch approval and
+        // operational execution remain an EmergencyCoordinator responsibility.
         [HttpPost]
         public async Task<ActionResult<AgentWorkflowDto>> Start(StartWorkflowDto dto)
         {

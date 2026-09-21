@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RescueSriLanka.Api.DTOs;
+using RescueSriLanka.Api.Agents.SafetyValidation;
 using RescueSriLanka.Api.Services;
 
 namespace RescueSriLanka.Api.Controllers
@@ -12,11 +13,16 @@ namespace RescueSriLanka.Api.Controllers
     {
         private readonly IAssignmentService _assignmentService;
         private readonly ITeamMatchingService _matchingService;
+        private readonly IAssignmentSafetyValidationAgent _safetyValidationAgent;
 
-        public AssignmentsController(IAssignmentService assignmentService, ITeamMatchingService matchingService)
+        public AssignmentsController(
+            IAssignmentService assignmentService,
+            ITeamMatchingService matchingService,
+            IAssignmentSafetyValidationAgent safetyValidationAgent)
         {
             _assignmentService = assignmentService;
             _matchingService = matchingService;
+            _safetyValidationAgent = safetyValidationAgent;
         }
 
         [HttpGet]
@@ -56,5 +62,12 @@ namespace RescueSriLanka.Api.Controllers
             if (revised is not null) return Ok(revised);
             return error == "Assignment not found." ? NotFound(error) : ValidationProblem(error);
         }
+
+        // Produces a safety recommendation only. It never approves or
+        // dispatches the assignment; an EmergencyCoordinator remains required.
+        [Authorize(Roles = "EmergencyCoordinator")]
+        [HttpPost("{id:guid}/validate")]
+        public async Task<ActionResult<SafetyValidationWorkflowResultDto>> Validate(Guid id, CancellationToken cancellationToken)
+            => Ok(await _safetyValidationAgent.ValidateAsync(id, cancellationToken));
     }
 }

@@ -21,23 +21,20 @@ public class AgentOrchestrator : IAgentOrchestrator
     private readonly IIncidentAnalysisAgent _incidentAnalysisAgent;
     private readonly IDispatchRecommendationAgent _recommendationAgent;
     private readonly IAssignmentService _assignmentService;
-    private readonly IDispatchService _dispatchService;
-    private readonly ISafetyValidationAgent _safetyAgent;
+    private readonly IAssignmentSafetyValidationAgent _safetyValidationAgent;
 
     public AgentOrchestrator(
         ComponentDDbContext db,
         IIncidentAnalysisAgent incidentAnalysisAgent,
         IDispatchRecommendationAgent recommendationAgent,
         IAssignmentService assignmentService,
-        IDispatchService dispatchService,
-        ISafetyValidationAgent safetyAgent)
+        IAssignmentSafetyValidationAgent safetyValidationAgent)
     {
         _db = db;
         _incidentAnalysisAgent = incidentAnalysisAgent;
         _recommendationAgent = recommendationAgent;
         _assignmentService = assignmentService;
-        _dispatchService = dispatchService;
-        _safetyAgent = safetyAgent;
+        _safetyValidationAgent = safetyValidationAgent;
     }
 
     public async Task<AgentWorkflowDto> StartWorkflowAsync(StartWorkflowDto dto)
@@ -123,27 +120,19 @@ public class AgentOrchestrator : IAgentOrchestrator
         workflow.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
+        SafetyValidationWorkflowResultDto? validation = null;
         var step3 = await RunStepAsync(
             workflow.Id,
             3,
             AgentType.SafetyValidationAgent,
-            "Validate dispatch safety",
+            "Validate assignment safety",
             JsonSerializer.Serialize(new { assignmentId = assignment.Id }),
             true,
-            async () => JsonSerializer.Serialize(await _safetyAgent.ValidateAsync(assignment.Id)));
-
-        var validationPassed = step3.Status != StepStatus.Failed
-            && step3.ValidationResultJson is not null
-            && JsonSerializer.Deserialize<SafetyValidationResultDto>(step3.ValidationResultJson)?.Passed == true;
-
-        if (!validationPassed)
-            return await FailWorkflowAsync(workflow, "Safety guardrail rejected the agent recommendation.");
-
-        var (dispatch, _, dispatchError) = await _dispatchService.CreateAsync(
-            new CreateDispatchDto(assignment.Id, "Created by AgentOrchestrator"));
-
-        if (dispatch is null)
-            return await FailWorkflowAsync(workflow, dispatchError ?? "Failed to create dispatch.");
+            async () =>
+            {
+                validation = await _safetyValidationAgent.ValidateAsync(assignment.Id);
+                return JsonSerializer.Serialize(validation);
+            });
 
         workflow.PlanJson = JsonSerializer.Serialize(new
         {
@@ -151,9 +140,17 @@ public class AgentOrchestrator : IAgentOrchestrator
             recommendedTeamId = recommendation.RescueTeamId,
             vehicleId = vehicle.Id,
             assignmentId = assignment.Id,
-            dispatchId = dispatch.Id
+            safetyValidationWorkflowId = validation?.WorkflowId,
+            safetyDecision = validation?.Decision.ToString()
         });
         workflow.Status = WorkflowStatus.AwaitingApproval;
+        workflow.FinalOutcomeJson = JsonSerializer.Serialize(new
+        {
+            assignmentId = assignment.Id,
+            safetyDecision = validation?.Decision.ToString() ?? "REVISE",
+            summary = validation?.Summary ?? "Safety validation failed; human review is required.",
+            dispatchCreated = false
+        });
         workflow.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
