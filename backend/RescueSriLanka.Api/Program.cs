@@ -8,7 +8,9 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
+using Microsoft.Extensions.Options;
 using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Services.Email;
 using RescueSriLanka.Api.Services.Llm;
 using RescueSriLanka.Api.Services.Storage;
 using RescueSriLanka.Api.Agents.IncidentAnalysisAgent;
@@ -82,6 +84,56 @@ else
 {
     builder.Services.AddScoped<IImageStore, LocalDiskImageStore>();
 }
+
+// ---------------------------------------------------------------- email
+// Two notifications: a receipt to whoever files a report, and a district-wide
+// warning once a coordinator confirms a High or Critical risk.
+//
+// testmail.app cannot send — it only receives — so it is not the transport. The
+// transport is SMTP, and testmail is the inbox we aim it at while developing,
+// plus an API for reading back what arrived. With no SMTP host configured the
+// sender writes each message to the log instead, which keeps the whole feature
+// runnable by anyone who clones this repository.
+builder.Services.Configure<EmailOptions>(
+    builder.Configuration.GetSection(EmailOptions.SectionName));
+
+var emailOptions =
+    builder.Configuration.GetSection(EmailOptions.SectionName).Get<EmailOptions>()
+    ?? new EmailOptions();
+
+builder.Services.AddScoped<SmtpEmailSender>();
+builder.Services.AddScoped<LoggingEmailSender>();
+
+builder.Services.AddScoped<IEmailSender>(provider =>
+{
+    IEmailSender transport = emailOptions.Smtp.IsConfigured
+        ? provider.GetRequiredService<SmtpEmailSender>()
+        : provider.GetRequiredService<LoggingEmailSender>();
+
+    // Redirecting at the last hop keeps the recipient query honest: the real
+    // citizens in the district are still looked up and addressed by name.
+    if (emailOptions.Testmail.IsConfigured && emailOptions.Testmail.RedirectAllMail)
+    {
+        return new TestmailRedirectingEmailSender(
+            transport,
+            provider.GetRequiredService<IOptions<EmailOptions>>(),
+            provider.GetRequiredService<ILogger<TestmailRedirectingEmailSender>>());
+    }
+
+    return transport;
+});
+
+builder.Services.AddHttpClient<ITestmailClient, TestmailClient>(client =>
+    client.Timeout = TimeSpan.FromSeconds(15));
+
+builder.Services.AddScoped<INotificationService, NotificationService>();
+
+// Mail goes out on a background worker: nobody filing a report or approving an
+// assessment should wait on a mail server, or fail because one is down.
+builder.Services.AddSingleton<NotificationQueue>();
+builder.Services.AddSingleton<INotificationQueue>(
+    provider => provider.GetRequiredService<NotificationQueue>());
+builder.Services.AddHostedService<NotificationWorker>();
 
 // ---------------------------------------------------------------- agentic AI
 // The agents depend on ILlmClient, never on a concrete provider. Google AI
@@ -179,6 +231,14 @@ using (var startupScope = app.Services.CreateScope())
         "Agents use {Model}{Unconfigured}.",
         llm.ModelName,
         llm.IsConfigured ? string.Empty : " — NOT configured, rule engine will run");
+
+    // Which way mail goes, and at what risk level, decides whether anyone is
+    // warned at all — never leave that to be discovered mid-demo.
+    startupLogger.LogInformation(
+        "Email notifications {State} via {Transport}; district warnings at {Severity} and above.",
+        emailOptions.Enabled ? "ON" : "OFF",
+        startupScope.ServiceProvider.GetRequiredService<IEmailSender>().Name,
+        emailOptions.MinimumWarningSeverity);
 }
 
 // ---------------------------------------------------------------- start-up

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.DTOs.Incidents;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Services.Email;
 
 namespace RescueSriLanka.Api.Services;
 
@@ -32,6 +33,7 @@ public class IncidentService(
     AppDbContext db,
     ISafetyZoneService zoneService,
     IIncidentAnalysisQueue analysisQueue,
+    INotificationQueue notificationQueue,
     ILogger<IncidentService> logger) : IIncidentService
 {
     public async Task<IReadOnlyList<IncidentDto>> QueryAsync(
@@ -123,6 +125,11 @@ public class IncidentService(
         // is applied without approval.
         analysisQueue.Enqueue(incident.Id);
 
+        // Tell the reporter we have it. No district warning yet — nobody has
+        // confirmed this is real.
+        notificationQueue.Enqueue(
+            new NotificationJob(NotificationKind.ReportReceived, incident.Id));
+
         logger.LogInformation("Incident {Id} created ({Type}, {Severity})",
             incident.Id, incident.Type, incident.Severity);
 
@@ -158,6 +165,15 @@ public class IncidentService(
         await db.SaveChangesAsync(ct);
         await zoneService.RecomputeAsync(ct);
 
+        // Verification is a human vouching for the report, which is exactly the
+        // point at which warning a whole district becomes defensible. The
+        // notification service decides whether the severity clears the bar.
+        if (status == IncidentStatus.Verified)
+        {
+            notificationQueue.Enqueue(
+                new NotificationJob(NotificationKind.DistrictWarning, incident.Id));
+        }
+
         return IncidentDto.FromIncident(incident);
     }
 
@@ -177,6 +193,13 @@ public class IncidentService(
 
         await db.SaveChangesAsync(ct);
         await zoneService.RecomputeAsync(ct);
+
+        // A coordinator setting the severity by hand is the same judgement as
+        // approving a proposal, and without this an incident verified while it
+        // looked Moderate would never warn its district once someone raised it
+        // to Critical. Already-warned incidents are not warned twice.
+        notificationQueue.Enqueue(
+            new NotificationJob(NotificationKind.DistrictWarning, incident.Id));
 
         return IncidentDto.FromIncident(incident);
     }

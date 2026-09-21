@@ -73,6 +73,13 @@ class ApiClient {
         .toList();
   }
 
+  /// The 25 districts, for the notification settings picker. Anonymous, and
+  /// server-side so the app cannot drift from the list warnings are matched on.
+  Future<List<String>> fetchDistricts() async {
+    final data = await _getJson('/api/districts');
+    return (data as List).map((item) => item as String).toList();
+  }
+
   Future<ZoneCheck> checkZone({
     required double latitude,
     required double longitude,

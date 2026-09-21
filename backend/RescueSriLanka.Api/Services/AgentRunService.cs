@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.DTOs.Agents;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Services.Email;
 
 namespace RescueSriLanka.Api.Services;
 
@@ -21,6 +22,7 @@ public interface IAgentRunService
 public class AgentRunService(
     AppDbContext db,
     ISafetyZoneService zoneService,
+    INotificationQueue notificationQueue,
     ILogger<AgentRunService> logger) : IAgentRunService
 {
     public async Task<IReadOnlyList<AgentRunDto>> QueryAsync(
@@ -84,6 +86,15 @@ public class AgentRunService(
 
         await db.SaveChangesAsync(ct);
         await zoneService.RecomputeAsync(ct);
+
+        // Approval is the other moment a human stands behind the risk level, so
+        // it warns the district too. An incident that was already verified has
+        // been warned about once and will not be warned about again.
+        if (run.IncidentId is Guid warnedIncidentId)
+        {
+            notificationQueue.Enqueue(
+                new NotificationJob(NotificationKind.DistrictWarning, warnedIncidentId));
+        }
 
         logger.LogInformation(
             "Agent run {RunId} approved by {UserId}{Revised}",

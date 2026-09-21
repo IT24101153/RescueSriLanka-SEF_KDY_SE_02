@@ -5,6 +5,7 @@ import '../../core/theme.dart';
 import '../../services/auth_service.dart';
 import '../auth/login_screen.dart';
 import '../auth/register_screen.dart';
+import 'notification_settings.dart';
 
 /// Profile tab. Shows who is signed in, or offers the two ways to get there.
 class ProfileScreen extends StatelessWidget {
@@ -81,7 +82,11 @@ class _SignedIn extends StatelessWidget {
         _InfoRow(label: 'Role', value: user.role),
         if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
           _InfoRow(label: 'Phone', value: user.phoneNumber!),
+        _InfoRow(label: 'District', value: user.district ?? 'Not set'),
         _InfoRow(label: 'Server', value: AppConfig.apiBaseUrl),
+
+        const SizedBox(height: 22),
+        NotificationSettings(auth: auth),
 
         const SizedBox(height: 28),
         OutlinedButton.icon(

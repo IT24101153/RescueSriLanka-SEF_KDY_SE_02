@@ -29,6 +29,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             entity.HasIndex(user => user.Email).IsUnique();
 
+            // Every district warning asks "who lives here?" — this is the index
+            // that question runs on.
+            entity.HasIndex(user => user.District);
+
             // Persist the role as readable text rather than an opaque integer.
             entity.Property(user => user.Role)
                 .HasConversion<string>()

@@ -25,6 +25,17 @@ public class User
     [MaxLength(20)]
     public string? PhoneNumber { get; set; }
 
+    /// <summary>
+    /// Home district, chosen in app settings from <see cref="SriLankaDistricts.All"/>
+    /// and always stored in that canonical spelling. Null until the citizen sets
+    /// one, which simply means they receive no area warnings.
+    /// </summary>
+    [MaxLength(50)]
+    public string? District { get; set; }
+
+    /// <summary>Opt-out switch for every email this platform sends them.</summary>
+    public bool EmailNotificationsEnabled { get; set; } = true;
+
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

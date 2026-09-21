@@ -6,6 +6,8 @@ class AuthUser {
     required this.email,
     required this.role,
     this.phoneNumber,
+    this.district,
+    this.emailNotificationsEnabled = true,
   });
 
   final String id;
@@ -13,6 +15,12 @@ class AuthUser {
   final String email;
   final String role;
   final String? phoneNumber;
+
+  /// District this person wants disaster warnings for. Null means none set, so
+  /// no area warnings are sent.
+  final String? district;
+
+  final bool emailNotificationsEnabled;
 
   /// First name only — all the greeting needs, and kinder to narrow screens.
   String get shortName => fullName.split(' ').first;
@@ -23,6 +31,11 @@ class AuthUser {
         email: json['email'] as String? ?? '',
         role: json['role'] as String? ?? 'Citizen',
         phoneNumber: json['phoneNumber'] as String?,
+        district: json['district'] as String?,
+        // Defaults to on, matching the API, so a session stored by an older
+        // build does not read as opted out.
+        emailNotificationsEnabled:
+            json['emailNotificationsEnabled'] as bool? ?? true,
       );
 
   Map<String, dynamic> toJson() => {
@@ -31,6 +44,8 @@ class AuthUser {
         'email': email,
         'role': role,
         'phoneNumber': phoneNumber,
+        'district': district,
+        'emailNotificationsEnabled': emailNotificationsEnabled,
       };
 }
 

@@ -67,6 +67,14 @@ public class Incident
 
     public DateTime? ResolvedAt { get; set; }
 
+    /// <summary>
+    /// When the district-wide warning email went out. Verification and AI
+    /// approval both fire the warning, and an incident is often both verified
+    /// and approved — this is what stops the district being emailed twice about
+    /// the same event.
+    /// </summary>
+    public DateTime? DistrictWarningSentAt { get; set; }
+
     /// <summary>False once resolved or rejected — drives the "active" map layer.</summary>
     public bool IsActive { get; set; } = true;
 

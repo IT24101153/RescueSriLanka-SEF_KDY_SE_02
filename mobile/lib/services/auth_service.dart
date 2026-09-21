@@ -98,6 +98,83 @@ class AuthService extends ChangeNotifier {
           'phoneNumber': phoneNumber.trim(),
       });
 
+  /// Saves the notification settings, then folds the user the API returns back
+  /// into the stored session — otherwise the profile screen would show the new
+  /// district while the app still remembered the old one.
+  ///
+  /// [clearDistrict] exists because null already means "leave this alone": the
+  /// API distinguishes an absent field from an explicit null, and only the
+  /// latter unsubscribes someone.
+  Future<AuthResult> updatePreferences({
+    String? district,
+    bool clearDistrict = false,
+    bool? emailNotificationsEnabled,
+  }) async {
+    final current = _session;
+    if (current == null) {
+      return const AuthResult.failure('Please sign in first.');
+    }
+
+    final body = <String, dynamic>{
+      if (clearDistrict) 'district': null else 'district': ?district,
+      'emailNotificationsEnabled': ?emailNotificationsEnabled,
+    };
+
+    http.Response response;
+    try {
+      response = await _client
+          .patch(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/auth/me/preferences'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ${current.token}',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(_timeout);
+    } catch (_) {
+      return AuthResult.failure(
+        'Cannot reach the server at ${AppConfig.apiBaseUrl}.',
+      );
+    }
+
+    if (response.statusCode == 401) {
+      await handleUnauthorized();
+      return const AuthResult.failure(
+        'Your session has expired. Please sign in again.',
+      );
+    }
+
+    if (response.statusCode != 200) {
+      return AuthResult.failure(
+        _readMessage(response.body) ??
+            'Could not save your settings (HTTP ${response.statusCode}).',
+      );
+    }
+
+    try {
+      final updated = AuthSession(
+        token: current.token,
+        expiresAt: current.expiresAt,
+        user: AuthUser.fromJson(
+          jsonDecode(response.body) as Map<String, dynamic>,
+        ),
+      );
+
+      _session = updated;
+      notifyListeners();
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_storageKey, jsonEncode(updated.toJson()));
+
+      return AuthResult.success(updated);
+    } catch (_) {
+      return const AuthResult.failure(
+        'The server sent a response the app could not read.',
+      );
+    }
+  }
+
   Future<void> signOut() async {
     _session = null;
     notifyListeners();

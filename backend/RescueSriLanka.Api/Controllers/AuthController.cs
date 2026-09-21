@@ -60,4 +60,35 @@ public class AuthController(IAuthService authService) : ControllerBase
         var user = await authService.FindByIdAsync(userId, cancellationToken);
         return user is null ? Unauthorized() : Ok(UserDto.FromUser(user));
     }
+
+    /// <summary>
+    /// Sets the home district for disaster warnings, and the email opt-out.
+    /// This is what the app's Profile → Notification settings screen saves.
+    /// </summary>
+    [HttpPatch("me/preferences")]
+    [Authorize]
+    [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<UserDto>> UpdatePreferences(
+        [FromBody] UpdatePreferencesRequest request,
+        CancellationToken cancellationToken)
+    {
+        var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (!Guid.TryParse(id, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var user = await authService.UpdatePreferencesAsync(userId, request, cancellationToken);
+            return user is null ? Unauthorized() : Ok(UserDto.FromUser(user));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }
