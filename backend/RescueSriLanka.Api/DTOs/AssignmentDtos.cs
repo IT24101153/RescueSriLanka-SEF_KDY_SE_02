@@ -7,7 +7,7 @@ namespace RescueSriLanka.Api.DTOs
         SkillType RequiredSkill,
         double? Latitude,
         double? Longitude,
-        [property: Range(1, 100, ErrorMessage = "Minimum capacity must be at least 1.")] int? MinCapacity);
+        [param: Range(1, 100, ErrorMessage = "Minimum capacity must be at least 1.")] int? MinCapacity);
 
     public record TeamMatchResultDto(
         Guid RescueTeamId,
@@ -22,15 +22,15 @@ namespace RescueSriLanka.Api.DTOs
         Guid RescueTeamId,
         Guid VehicleId,
         SkillType RequiredSkill,
-        [property: Range(1, int.MaxValue, ErrorMessage = "Required capacity must be at least 1.")] int RequiredCapacity,
-        [property: MaxLength(500)] string? Notes);
+        [param: Range(1, int.MaxValue, ErrorMessage = "Required capacity must be at least 1.")] int RequiredCapacity,
+        [param: MaxLength(500)] string? Notes);
 
     public record ReviseAssignmentDto(
         Guid RescueTeamId,
         Guid VehicleId,
         SkillType RequiredSkill,
-        [property: Range(1, int.MaxValue, ErrorMessage = "Required capacity must be at least 1.")] int RequiredCapacity,
-        [property: MaxLength(500)] string? Notes);
+        [param: Range(1, int.MaxValue, ErrorMessage = "Required capacity must be at least 1.")] int RequiredCapacity,
+        [param: MaxLength(500)] string? Notes);
 
     public record AssignmentDto(
         Guid Id,

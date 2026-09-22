@@ -14,10 +14,14 @@ namespace RescueSriLanka.Api.Services
         Task<(bool Success, string? Error)> DeleteAsync(Guid id);
 
         Task<TeamMemberDto?> AddMemberAsync(Guid teamId, CreateTeamMemberDto dto);
-        Task<bool> SetMemberAvailabilityAsync(Guid teamId, Guid memberId, bool isAvailable);
+        Task<(bool Success, string? Error)> SetMemberAvailabilityAsync(Guid teamId, Guid memberId, bool isAvailable);
+        Task<(TeamMemberDto? Member, string? Error)> UpdateMemberAsync(Guid teamId, Guid memberId, UpdateTeamMemberDto dto);
+        Task<(bool Success, string? Error)> DeleteMemberAsync(Guid teamId, Guid memberId);
 
         Task<VehicleDto?> AddVehicleAsync(Guid teamId, CreateVehicleDto dto);
-        Task<bool> SetVehicleStatusAsync(Guid teamId, Guid vehicleId, VehicleStatus status);
+        Task<(bool Success, string? Error)> SetVehicleStatusAsync(Guid teamId, Guid vehicleId, VehicleStatus status);
+        Task<(VehicleDto? Vehicle, string? Error)> UpdateVehicleAsync(Guid teamId, Guid vehicleId, UpdateVehicleDto dto);
+        Task<(bool Success, string? Error)> DeleteVehicleAsync(Guid teamId, Guid vehicleId);
     }
 
     public class RescueTeamService : IRescueTeamService
@@ -91,6 +95,9 @@ namespace RescueSriLanka.Api.Services
             var team = await _db.RescueTeams.FindAsync(id);
             if (team is null) return (false, "Team not found.");
 
+            if (team.Status == TeamStatus.OnMission)
+                return (false, "Cannot delete a team while it is on mission.");
+
             var hasAssignments = await _db.Assignments.AnyAsync(a => a.RescueTeamId == id);
             if (hasAssignments)
             {
@@ -122,16 +129,37 @@ namespace RescueSriLanka.Api.Services
             return new TeamMemberDto(member.Id, member.FullName, member.Phone, member.Skill, member.IsAvailable);
         }
 
-        public async Task<bool> SetMemberAvailabilityAsync(Guid teamId, Guid memberId, bool isAvailable)
+        public async Task<(bool Success, string? Error)> SetMemberAvailabilityAsync(Guid teamId, Guid memberId, bool isAvailable)
         {
+            if (await IsTeamOperationallyReservedAsync(teamId)) return (false, "Team members cannot be changed while the team has an active assignment or mission.");
             var member = await _db.TeamMembers
                 .FirstOrDefaultAsync(m => m.Id == memberId && m.RescueTeamId == teamId);
 
-            if (member is null) return false;
+            if (member is null) return (false, "Team member not found.");
 
             member.IsAvailable = isAvailable;
             await _db.SaveChangesAsync();
-            return true;
+            return (true, null);
+        }
+
+        public async Task<(TeamMemberDto? Member, string? Error)> UpdateMemberAsync(Guid teamId, Guid memberId, UpdateTeamMemberDto dto)
+        {
+            if (await IsTeamOperationallyReservedAsync(teamId))
+                return (null, "Team members cannot be changed while the team has an active assignment or mission.");
+            var member = await _db.TeamMembers.FirstOrDefaultAsync(m => m.Id == memberId && m.RescueTeamId == teamId);
+            if (member is null) return (null, "Team member not found.");
+            member.FullName = dto.FullName; member.Phone = dto.Phone; member.Skill = dto.Skill; member.IsAvailable = dto.IsAvailable;
+            await _db.SaveChangesAsync();
+            return (new TeamMemberDto(member.Id, member.FullName, member.Phone, member.Skill, member.IsAvailable), null);
+        }
+
+        public async Task<(bool Success, string? Error)> DeleteMemberAsync(Guid teamId, Guid memberId)
+        {
+            if (await IsTeamOperationallyReservedAsync(teamId))
+                return (false, "Team members cannot be removed while the team has an active assignment or mission.");
+            var member = await _db.TeamMembers.FirstOrDefaultAsync(m => m.Id == memberId && m.RescueTeamId == teamId);
+            if (member is null) return (false, "Team member not found.");
+            _db.TeamMembers.Remove(member); await _db.SaveChangesAsync(); return (true, null);
         }
 
         public async Task<VehicleDto?> AddVehicleAsync(Guid teamId, CreateVehicleDto dto)
@@ -153,16 +181,45 @@ namespace RescueSriLanka.Api.Services
             return new VehicleDto(vehicle.Id, vehicle.PlateNumber, vehicle.Type, vehicle.Status, vehicle.Capacity);
         }
 
-        public async Task<bool> SetVehicleStatusAsync(Guid teamId, Guid vehicleId, VehicleStatus status)
+        public async Task<(bool Success, string? Error)> SetVehicleStatusAsync(Guid teamId, Guid vehicleId, VehicleStatus status)
         {
+            if (await IsTeamOperationallyReservedAsync(teamId)) return (false, "Vehicles cannot be changed while the team has an active assignment or mission.");
             var vehicle = await _db.Vehicles
                 .FirstOrDefaultAsync(v => v.Id == vehicleId && v.RescueTeamId == teamId);
 
-            if (vehicle is null) return false;
+            if (vehicle is null) return (false, "Vehicle not found.");
 
             vehicle.Status = status;
             await _db.SaveChangesAsync();
-            return true;
+            return (true, null);
+        }
+
+        public async Task<(VehicleDto? Vehicle, string? Error)> UpdateVehicleAsync(Guid teamId, Guid vehicleId, UpdateVehicleDto dto)
+        {
+            if (await IsTeamOperationallyReservedAsync(teamId))
+                return (null, "Vehicles cannot be changed while the team has an active assignment or mission.");
+            var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == vehicleId && v.RescueTeamId == teamId);
+            if (vehicle is null) return (null, "Vehicle not found.");
+            if (vehicle.Status == VehicleStatus.InUse) return (null, "An in-use vehicle cannot be changed.");
+            vehicle.PlateNumber = dto.PlateNumber; vehicle.Type = dto.Type; vehicle.Status = dto.Status; vehicle.Capacity = dto.Capacity;
+            await _db.SaveChangesAsync();
+            return (new VehicleDto(vehicle.Id, vehicle.PlateNumber, vehicle.Type, vehicle.Status, vehicle.Capacity), null);
+        }
+
+        public async Task<(bool Success, string? Error)> DeleteVehicleAsync(Guid teamId, Guid vehicleId)
+        {
+            if (await IsTeamOperationallyReservedAsync(teamId))
+                return (false, "Vehicles cannot be removed while the team has an active assignment or mission.");
+            var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == vehicleId && v.RescueTeamId == teamId);
+            if (vehicle is null) return (false, "Vehicle not found.");
+            if (vehicle.Status == VehicleStatus.InUse) return (false, "An in-use vehicle cannot be removed.");
+            _db.Vehicles.Remove(vehicle); await _db.SaveChangesAsync(); return (true, null);
+        }
+
+        private async Task<bool> IsTeamOperationallyReservedAsync(Guid teamId)
+        {
+            var status = await _db.RescueTeams.Where(t => t.Id == teamId).Select(t => (TeamStatus?)t.Status).FirstOrDefaultAsync();
+            return status == TeamStatus.OnMission || await _db.Assignments.AnyAsync(a => a.RescueTeamId == teamId && a.Status != AssignmentStatus.Rejected);
         }
 
         private static RescueTeamDto ToDto(RescueTeam t) => new(

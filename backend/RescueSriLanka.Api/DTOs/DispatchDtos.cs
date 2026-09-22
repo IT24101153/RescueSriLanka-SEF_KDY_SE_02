@@ -9,7 +9,7 @@ namespace RescueSriLanka.Api.DTOs
         Guid WorkflowId,
         int PlanVersion,
         CoordinatorDecision Decision,
-        [property: MaxLength(500)] string? Notes);
+        [param: MaxLength(500)] string? Notes);
 
     public record CoordinatorDecisionResultDto(
         bool Success,
@@ -22,15 +22,15 @@ namespace RescueSriLanka.Api.DTOs
 
     public record CreateDispatchDto(
         Guid AssignmentId,
-        [property: MaxLength(500)] string? Notes);
+        [param: MaxLength(500)] string? Notes);
 
     public record TransitionDispatchStatusDto(
         DispatchStatus NewStatus,
-        [property: MaxLength(500)] string? Notes);
+        [param: MaxLength(500)] string? Notes);
 
     public record ApproveDispatchDto(
         bool Approve,
-        [property: MaxLength(500)] string? Notes);
+        [param: MaxLength(500)] string? Notes);
 
     public record DispatchDto(
         Guid Id,

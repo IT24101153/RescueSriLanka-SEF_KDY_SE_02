@@ -2,12 +2,26 @@ using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services;
+using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 using Xunit;
 
 namespace RescueSriLanka.Api.Tests;
 
 public class AssignmentServiceTests
 {
+    [Fact]
+    public void AssignmentRequestValidationAttributesAreAppliedToRecordConstructorParameters()
+    {
+        var createParameters = typeof(CreateAssignmentDto).GetConstructors().Single().GetParameters();
+        var reviseParameters = typeof(ReviseAssignmentDto).GetConstructors().Single().GetParameters();
+
+        Assert.NotNull(createParameters.Single(p => string.Equals(p.Name, "requiredCapacity", StringComparison.OrdinalIgnoreCase)).GetCustomAttribute<RangeAttribute>());
+        Assert.NotNull(createParameters.Single(p => string.Equals(p.Name, "notes", StringComparison.OrdinalIgnoreCase)).GetCustomAttribute<MaxLengthAttribute>());
+        Assert.NotNull(reviseParameters.Single(p => string.Equals(p.Name, "requiredCapacity", StringComparison.OrdinalIgnoreCase)).GetCustomAttribute<RangeAttribute>());
+        Assert.NotNull(reviseParameters.Single(p => string.Equals(p.Name, "notes", StringComparison.OrdinalIgnoreCase)).GetCustomAttribute<MaxLengthAttribute>());
+    }
+
     [Fact]
     public async Task CreatesAssignmentWithValidTeamAndVehicleAtPlanVersionOne()
     {

@@ -66,12 +66,30 @@ namespace RescueSriLanka.Api.Controllers
             return member is null ? NotFound("Team not found.") : Ok(member);
         }
 
-        [Authorize(Roles = "EmergencyCoordinator,RescueTeam")]
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPatch("{teamId:guid}/members/{memberId:guid}/availability")]
         public async Task<IActionResult> SetMemberAvailability(Guid teamId, Guid memberId, UpdateTeamMemberAvailabilityDto dto)
         {
-            var success = await _service.SetMemberAvailabilityAsync(teamId, memberId, dto.IsAvailable);
-            return success ? NoContent() : NotFound();
+            var (success, error) = await _service.SetMemberAvailabilityAsync(teamId, memberId, dto.IsAvailable);
+            return success ? NoContent() : error == "Team member not found." ? NotFound(error) : Conflict(new { error });
+        }
+
+        [Authorize(Roles = "EmergencyCoordinator")]
+        [HttpPut("{teamId:guid}/members/{memberId:guid}")]
+        public async Task<ActionResult<TeamMemberDto>> UpdateMember(Guid teamId, Guid memberId, UpdateTeamMemberDto dto)
+        {
+            var (member, error) = await _service.UpdateMemberAsync(teamId, memberId, dto);
+            if (member is not null) return Ok(member);
+            return error == "Team member not found." ? NotFound(error) : Conflict(new { error });
+        }
+
+        [Authorize(Roles = "EmergencyCoordinator")]
+        [HttpDelete("{teamId:guid}/members/{memberId:guid}")]
+        public async Task<IActionResult> DeleteMember(Guid teamId, Guid memberId)
+        {
+            var (success, error) = await _service.DeleteMemberAsync(teamId, memberId);
+            if (success) return NoContent();
+            return error == "Team member not found." ? NotFound(error) : Conflict(new { error });
         }
 
         [Authorize(Roles = "EmergencyCoordinator")]
@@ -82,13 +100,30 @@ namespace RescueSriLanka.Api.Controllers
             return vehicle is null ? NotFound("Team not found.") : Ok(vehicle);
         }
 
-        [Authorize(Roles = "EmergencyCoordinator,RescueTeam")]
+        [Authorize(Roles = "EmergencyCoordinator")]
         [HttpPatch("{teamId:guid}/vehicles/{vehicleId:guid}/status")]
         public async Task<IActionResult> SetVehicleStatus(Guid teamId, Guid vehicleId, UpdateVehicleStatusDto dto)
         {
-            var success = await _service.SetVehicleStatusAsync(teamId, vehicleId, dto.Status);
-            return success ? NoContent() : NotFound();
+            var (success, error) = await _service.SetVehicleStatusAsync(teamId, vehicleId, dto.Status);
+            return success ? NoContent() : error == "Vehicle not found." ? NotFound(error) : Conflict(new { error });
+        }
+
+        [Authorize(Roles = "EmergencyCoordinator")]
+        [HttpPut("{teamId:guid}/vehicles/{vehicleId:guid}")]
+        public async Task<ActionResult<VehicleDto>> UpdateVehicle(Guid teamId, Guid vehicleId, UpdateVehicleDto dto)
+        {
+            var (vehicle, error) = await _service.UpdateVehicleAsync(teamId, vehicleId, dto);
+            if (vehicle is not null) return Ok(vehicle);
+            return error == "Vehicle not found." ? NotFound(error) : Conflict(new { error });
+        }
+
+        [Authorize(Roles = "EmergencyCoordinator")]
+        [HttpDelete("{teamId:guid}/vehicles/{vehicleId:guid}")]
+        public async Task<IActionResult> DeleteVehicle(Guid teamId, Guid vehicleId)
+        {
+            var (success, error) = await _service.DeleteVehicleAsync(teamId, vehicleId);
+            if (success) return NoContent();
+            return error == "Vehicle not found." ? NotFound(error) : Conflict(new { error });
         }
     }
 }
-
