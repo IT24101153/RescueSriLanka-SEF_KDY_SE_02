@@ -476,3 +476,6 @@
     max-height: none;
   }
 }
+
+.hr-request-image-link { display: block; width: fit-content; max-width: 100%; margin: 0 0 1.4rem; color: #a35e00; font-size: .78rem; font-weight: 600; text-decoration: none; }
+.hr-request-image { display: block; width: min(100%, 520px); max-height: 300px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); margin-bottom: .45rem; }

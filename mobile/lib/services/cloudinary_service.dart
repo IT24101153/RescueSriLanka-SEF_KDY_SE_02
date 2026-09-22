@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 /// Uploads images directly to Cloudinary using an unsigned upload preset,
 /// so no API secret needs to live in the mobile app.
@@ -12,11 +12,12 @@ class CloudinaryService {
       Uri.parse('https://api.cloudinary.com/v1_1/$_cloudName/image/upload');
 
   /// Uploads [imageFile] and returns the resulting secure URL, or null on failure.
-  static Future<String?> uploadImage(File imageFile) async {
+  static Future<String?> uploadImage(XFile imageFile) async {
     try {
+      final bytes = await imageFile.readAsBytes();
       final request = http.MultipartRequest('POST', _uploadUrl)
         ..fields['upload_preset'] = _uploadPreset
-        ..files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+        ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: imageFile.name));
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);

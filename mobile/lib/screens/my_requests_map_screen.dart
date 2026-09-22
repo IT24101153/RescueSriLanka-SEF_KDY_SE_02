@@ -1,6 +1,7 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart' show LatLng, LatLngBounds;
+import 'package:latlong2/latlong.dart';
 import '../services/help_request_service.dart';
 
 const _typeColors = <Color>[
@@ -23,6 +24,7 @@ class _MyRequestsMapScreenState extends State<MyRequestsMapScreen> {
   final MapController _mapController = MapController();
   List<HelpRequest> _requests = [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -32,13 +34,14 @@ class _MyRequestsMapScreenState extends State<MyRequestsMapScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final requests = await HelpRequestService.getMine();
+    final result = await HelpRequestService.getMineWithStatus();
     if (!mounted) return;
     setState(() {
-      _requests = requests;
+      _requests = result.requests;
+      _error = result.error;
       _loading = false;
     });
-    if (requests.isNotEmpty) {
+    if (result.requests.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fitToRequests());
     }
   }
@@ -113,8 +116,10 @@ class _MyRequestsMapScreenState extends State<MyRequestsMapScreen> {
                     ),
                   ],
                 ),
-                if (_requests.isEmpty)
+                if (_requests.isEmpty && _error == null)
                   const Center(child: _EmptyMapMessage()),
+                if (_error != null)
+                  Center(child: _MapErrorMessage(message: _error!)),
                 Positioned(
                   left: 14,
                   right: 14,
@@ -187,7 +192,7 @@ class _PinTailPainter extends CustomPainter {
   _PinTailPainter(this.color);
   @override
   void paint(Canvas canvas, Size size) {
-    final path = Path()..moveTo(0, 0)..lineTo(size.width, 0)..lineTo(size.width / 2, size.height)..close();
+    final path = ui.Path()..moveTo(0, 0)..lineTo(size.width, 0)..lineTo(size.width / 2, size.height)..close();
     canvas.drawPath(path, Paint()..color = color);
   }
   @override
@@ -234,6 +239,25 @@ class _EmptyMapMessage extends StatelessWidget {
   );
 }
 
+class _MapErrorMessage extends StatelessWidget {
+  final String message;
+  const _MapErrorMessage({required this.message});
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.cloud_off_outlined, size: 34, color: Color(0xFFC8453C)),
+        const SizedBox(height: 8),
+        const Text('Unable to load request locations', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF7A7D89), fontSize: 12)),
+      ]),
+    ),
+  );
+}
+
 class _RequestInfoSheet extends StatelessWidget {
   final HelpRequest request;
   const _RequestInfoSheet({required this.request});
@@ -266,7 +290,7 @@ class _RequestInfoSheet extends StatelessWidget {
             ]),
             const SizedBox(height: 18),
             if (request.imageUrl != null) ...[
-              ClipRRect(borderRadius: BorderRadius.circular(14), child: Image.network(request.imageUrl!, height: 190, width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(height: 100, child: Center(child: Text('Unable to load submitted photo'))))),
+              ClipRRect(borderRadius: BorderRadius.circular(14), child: Image.network(request.imageUrl!, height: 190, width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, _,_) => const SizedBox(height: 100, child: Center(child: Text('Unable to load submitted photo'))))),
               const SizedBox(height: 16),
             ],
             const Text('Request details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),

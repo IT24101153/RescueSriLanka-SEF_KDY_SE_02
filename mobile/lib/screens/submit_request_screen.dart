@@ -21,12 +21,15 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
   double? _latitude;
   double? _longitude;
   File? _selectedImage;
+  XFile? _selectedImageFile;
   String? _selectedImagePath; // works on both web (blob URL) and mobile
 
   bool _locating = false;
   bool _uploadingImage = false;
   bool _submitting = false;
+  bool _analyzingDraft = false;
   String? _error;
+  AiRequestAnalysis? _draftAnalysis;
 
   Future<void> _useMyLocation() async {
     setState(() {
@@ -74,6 +77,7 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
     if (picked != null) {
       setState(() {
         _selectedImagePath = picked.path;
+        _selectedImageFile = picked;
         _selectedImage = kIsWeb ? null : File(picked.path);
       });
     }
@@ -130,13 +134,11 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
     });
 
     // Upload the photo first (if one was picked), then submit the request with its URL.
-    // NOTE: real upload only works on mobile — Flutter Web doesn't expose a real
-    // File for picked images, so we skip upload there (photo capture is a
-    // mobile-only feature by nature anyway — most citizens will use the phone app).
+    // XFile supports byte uploads on both Flutter Web and mobile.
     String? imageUrl;
-    if (_selectedImage != null && !kIsWeb) {
+    if (_selectedImageFile != null) {
       setState(() => _uploadingImage = true);
-      imageUrl = await CloudinaryService.uploadImage(_selectedImage!);
+      imageUrl = await CloudinaryService.uploadImage(_selectedImageFile!);
       setState(() => _uploadingImage = false);
 
       if (imageUrl == null) {
@@ -168,6 +170,26 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
     } else {
       setState(() => _error = 'Could not submit your request. Try again.');
     }
+  }
+
+  Future<void> _analyzeDraft() async {
+    final description = _descriptionController.text.trim();
+    if (description.isEmpty) {
+      setState(() => _error = 'Describe the situation before requesting AI guidance.');
+      return;
+    }
+    setState(() {
+      _analyzingDraft = true;
+      _error = null;
+      _draftAnalysis = null;
+    });
+    final result = await HelpRequestService.analyzeDraft(type: _selectedType, description: description);
+    if (!mounted) return;
+    setState(() {
+      _analyzingDraft = false;
+      _draftAnalysis = result;
+      if (result == null) _error = 'AI guidance is unavailable right now. You can still submit your request.';
+    });
   }
 
   @override
@@ -204,7 +226,10 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
                   return ChoiceChip(
                     label: Text(helpRequestTypeLabels[i]),
                     selected: selected,
-                    onSelected: (_) => setState(() => _selectedType = i),
+                    onSelected: (_) => setState(() {
+                      _selectedType = i;
+                      _draftAnalysis = null;
+                    }),
                     selectedColor: const Color(0xFFE8960B),
                     labelStyle: TextStyle(color: selected ? Colors.white : const Color(0xFF14161C)),
                     backgroundColor: const Color(0xFFF0F0F3),
@@ -223,6 +248,40 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
                   border: OutlineInputBorder(),
                 ),
               ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _analyzingDraft ? null : _analyzeDraft,
+                icon: _analyzingDraft
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.auto_awesome_outlined),
+                label: Text(_analyzingDraft ? 'Reviewing your report...' : 'Improve report with AI'),
+              ),
+              if (_draftAnalysis != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F7F7),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFB9D9D7)),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Row(children: [
+                      Icon(Icons.auto_awesome_outlined, size: 18, color: Color(0xFF0B6E69)),
+                      SizedBox(width: 7),
+                      Text('AI report guidance', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF17323B))),
+                    ]),
+                    const SizedBox(height: 8),
+                    Text(_draftAnalysis!.reasoning, style: const TextStyle(fontSize: 13, height: 1.35)),
+                    if (_draftAnalysis!.suggestedAction.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(_draftAnalysis!.suggestedAction, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, height: 1.35)),
+                    ],
+                    const SizedBox(height: 8),
+                    const Text('This is guidance only. Do not delay submitting an emergency request.', style: TextStyle(fontSize: 11, color: Color(0xFF547071))),
+                  ]),
+                ),
+              ],
 
               const SizedBox(height: 22),
               const Text('Photo (optional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
@@ -242,6 +301,7 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
                       child: GestureDetector(
                         onTap: () => setState(() {
                           _selectedImage = null;
+                          _selectedImageFile = null;
                           _selectedImagePath = null;
                         }),
                         child: Container(

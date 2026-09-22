@@ -219,6 +219,13 @@ export default function HelpRequestsReview() {
 
               <p className="hr-detail-desc">{selected.description}</p>
 
+              {selected.imageUrl && (
+                <a className="hr-request-image-link" href={selected.imageUrl} target="_blank" rel="noreferrer">
+                  <img className="hr-request-image" src={selected.imageUrl} alt="Photo submitted with this help request" />
+                  <span>Open full-size photo</span>
+                </a>
+              )}
+
               {selected.verificationStatus === 0 && (
                 <div className="hr-verify-prompt">
                   <span className="hr-verify-prompt-text">This report needs verification</span>

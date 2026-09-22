@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Services;
 using RescueSriLanka.Api.Agents.PlannerAgent;
+using RescueSriLanka.Api.Services.Llm;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -59,6 +60,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddHttpClient<IAiAnalysisService, GeminiAnalysisService>();
 
 var app = builder.Build();
 

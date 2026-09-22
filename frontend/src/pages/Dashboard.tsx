@@ -64,10 +64,16 @@ export default function Dashboard() {
     setError(null);
     try {
       const response = await authFetch("/api/HelpRequests");
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401 || response.status === 403
+              ? "Your dashboard session is not authorized. Please sign out and sign in again as the coordinator."
+              : "Unable to load live request data. Make sure the API is running.",
+        );
+      }
       setRequests(await response.json());
-    } catch {
-      setError("Unable to load live request data. Make sure the API is running.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to load live request data. Make sure the API is running.");
     } finally {
       setLoading(false);
     }

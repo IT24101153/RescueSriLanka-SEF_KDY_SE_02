@@ -39,11 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(res.status === 401 ? "Incorrect email or password." : "Login failed. Try again.");
       }
 
-      // ASSUMPTION: response shape is { token, role, userId, name }.
-      // Adjust this destructuring once the real AuthController response is confirmed.
       const data = await res.json();
       const newToken: string = data.token;
-      const newUser: AuthUser = { role: data.role, userId: data.userId, name: data.name };
+      const newUser: AuthUser = {
+        role: data.user.role,
+        userId: data.user.id,
+        name: data.user.fullName,
+      };
 
       localStorage.setItem("authToken", newToken);
       localStorage.setItem("authUser", JSON.stringify(newUser));

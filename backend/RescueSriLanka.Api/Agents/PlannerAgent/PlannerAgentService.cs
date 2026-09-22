@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Services.Llm;
 
 namespace RescueSriLanka.Api.Agents.PlannerAgent
 {
@@ -31,6 +32,7 @@ namespace RescueSriLanka.Api.Agents.PlannerAgent
     {
         private readonly ApplicationDbContext _db;
         private readonly IHelpRequestServiceForAgent _helpRequestLookup;
+        private readonly IAiAnalysisService _aiAnalysis;
 
         // PLACEHOLDER reference dataset for the Resource & Logistics step, standing in for
         // Student C's real Shelter/MedicalSupply table until it exists.
@@ -41,10 +43,11 @@ namespace RescueSriLanka.Api.Agents.PlannerAgent
             ("Ratnapura General Hospital", 6.6828, 80.4012),
         };
 
-        public PlannerAgentService(ApplicationDbContext db, IHelpRequestServiceForAgent helpRequestLookup)
+        public PlannerAgentService(ApplicationDbContext db, IHelpRequestServiceForAgent helpRequestLookup, IAiAnalysisService aiAnalysis)
         {
             _db = db;
             _helpRequestLookup = helpRequestLookup;
+            _aiAnalysis = aiAnalysis;
         }
 
         public async Task<AgentWorkflowResponseDto> TriggerAsync(TriggerWorkflowDto dto)
@@ -117,13 +120,29 @@ namespace RescueSriLanka.Api.Agents.PlannerAgent
             var step2 = workflow.Steps.First(s => s.StepNumber == 2);
             var step3 = workflow.Steps.First(s => s.StepNumber == 3);
 
-            // ---- Step 1: Incident Analysis — REAL logic against this request's own data ----
+            // ---- Step 1: Incident Analysis — REAL rule-based classification + real Gemini AI reasoning ----
             if (request is not null)
             {
                 string severity = request.UrgencyScore >= 70 ? "High" : request.UrgencyScore >= 40 ? "Medium" : "Low";
                 string zone = request.UrgencyScore >= 70 ? "Danger" : request.UrgencyScore >= 40 ? "Caution" : "Safe";
 
-                step1.ToolResultJson = JsonSerializer.Serialize(new { severity, zone, basedOnUrgencyScore = request.UrgencyScore });
+                // Real Gemini call — adds human-readable reasoning and a credibility
+                // signal on top of the deterministic score. If the AI call fails or
+                // no key is configured, we still have the rule-based result above,
+                // so the workflow degrades gracefully rather than breaking.
+                var aiResult = await _aiAnalysis.AnalyzeHelpRequestAsync(
+                    request.Type.ToString(), request.Description, request.UrgencyScore);
+
+                step1.ToolResultJson = JsonSerializer.Serialize(new
+                {
+                    severity,
+                    zone,
+                    basedOnUrgencyScore = request.UrgencyScore,
+                    aiReasoning = aiResult?.Reasoning,
+                    aiCredibilitySignal = aiResult?.CredibilitySignal,
+                    aiSuggestedAction = aiResult?.SuggestedAction,
+                    aiAnalysisAvailable = aiResult is not null
+                });
                 step1.Status = StepStatus.Completed;
                 step1.CompletedAt = DateTime.UtcNow;
             }

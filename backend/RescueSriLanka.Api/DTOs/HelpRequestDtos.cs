@@ -54,4 +54,17 @@ namespace RescueSriLanka.Api.DTOs
         public string? Notes { get; set; }
         public DateTime ChangedAt { get; set; }
     }
+
+    // A compact, citizen-safe summary of the most recent incident-analysis step.
+    public class AiPriorityResponseDto
+    {
+        public string Priority { get; set; } = "Pending";
+        public bool AiAnalysisAvailable { get; set; }
+    }
+
+    public class AnalyzeRequestDraftDto
+    {
+        public HelpRequestType Type { get; set; }
+        public string Description { get; set; } = string.Empty;
+    }
 }
