@@ -1,9 +1,18 @@
 import { apiFetch } from './client'
-import type { AssignmentDto, CreateAssignmentRequest, ReviseAssignmentRequest, SafetyValidationWorkflowResultDto, CoordinatorDecisionRequest, CoordinatorDecisionResultDto, DispatchDto, DispatchStatus, MatchRequest, RescueTeamDto, TeamMatchResultDto } from '../types/rescueCoordination'
+import type { AssignmentDto, CreateAssignmentRequest, CreateRescueTeamRequest, CreateTeamMemberRequest, CreateVehicleRequest, ReviseAssignmentRequest, SafetyValidationWorkflowResultDto, CoordinatorDecisionRequest, CoordinatorDecisionResultDto, DispatchDto, DispatchStatus, MatchRequest, RescueTeamDto, TeamMatchResultDto, TeamMemberDto, UpdateTeamMemberRequest, UpdateVehicleRequest, VehicleDto } from '../types/rescueCoordination'
 
 export const getRescueTeams = (signal?: AbortSignal) => apiFetch<RescueTeamDto[]>('/api/rescueteams', { signal })
 export const getAssignments = (signal?: AbortSignal) => apiFetch<AssignmentDto[]>('/api/assignments', { signal })
 export const getDispatches = (signal?: AbortSignal) => apiFetch<DispatchDto[]>('/api/dispatches', { signal })
+export const createRescueTeam = (request: CreateRescueTeamRequest) => apiFetch<RescueTeamDto>('/api/rescueteams', { method: 'POST', body: JSON.stringify(request) })
+export const updateRescueTeam = (id: string, request: RescueTeamDto) => apiFetch<RescueTeamDto>(`/api/rescueteams/${id}`, { method: 'PUT', body: JSON.stringify({ name: request.name, status: request.status, baseLatitude: request.baseLatitude, baseLongitude: request.baseLongitude }) })
+export const deleteRescueTeam = (id: string) => apiFetch<void>(`/api/rescueteams/${id}`, { method: 'DELETE' })
+export const addTeamMember = (teamId: string, request: CreateTeamMemberRequest) => apiFetch<TeamMemberDto>(`/api/rescueteams/${teamId}/members`, { method: 'POST', body: JSON.stringify(request) })
+export const updateTeamMember = (teamId: string, memberId: string, request: UpdateTeamMemberRequest) => apiFetch<TeamMemberDto>(`/api/rescueteams/${teamId}/members/${memberId}`, { method: 'PUT', body: JSON.stringify(request) })
+export const removeTeamMember = (teamId: string, memberId: string) => apiFetch<void>(`/api/rescueteams/${teamId}/members/${memberId}`, { method: 'DELETE' })
+export const addVehicle = (teamId: string, request: CreateVehicleRequest) => apiFetch<VehicleDto>(`/api/rescueteams/${teamId}/vehicles`, { method: 'POST', body: JSON.stringify(request) })
+export const updateVehicle = (teamId: string, vehicleId: string, request: UpdateVehicleRequest) => apiFetch<VehicleDto>(`/api/rescueteams/${teamId}/vehicles/${vehicleId}`, { method: 'PUT', body: JSON.stringify(request) })
+export const removeVehicle = (teamId: string, vehicleId: string) => apiFetch<void>(`/api/rescueteams/${teamId}/vehicles/${vehicleId}`, { method: 'DELETE' })
 export const matchTeams = (request: MatchRequest) => apiFetch<TeamMatchResultDto[]>('/api/assignments/match', { method: 'POST', body: JSON.stringify(request) })
 export const createAssignment = (request: CreateAssignmentRequest) => apiFetch<AssignmentDto>('/api/assignments', { method: 'POST', body: JSON.stringify(request) })
 export const reviseAssignment = (id: string, request: ReviseAssignmentRequest) => apiFetch<AssignmentDto>(`/api/assignments/${id}/revise`, { method: 'POST', body: JSON.stringify(request) })

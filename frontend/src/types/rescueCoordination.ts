@@ -118,11 +118,15 @@ export interface CreateTeamMemberRequest {
   skill: SkillType;
 }
 
+export interface UpdateTeamMemberRequest extends CreateTeamMemberRequest { isAvailable: boolean }
+
 export interface CreateVehicleRequest {
   plateNumber: string;
   type: VehicleType;
   capacity: number;
 }
+
+export interface UpdateVehicleRequest extends CreateVehicleRequest { status: VehicleStatus }
 
 export interface MatchRequest {
   requiredSkill: SkillType;

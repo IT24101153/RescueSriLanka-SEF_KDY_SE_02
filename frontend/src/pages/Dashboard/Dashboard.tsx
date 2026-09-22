@@ -16,7 +16,6 @@ import AgentPanel from './sections/AgentPanel'
 import AgentActivity from './sections/AgentActivity'
 import ReviewPanel from './sections/ReviewPanel'
 import IncidentPhotos from './sections/IncidentPhotos'
-import RescueCoordinationSection from './sections/RescueCoordinationSection'
 import { SEVERITY_TOKEN, STATUS_LABEL, timeAgo } from './severity'
 import './Dashboard.css'
 import type { Role } from '../../auth/session'
@@ -33,7 +32,7 @@ const TYPES: IncidentType[] = [
   'Other',
 ]
 
-type TabId = 'overview' | 'map' | 'zones' | 'queue' | 'agent' | 'rescue'
+type TabId = 'overview' | 'map' | 'zones' | 'queue' | 'agent'
 
 const TABS: { id: TabId; label: string; hint: string }[] = [
   { id: 'overview', label: 'Overview', hint: 'Figures and breakdowns' },
@@ -41,10 +40,9 @@ const TABS: { id: TabId; label: string; hint: string }[] = [
   { id: 'zones', label: 'Safety zones', hint: 'Safe / caution / danger' },
   { id: 'queue', label: 'Incident queue', hint: 'Full incident table' },
   { id: 'agent', label: 'Agent activity', hint: 'Runs and approvals' },
-  { id: 'rescue', label: 'Rescue coordination', hint: 'Teams, assignments & dispatch' },
 ]
 
-export default function Dashboard({ role }: { role: Role }) {
+export default function Dashboard({ role: _role }: { role: Role }) {
   const [tab, setTab] = useState<TabId>('overview')
 
   const [stats, setStats] = useState<DashboardStatistics | null>(null)
@@ -269,7 +267,6 @@ export default function Dashboard({ role }: { role: Role }) {
       )}
 
       {tab === 'agent' && <AgentActivity />}
-      {tab === 'rescue' && <RescueCoordinationSection canCoordinate={role === 'EmergencyCoordinator'} />}
 
       {tab === 'queue' && (
         <section className="panel" aria-label="Incident queue">
