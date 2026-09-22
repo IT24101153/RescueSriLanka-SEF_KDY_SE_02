@@ -20,13 +20,13 @@ namespace RescueSriLanka.Api.Controllers
     {
         private readonly IHelpRequestService _service;
         private readonly IAiAnalysisService _aiAnalysis;
-        private readonly ApplicationDbContext _db;
+        private readonly AppDbContext _db;
         private readonly IPlannerAgentService _plannerAgent;
 
         public HelpRequestsController(
             IHelpRequestService service,
             IAiAnalysisService aiAnalysis,
-            ApplicationDbContext db,
+            AppDbContext db,
             IPlannerAgentService plannerAgent)
         {
             _service = service;

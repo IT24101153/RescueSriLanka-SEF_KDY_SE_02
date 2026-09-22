@@ -30,7 +30,7 @@ namespace RescueSriLanka.Api.Agents.PlannerAgent
     // it's real, working deterministic validation against this project's own data.
     public class PlannerAgentService : IPlannerAgentService
     {
-        private readonly ApplicationDbContext _db;
+        private readonly AppDbContext _db;
         private readonly IHelpRequestServiceForAgent _helpRequestLookup;
         private readonly IAiAnalysisService _aiAnalysis;
 
@@ -43,7 +43,7 @@ namespace RescueSriLanka.Api.Agents.PlannerAgent
             ("Ratnapura General Hospital", 6.6828, 80.4012),
         };
 
-        public PlannerAgentService(ApplicationDbContext db, IHelpRequestServiceForAgent helpRequestLookup, IAiAnalysisService aiAnalysis)
+        public PlannerAgentService(AppDbContext db, IHelpRequestServiceForAgent helpRequestLookup, IAiAnalysisService aiAnalysis)
         {
             _db = db;
             _helpRequestLookup = helpRequestLookup;
@@ -317,9 +317,9 @@ namespace RescueSriLanka.Api.Agents.PlannerAgent
 
     public class HelpRequestServiceForAgent : IHelpRequestServiceForAgent
     {
-        private readonly ApplicationDbContext _db;
+        private readonly AppDbContext _db;
 
-        public HelpRequestServiceForAgent(ApplicationDbContext db)
+        public HelpRequestServiceForAgent(AppDbContext db)
         {
             _db = db;
         }

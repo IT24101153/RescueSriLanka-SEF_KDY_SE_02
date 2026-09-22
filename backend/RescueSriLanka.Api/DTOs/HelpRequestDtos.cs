@@ -1,11 +1,16 @@
 using System;
+using System.Text.Json.Serialization;
 using RescueSriLanka.Api.Models;
 
 namespace RescueSriLanka.Api.DTOs
 {
+    // Enums here are sent as numbers (the React and Flutter help-request clients
+    // read them that way), overriding the API-wide JsonStringEnumConverter.
+
     // What the client sends when creating a new help request
     public class CreateHelpRequestDto
     {
+        [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestType>))]
         public HelpRequestType Type { get; set; }
         public string Description { get; set; } = string.Empty;
         public double Latitude { get; set; }
@@ -17,6 +22,7 @@ namespace RescueSriLanka.Api.DTOs
     // What the client sends to change a request's status
     public class UpdateHelpRequestStatusDto
     {
+        [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestStatus>))]
         public HelpRequestStatus NewStatus { get; set; }
         public string? Notes { get; set; }
     }
@@ -33,12 +39,15 @@ namespace RescueSriLanka.Api.DTOs
     {
         public Guid Id { get; set; }
         public Guid CitizenId { get; set; }
+        [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestType>))]
         public HelpRequestType Type { get; set; }
         public string Description { get; set; } = string.Empty;
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public int UrgencyScore { get; set; }
+        [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestStatus>))]
         public HelpRequestStatus Status { get; set; }
+        [JsonConverter(typeof(JsonNumberEnumConverter<VerificationStatus>))]
         public VerificationStatus VerificationStatus { get; set; }
         public string? VerificationNotes { get; set; }
         public string? ImageUrl { get; set; }
@@ -49,7 +58,9 @@ namespace RescueSriLanka.Api.DTOs
     // A single entry in the status history, for the tracking screen
     public class StatusHistoryDto
     {
+        [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestStatus>))]
         public HelpRequestStatus OldStatus { get; set; }
+        [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestStatus>))]
         public HelpRequestStatus NewStatus { get; set; }
         public string? Notes { get; set; }
         public DateTime ChangedAt { get; set; }
@@ -64,6 +75,7 @@ namespace RescueSriLanka.Api.DTOs
 
     public class AnalyzeRequestDraftDto
     {
+        [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestType>))]
         public HelpRequestType Type { get; set; }
         public string Description { get; set; } = string.Empty;
     }

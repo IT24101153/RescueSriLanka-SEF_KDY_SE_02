@@ -22,9 +22,9 @@ namespace RescueSriLanka.Api.Services
 
     public class HelpRequestService : IHelpRequestService
     {
-        private readonly ApplicationDbContext _db;
+        private readonly AppDbContext _db;
 
-        public HelpRequestService(ApplicationDbContext db)
+        public HelpRequestService(AppDbContext db)
         {
             _db = db;
         }

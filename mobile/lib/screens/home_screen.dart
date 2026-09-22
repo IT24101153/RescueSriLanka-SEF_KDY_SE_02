@@ -1,14 +1,37 @@
 import 'package:flutter/material.dart';
+import '../core/theme.dart';
 import '../services/auth_service.dart';
-import 'login_screen.dart';
+import '../services/help_request_api.dart';
+import 'auth/login_screen.dart';
 import 'submit_request_screen.dart';
 import 'my_requests_screen.dart';
 import 'my_requests_map_screen.dart';
 import 'safety_check_screen.dart';
 import '../services/help_request_service.dart';
 
+/// The Help tab in the app shell: the help-request hub when signed in, a
+/// sign-in prompt otherwise. A fresh [HomeScreen] is built on every sign-in,
+/// so its summary always loads with the new session.
+class HelpRequestsTab extends StatelessWidget {
+  const HelpRequestsTab({super.key, required this.auth});
+
+  final AuthService auth;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: auth,
+      builder: (context, _) => auth.isSignedIn
+          ? HomeScreen(auth: auth)
+          : _SignInPrompt(auth: auth),
+    );
+  }
+}
+
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, required this.auth});
+
+  final AuthService auth;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -22,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    HelpRequestApi.auth = widget.auth;
     _loadSummary();
   }
 
@@ -55,15 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Log out',
-            onPressed: () async {
-              await AuthService.logout();
-              if (context.mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  (route) => false,
-                );
-              }
-            },
+            onPressed: () => widget.auth.signOut(),
           ),
         ],
       ),
@@ -256,6 +272,58 @@ class _HomeCard extends StatelessWidget {
                 ),
               ),
               const Icon(Icons.chevron_right, color: Color(0xFF7A7D89)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SignInPrompt extends StatelessWidget {
+  const _SignInPrompt({required this.auth});
+
+  final AuthService auth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Get help')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.health_and_safety_outlined, size: 54, color: AppColors.brand),
+              const SizedBox(height: 18),
+              Text(
+                'Sign in to request help',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink,
+                    ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'An account lets coordinators verify your request and keep you '
+                'updated on its status.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13.5, height: 1.5),
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: () => Navigator.of(context).push<bool>(
+                  MaterialPageRoute(builder: (_) => LoginScreen(auth: auth)),
+                ),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(220, 46),
+                  backgroundColor: AppColors.brand,
+                  foregroundColor: AppColors.brandInk,
+                ),
+                child: const Text('Sign in'),
+              ),
             ],
           ),
         ),

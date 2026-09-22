@@ -18,9 +18,9 @@ namespace RescueSriLanka.Api.Services
 
     public class TravelAdvisoryService : ITravelAdvisoryService
     {
-        private readonly ApplicationDbContext _db;
+        private readonly AppDbContext _db;
 
-        public TravelAdvisoryService(ApplicationDbContext db)
+        public TravelAdvisoryService(AppDbContext db)
         {
             _db = db;
         }

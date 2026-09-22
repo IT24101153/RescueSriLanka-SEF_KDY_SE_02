@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import '../services/api_client.dart';
+import '../services/help_request_api.dart';
 
 class SafetyCheckScreen extends StatefulWidget {
   const SafetyCheckScreen({super.key});
@@ -41,7 +41,7 @@ class _SafetyCheckScreenState extends State<SafetyCheckScreen> {
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
 
-      final res = await ApiClient.post('/api/TravelAdvisories/check-safety', {
+      final res = await HelpRequestApi.post('/api/TravelAdvisories/check-safety', {
         'points': [
           {'latitude': position.latitude, 'longitude': position.longitude}
         ],

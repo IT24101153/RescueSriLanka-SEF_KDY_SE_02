@@ -14,23 +14,14 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-
-  # For talking to the ASP.NET Core API
-  http: ^1.2.0
-
-  # For storing the JWT token locally between app launches
-  shared_preferences: ^2.3.0
-
-  # For capturing the citizen's real GPS location on a help request
-  geolocator: ^13.0.0
-
-  # For picking/capturing a photo to attach to a help request
-  image_picker: ^1.1.2
-
-  # OpenStreetMap view used to show citizens their own submitted request locations
   flutter_map: ^8.3.2
   latlong2: ^0.9.1
-
+  http: ^1.5.0
+  http_parser: ^4.1.2
+  geolocator: ^14.0.2
+  image_picker: ^1.2.3
+  shared_preferences: ^2.5.5
+  intl: ^0.20.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

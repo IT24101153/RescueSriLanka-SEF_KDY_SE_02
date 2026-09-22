@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using RescueSriLanka.Api.Models;
 
 namespace RescueSriLanka.Api.DTOs
 {
+    // Enums here are sent as numbers (the React and Flutter help-request clients
+    // read them that way), overriding the API-wide JsonStringEnumConverter.
+
     // For creating an advisory (coordinator-facing, or later auto-generated from an Incident)
     public class CreateTravelAdvisoryDto
     {
@@ -11,6 +15,7 @@ namespace RescueSriLanka.Api.DTOs
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public double RadiusMeters { get; set; }
+        [JsonConverter(typeof(JsonNumberEnumConverter<SafetyLevel>))]
         public SafetyLevel SafetyLevel { get; set; }
         public string Reason { get; set; } = string.Empty;
         public DateTime? ExpiresAt { get; set; }
@@ -23,6 +28,7 @@ namespace RescueSriLanka.Api.DTOs
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public double RadiusMeters { get; set; }
+        [JsonConverter(typeof(JsonNumberEnumConverter<SafetyLevel>))]
         public SafetyLevel SafetyLevel { get; set; }
         public string Reason { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
@@ -45,6 +51,7 @@ namespace RescueSriLanka.Api.DTOs
     // Response: the worst safety level found across all points/advisories, plus why
     public class SafetyCheckResponseDto
     {
+        [JsonConverter(typeof(JsonNumberEnumConverter<SafetyLevel>))]
         public SafetyLevel OverallSafetyLevel { get; set; }
         public string Reason { get; set; } = string.Empty;
         public List<TravelAdvisoryResponseDto> MatchedAdvisories { get; set; } = new();

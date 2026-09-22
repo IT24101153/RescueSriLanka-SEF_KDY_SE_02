@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { authFetch } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
+import { getSession } from "../auth/session";
 import "./HelpRequestsReview.css";
 
 const TYPE_LABELS = ["Water", "Food", "Medical", "Rescue", "Shelter", "Other"] as const;
@@ -65,7 +65,7 @@ function formatTime(iso: string): string {
 }
 
 export default function HelpRequestsReview() {
-  const { user } = useAuth();
+  const user = getSession()?.user;
   const [requests, setRequests] = useState<HelpRequestDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [history, setHistory] = useState<StatusHistoryDto[]>([]);
@@ -161,8 +161,8 @@ export default function HelpRequestsReview() {
         <div className="hr-breadcrumb">
           Dashboard <span>/</span> <strong>Help Requests</strong>
         </div>
-        <div className="hr-topbar-avatar" title={user?.name ?? "Admin"}>
-          {(user?.name ?? "A").charAt(0)}
+        <div className="hr-topbar-avatar" title={user?.fullName ?? "Admin"}>
+          {(user?.fullName ?? "A").charAt(0)}
         </div>
       </div>
 

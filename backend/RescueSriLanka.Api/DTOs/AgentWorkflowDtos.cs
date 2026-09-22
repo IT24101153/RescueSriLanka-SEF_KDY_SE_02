@@ -1,11 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using RescueSriLanka.Api.Models;
 
 namespace RescueSriLanka.Api.DTOs
 {
+    // Enums here are sent as numbers (the React and Flutter help-request clients
+    // read them that way), overriding the API-wide JsonStringEnumConverter.
+
     public class TriggerWorkflowDto
     {
+        [JsonConverter(typeof(JsonNumberEnumConverter<WorkflowObjectiveType>))]
         public WorkflowObjectiveType ObjectiveType { get; set; }
         public Guid ObjectiveId { get; set; }
     }
@@ -14,20 +19,24 @@ namespace RescueSriLanka.Api.DTOs
     {
         public Guid Id { get; set; }
         public int StepNumber { get; set; }
+        [JsonConverter(typeof(JsonNumberEnumConverter<AgentType>))]
         public AgentType TargetAgent { get; set; }
         public string Action { get; set; } = string.Empty;
         public string InputParamsJson { get; set; } = "{}";
         public string? ToolResultJson { get; set; }
         public string? ValidationResultJson { get; set; }
+        [JsonConverter(typeof(JsonNumberEnumConverter<StepStatus>))]
         public StepStatus Status { get; set; }
     }
 
     public class AgentWorkflowResponseDto
     {
         public Guid Id { get; set; }
+        [JsonConverter(typeof(JsonNumberEnumConverter<WorkflowObjectiveType>))]
         public WorkflowObjectiveType ObjectiveType { get; set; }
         public Guid ObjectiveId { get; set; }
         public string PlanJson { get; set; } = "{}";
+        [JsonConverter(typeof(JsonNumberEnumConverter<WorkflowStatus>))]
         public WorkflowStatus Status { get; set; }
         public string? ApprovalNotes { get; set; }
         public string? FinalOutcomeJson { get; set; }

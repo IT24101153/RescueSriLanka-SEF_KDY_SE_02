@@ -1,5 +1,5 @@
 import 'dart:convert';
-import '../services/api_client.dart';
+import 'help_request_api.dart';
 
 // Matches HelpRequestType enum: Water=0, Food=1, Medical=2, Rescue=3, Shelter=4, Other=5
 const List<String> helpRequestTypeLabels = ['Water', 'Food', 'Medical', 'Rescue', 'Shelter', 'Other'];
@@ -114,7 +114,7 @@ class HelpRequestService {
     required double longitude,
     String? imageUrl,
   }) async {
-    final res = await ApiClient.post('/api/HelpRequests', {
+    final res = await HelpRequestApi.post('/api/HelpRequests', {
       'type': type,
       'description': description,
       'latitude': latitude,
@@ -136,7 +136,7 @@ class HelpRequestService {
   /// Keeps a failed request fetch distinct from a genuine empty request list.
   static Future<HelpRequestLoadResult> getMineWithStatus() async {
     try {
-      final res = await ApiClient.get('/api/HelpRequests/mine');
+      final res = await HelpRequestApi.get('/api/HelpRequests/mine');
       if (res.statusCode == 401) {
         return const HelpRequestLoadResult(requests: [], error: 'Your session has expired. Please sign in again.');
       }
@@ -151,7 +151,7 @@ class HelpRequestService {
   }
 
   static Future<List<StatusHistoryEntry>> getHistory(String id) async {
-    final res = await ApiClient.get('/api/HelpRequests/$id/history');
+    final res = await HelpRequestApi.get('/api/HelpRequests/$id/history');
     if (res.statusCode != 200) return [];
 
     final List<dynamic> data = jsonDecode(res.body);
@@ -159,19 +159,19 @@ class HelpRequestService {
   }
 
   static Future<AiRequestAnalysis?> getAiAnalysis(String id) async {
-    final res = await ApiClient.post('/api/HelpRequests/$id/ai-analysis', {});
+    final res = await HelpRequestApi.post('/api/HelpRequests/$id/ai-analysis', {});
     if (res.statusCode != 200) return null;
     return AiRequestAnalysis.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
   static Future<AiPriority?> getAiPriority(String id) async {
-    final res = await ApiClient.get('/api/HelpRequests/$id/ai-priority');
+    final res = await HelpRequestApi.get('/api/HelpRequests/$id/ai-priority');
     if (res.statusCode != 200) return null;
     return AiPriority.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
   static Future<AiRequestAnalysis?> analyzeDraft({required int type, required String description}) async {
-    final res = await ApiClient.post('/api/HelpRequests/ai-draft-analysis', {
+    final res = await HelpRequestApi.post('/api/HelpRequests/ai-draft-analysis', {
       'type': type,
       'description': description,
     });

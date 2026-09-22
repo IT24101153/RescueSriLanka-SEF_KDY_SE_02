@@ -1,34 +1,28 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
-import ProtectedRoute from "./components/ProtectedRoute";
-import DashboardLayout from "./components/DashboardLayout";
-import LoginPage from "./pages/LoginPage";
-import HelpRequestsReview from "./pages/HelpRequestsReview";
-import UserManagement from "./pages/UserManagement";
-import Reports from "./pages/Reports";
-import Dashboard from "./pages/Dashboard";
+import { useState } from 'react'
+import { BrowserRouter } from 'react-router-dom'
+import LoginPage from './pages/Login/LoginPage'
+import ConsoleShell from './pages/Console/ConsoleShell'
+import { clearSession, getSession } from './auth/session'
+import type { Session } from './auth/session'
 
 function App() {
+  const [session, setSession] = useState<Session | null>(() => getSession())
+
+  function handleSignOut() {
+    clearSession()
+    setSession(null)
+  }
+
+  if (!session) {
+    return <LoginPage onSignedIn={setSession} />
+  }
+
+  // The console's pages (incident map, help requests, …) are URL routes.
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-
-          <Route element={<ProtectedRoute />}>
-            <Route element={<DashboardLayout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/dashboard/help-requests" element={<HelpRequestsReview />} />
-              <Route path="/dashboard/users" element={<UserManagement />} />
-              <Route path="/dashboard/reports" element={<Reports />} />
-            </Route>
-          </Route>
-
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
-  );
+    <BrowserRouter>
+      <ConsoleShell session={session} onSignOut={handleSignOut} />
+    </BrowserRouter>
+  )
 }
 
-export default App;
+export default App
