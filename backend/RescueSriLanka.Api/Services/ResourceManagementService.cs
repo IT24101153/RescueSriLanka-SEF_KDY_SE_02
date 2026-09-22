@@ -40,6 +40,14 @@ public interface IResourceManagementService
         CancellationToken cancellationToken);
 
     Task<ResourceAllocationResponse?> ReleaseAsync(Guid allocationId, CancellationToken cancellationToken);
+
+    Task<HelpRequestResponse> CreateHelpRequestAsync(CreateHelpRequestRequest request, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken);
+
+    Task<DonationResponse> CreateDonationAsync(CreateDonationRequest request, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken);
 }
 
 public class ResourceManagementService(RescueSriLankaDbContext dbContext) : IResourceManagementService
@@ -253,6 +261,101 @@ public class ResourceManagementService(RescueSriLankaDbContext dbContext) : IRes
 
         return supplyAlerts.Concat(stockAlerts).ToList();
     }
+
+    public async Task<HelpRequestResponse> CreateHelpRequestAsync(
+        CreateHelpRequestRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.RequesterName) ||
+            string.IsNullOrWhiteSpace(request.ContactNumber) ||
+            string.IsNullOrWhiteSpace(request.NeedType) ||
+            string.IsNullOrWhiteSpace(request.Description))
+        {
+            throw new ArgumentException("Name, contact number, need type, and description are required.");
+        }
+
+        var helpRequest = new HelpRequest
+        {
+            Id = Guid.NewGuid(),
+            RequesterName = request.RequesterName.Trim(),
+            ContactNumber = request.ContactNumber.Trim(),
+            NeedType = request.NeedType.Trim(),
+            Description = request.Description.Trim(),
+            Latitude = request.Latitude is null ? null : (double?)request.Latitude,
+            Longitude = request.Longitude is null ? null : (double?)request.Longitude
+        };
+
+        dbContext.HelpRequests.Add(helpRequest);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ToResponse(helpRequest);
+    }
+
+    public async Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken) =>
+        (await dbContext.HelpRequests
+            .AsNoTracking()
+            .OrderByDescending(request => request.CreatedAtUtc)
+            .ToListAsync(cancellationToken))
+        .Select(ToResponse)
+        .ToList();
+
+    public async Task<DonationResponse> CreateDonationAsync(
+        CreateDonationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.DonorName) ||
+            string.IsNullOrWhiteSpace(request.ContactNumber) ||
+            string.IsNullOrWhiteSpace(request.DonationType) ||
+            string.IsNullOrWhiteSpace(request.Unit) ||
+            request.Quantity <= 0)
+        {
+            throw new ArgumentException("Name, contact number, donation type, unit, and a positive quantity are required.");
+        }
+
+        var donation = new Donation
+        {
+            Id = Guid.NewGuid(),
+            DonorName = request.DonorName.Trim(),
+            ContactNumber = request.ContactNumber.Trim(),
+            DonationType = request.DonationType.Trim(),
+            Quantity = request.Quantity,
+            Unit = request.Unit.Trim(),
+            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim()
+        };
+
+        dbContext.Donations.Add(donation);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ToResponse(donation);
+    }
+
+    public async Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken) =>
+        (await dbContext.Donations
+            .AsNoTracking()
+            .OrderByDescending(donation => donation.CreatedAtUtc)
+            .ToListAsync(cancellationToken))
+        .Select(ToResponse)
+        .ToList();
+
+    private static HelpRequestResponse ToResponse(HelpRequest request) => new(
+        request.Id,
+        request.RequesterName,
+        request.ContactNumber,
+        request.NeedType,
+        request.Description,
+        request.Latitude is null ? null : (decimal?)request.Latitude,
+        request.Longitude is null ? null : (decimal?)request.Longitude,
+        request.Status,
+        request.CreatedAtUtc);
+
+    private static DonationResponse ToResponse(Donation donation) => new(
+        donation.Id,
+        donation.DonorName,
+        donation.ContactNumber,
+        donation.DonationType,
+        donation.Quantity,
+        donation.Unit,
+        donation.Notes,
+        donation.Status,
+        donation.CreatedAtUtc);
 
     public async Task<ResourceAllocationResponse> AllocateAsync(
         AllocateResourceRequest request,

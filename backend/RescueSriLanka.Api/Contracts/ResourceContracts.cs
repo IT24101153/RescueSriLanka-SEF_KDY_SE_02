@@ -68,3 +68,41 @@ public record ResourceAlertResponse(
     decimal QuantityOnHand,
     decimal LowStockThreshold,
     string Unit);
+
+public record CreateHelpRequestRequest(
+    string RequesterName,
+    string ContactNumber,
+    string NeedType,
+    string Description,
+    decimal? Latitude,
+    decimal? Longitude);
+
+public record HelpRequestResponse(
+    Guid Id,
+    string RequesterName,
+    string ContactNumber,
+    string NeedType,
+    string Description,
+    decimal? Latitude,
+    decimal? Longitude,
+    string Status,
+    DateTime CreatedAtUtc);
+
+public record CreateDonationRequest(
+    string DonorName,
+    string ContactNumber,
+    string DonationType,
+    decimal Quantity,
+    string Unit,
+    string? Notes);
+
+public record DonationResponse(
+    Guid Id,
+    string DonorName,
+    string ContactNumber,
+    string DonationType,
+    decimal Quantity,
+    string Unit,
+    string? Notes,
+    string Status,
+    DateTime CreatedAtUtc);

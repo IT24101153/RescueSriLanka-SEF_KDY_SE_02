@@ -13,6 +13,10 @@ public class RescueSriLankaDbContext(DbContextOptions<RescueSriLankaDbContext> o
 
     public DbSet<ResourceAllocation> ResourceAllocations => Set<ResourceAllocation>();
 
+    public DbSet<HelpRequest> HelpRequests => Set<HelpRequest>();
+
+    public DbSet<Donation> Donations => Set<Donation>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Shelter>(entity =>
@@ -50,6 +54,28 @@ public class RescueSriLankaDbContext(DbContextOptions<RescueSriLankaDbContext> o
                 allocation.ResourceId,
                 allocation.Status
             });
+        });
+
+        modelBuilder.Entity<HelpRequest>(entity =>
+        {
+            entity.Property(request => request.RequesterName).HasMaxLength(160).IsRequired();
+            entity.Property(request => request.ContactNumber).HasMaxLength(40).IsRequired();
+            entity.Property(request => request.NeedType).HasMaxLength(50).IsRequired();
+            entity.Property(request => request.Description).HasMaxLength(2000).IsRequired();
+            entity.Property(request => request.Status).HasMaxLength(30).IsRequired();
+            entity.HasIndex(request => new { request.Status, request.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<Donation>(entity =>
+        {
+            entity.Property(donation => donation.DonorName).HasMaxLength(160).IsRequired();
+            entity.Property(donation => donation.ContactNumber).HasMaxLength(40).IsRequired();
+            entity.Property(donation => donation.DonationType).HasMaxLength(80).IsRequired();
+            entity.Property(donation => donation.Quantity).HasPrecision(12, 2);
+            entity.Property(donation => donation.Unit).HasMaxLength(40).IsRequired();
+            entity.Property(donation => donation.Notes).HasMaxLength(1000);
+            entity.Property(donation => donation.Status).HasMaxLength(30).IsRequired();
+            entity.HasIndex(donation => new { donation.Status, donation.CreatedAtUtc });
         });
     }
 }

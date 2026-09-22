@@ -171,4 +171,44 @@ public class ResourcesController(IResourceManagementService resourceService) : C
             ? NotFound(new { error = "Active allocation was not found." })
             : Ok(allocation);
     }
+
+    [HttpGet("help-requests")]
+    public async Task<IActionResult> GetHelpRequests(CancellationToken cancellationToken) =>
+        Ok(await resourceService.GetHelpRequestsAsync(cancellationToken));
+
+    [HttpPost("help-requests")]
+    public async Task<IActionResult> CreateHelpRequest(
+        CreateHelpRequestRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var helpRequest = await resourceService.CreateHelpRequestAsync(request, cancellationToken);
+            return Created($"api/resources/help-requests/{helpRequest.Id}", helpRequest);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
+    }
+
+    [HttpGet("donations")]
+    public async Task<IActionResult> GetDonations(CancellationToken cancellationToken) =>
+        Ok(await resourceService.GetDonationsAsync(cancellationToken));
+
+    [HttpPost("donations")]
+    public async Task<IActionResult> CreateDonation(
+        CreateDonationRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var donation = await resourceService.CreateDonationAsync(request, cancellationToken);
+            return Created($"api/resources/donations/{donation.Id}", donation);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
+    }
 }
