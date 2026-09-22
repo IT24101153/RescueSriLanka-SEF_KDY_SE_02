@@ -1,5 +1,6 @@
-using RescueSriLanka.Api.Agents.IncidentAnalysisAgent;
-using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
+using RescueSriLanka.Api.Features.ComponentA.Models;
+
 
 namespace RescueSriLanka.Api.Tests;
 

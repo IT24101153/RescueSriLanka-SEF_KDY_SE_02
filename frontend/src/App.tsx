@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { BrowserRouter } from 'react-router-dom'
-import LoginPage from './pages/Login/LoginPage'
-import ConsoleShell from './pages/Console/ConsoleShell'
-import { clearSession, getSession } from './auth/session'
-import type { Session } from './auth/session'
+import LoginPage from './shared/pages/Login/LoginPage'
+import ConsoleShell from './shared/layout/ConsoleShell'
+import { clearSession, getSession } from './shared/auth/session'
+import type { Session } from './shared/auth/session'
 
 function App() {
   const [session, setSession] = useState<Session | null>(() => getSession())

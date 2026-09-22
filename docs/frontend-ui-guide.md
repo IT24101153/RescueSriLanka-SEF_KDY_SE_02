@@ -48,25 +48,33 @@ CI builds the frontend on every push, so `npm run build` must pass before you pu
 - **React 19 + TypeScript + Vite 8**
 - **Leaflet / react-leaflet 5** for maps
 - **Plain CSS** with custom properties (design tokens). No Tailwind, no component library.
-- **No router.** `App.tsx` shows the login page or the console depending on whether a session exists. Dashboard tabs are React state, not URLs.
-- **No state library.** `Dashboard.tsx` fetches the data and passes it down as props.
+- **React Router** for top-level console pages only. `App.tsx` shows the login page or the console depending on whether a session exists; the console shell maps URLs to pages. Dashboard tabs are React state, not URLs.
+- **No state library.** `ComponentADashboard.tsx` fetches the data and passes it down as props.
 
 ```
 frontend/src/
-├── App.tsx                   # session gate: Login ↔ Console
-├── index.css                 # global tokens + base styles  ← start here
-├── api/client.ts             # apiFetch(): bearer token, 401 → sign out
-├── auth/                     # signIn(), session storage, role labels
-├── config/tiles.ts           # Mapbox / OSM tile switch
-├── types/incidents.ts        # TS types mirroring the API DTOs
-└── pages/
-    ├── Login/                # LoginPage.tsx + .css
-    ├── Console/              # ConsoleShell.tsx — top bar frame
-    └── Dashboard/
-        ├── Dashboard.tsx     # tabs, filters, data loading, detail drawer
-        ├── Dashboard.css     # ~1,450 lines — all dashboard styling
-        ├── severity.ts       # colour / size / label maps, timeAgo()
-        └── sections/         # one file per panel (see §4)
+├── App.tsx                        # session gate: Login ↔ Console
+├── index.css                      # global tokens + base styles  ← start here
+├── shared/                        # used by every component
+│   ├── api/client.ts              # apiFetch(): bearer token, 401 → sign out
+│   ├── auth/                      # signIn(), session storage, role labels
+│   ├── config/tiles.ts            # Mapbox / OSM tile switch
+│   ├── layout/ConsoleShell.tsx    # top bar, nav bar and routes
+│   ├── pages/Login/               # LoginPage.tsx + .css
+│   ├── pages/Dashboard.tsx        # home: switches between the component dashboards
+│   └── types.ts                   # types shared across components (AgentRun)
+└── components/
+    ├── componentA/                # Incident & Disaster Map
+    │   ├── ComponentADashboard.tsx  # tabs, filters, data loading, detail drawer
+    │   ├── ComponentADashboard.css  # ~1,450 lines — all dashboard styling
+    │   ├── severity.ts            # colour / size / label maps, timeAgo()
+    │   ├── types.ts               # TS types mirroring the incident API DTOs
+    │   └── sections/              # one file per panel (see §4)
+    └── componentB/                # Help requests
+        ├── ComponentBDashboard.tsx  # request map and priority queue
+        ├── HelpRequestsReview.tsx   # coordinator review and verification
+        ├── api.ts                 # authFetch() on the shared session
+        └── types.ts               # TS types mirroring the help-request DTOs
 ```
 
 ---
@@ -99,7 +107,7 @@ Clicking an incident on any tab (map marker, table row, feed item, map-side list
 
 ## 4. Screens in detail
 
-### 4.1 Login — `pages/Login/LoginPage.tsx`
+### 4.1 Login — `shared/pages/Login/LoginPage.tsx`
 
 Two columns: an amber brand panel with a tagline, three feature ticks and a Safe/Caution/Danger legend, and the sign-in card. Below 900px they stack into one column.
 
@@ -109,11 +117,11 @@ Two columns: an amber brand panel with a tagline, three feature ticks and a Safe
 - While submitting, the button shows a spinner and "Signing in…", and the inputs are disabled.
 - ⚠️ The "Forgot password?" link goes to `#forgot` and does nothing yet.
 
-### 4.2 Console shell — `pages/Console/ConsoleShell.tsx`
+### 4.2 Console shell — `shared/layout/ConsoleShell.tsx`
 
-A top bar with the logo, the user's full name and role label, and a ghost **Sign out** button. The dashboard renders inside `<main>`. This is where a sidebar or other top-level pages would go.
+A top bar with the logo, the user's full name and role label, and a ghost **Sign out** button, then a nav bar for the top-level pages. The matching route renders inside `<main>`. The home route (`shared/pages/Dashboard.tsx`) switches between Component A's and Component B's dashboards.
 
-### 4.3 Dashboard frame — `pages/Dashboard/Dashboard.tsx`
+### 4.3 Dashboard frame — `components/componentA/ComponentADashboard.tsx`
 
 - Header: title, subtitle, "Updated HH:MM:SS" stamp, **Refresh** button (shows "Refreshing…" while loading).
 - **Tabs:** each tab shows a label with a small hint underneath.
@@ -157,7 +165,7 @@ Shows the log of every AI agent run (up to the latest 100).
 - Stat row: Total runs, Model-backed, Rule-engine fallback, Approved, Avg duration (ms).
 - Table: Agent, Status badge (ok / warn / bad; `SucceededWithFallback` shows as "Fallback"), Model, Duration, Approval (Awaiting / Approved / Rejected), Started, Note.
 
-### 4.9 Incident detail drawer (in `Dashboard.tsx`)
+### 4.9 Incident detail drawer (in `ComponentADashboard.tsx`)
 
 A 420px panel that slides in from the right over a scrim (full width on phones). Clicking the scrim or × closes it. From top to bottom:
 
@@ -226,7 +234,7 @@ Tokens are in [`frontend/src/index.css`](../frontend/src/index.css). Use the var
 
 - These values were **checked for colour-blind separation** (protan, deutan and tritan). Don't re-tune them by eye; the obvious amber/orange and green/amber values fail those checks.
 - **Never show severity by colour alone.** Always pair it with the text label, and on the map with marker size too. Amber is below 3:1 contrast on white.
-- The TypeScript mirrors of these are in `pages/Dashboard/severity.ts`: `SEVERITY_TOKEN`, `SEVERITY_HEX`, `SEVERITY_RADIUS`, `ZONE_HEX`, `ZONE_TOKEN`.
+- The TypeScript mirrors of these are in `components/componentA/severity.ts`: `SEVERITY_TOKEN`, `SEVERITY_HEX`, `SEVERITY_RADIUS`, `ZONE_HEX`, `ZONE_TOKEN`.
 - Errors and destructive actions use `--danger` `#dc2626`, which is separate from the severity red.
 
 ### 5.5 Shape, depth and type
@@ -275,7 +283,7 @@ The CSS uses BEM-style names (`block__element--modifier`). The main building blo
 
 ## 6. Data and API
 
-All calls go through `apiFetch()` in `api/client.ts`. It adds `Authorization: Bearer <token>`, and a **401 clears the session** so the user lands back on the login page. The response types are in [`frontend/src/types/incidents.ts`](../frontend/src/types/incidents.ts).
+All calls go through `apiFetch()` in `shared/api/client.ts`. It adds `Authorization: Bearer <token>`, and a **401 clears the session** so the user lands back on the login page. The response types are in [`frontend/src/components/componentA/types.ts`](../frontend/src/components/componentA/types.ts) and [`frontend/src/shared/types.ts`](../frontend/src/shared/types.ts).
 
 | Method | Endpoint | Used by | Who |
 |---|---|---|---|
@@ -306,7 +314,7 @@ Note that `UserDto` now also carries `district` and `emailNotificationsEnabled`,
 
 - **Photo URLs are either absolute or relative.** Cloudinary returns full `https://…` URLs, while the local-disk fallback returns a path relative to the API. Use the `resolve()` helper in `IncidentPhotos.tsx`.
 - **`outputJson` on an agent run is a JSON string.** Parse it into `AnalysisProposal`, and handle a parse failure.
-- **Mapbox tiles are 512px** and need `tileSize: 512, zoomOffset: -1`. `config/tiles.ts` already handles this.
+- **Mapbox tiles are 512px** and need `tileSize: 512, zoomOffset: -1`. `shared/config/tiles.ts` already handles this.
 - **Only Emergency Coordinators can act.** Other roles get 403 on triage and approval. The UI doesn't hide those buttons by role yet.
 
 ---

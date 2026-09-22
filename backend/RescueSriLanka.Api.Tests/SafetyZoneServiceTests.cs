@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using RescueSriLanka.Api.Data;
-using RescueSriLanka.Api.Models;
-using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Features.ComponentA.Models;
+using RescueSriLanka.Api.Features.ComponentA.Services;
 
 namespace RescueSriLanka.Api.Tests;
 

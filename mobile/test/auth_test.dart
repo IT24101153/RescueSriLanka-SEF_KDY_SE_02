@@ -5,9 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:mobile/models/auth.dart';
-import 'package:mobile/services/api_client.dart';
-import 'package:mobile/services/auth_service.dart';
+import 'package:mobile/shared/models/auth.dart';
+import 'package:mobile/features/component_a/services/api_client.dart';
+import 'package:mobile/shared/services/auth_service.dart';
 
 /// Builds an AuthResponse body the way the API returns one.
 String authBody({DateTime? expiresAt}) => jsonEncode({

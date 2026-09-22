@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:mobile/screens/home_screen.dart';
-import 'package:mobile/services/auth_service.dart';
+import 'package:mobile/features/component_b/screens/home_screen.dart';
+import 'package:mobile/shared/services/auth_service.dart';
 
 void main() {
   testWidgets('Help tab asks a signed-out user to sign in', (tester) async {

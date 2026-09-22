@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services.Email;
+using RescueSriLanka.Api.Features.ComponentA.Models;
+using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 
 namespace RescueSriLanka.Api.Tests;
 

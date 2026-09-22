@@ -13,8 +13,12 @@ using RescueSriLanka.Api.Services;
 using RescueSriLanka.Api.Services.Email;
 using RescueSriLanka.Api.Services.Llm;
 using RescueSriLanka.Api.Services.Storage;
-using RescueSriLanka.Api.Agents.IncidentAnalysisAgent;
-using RescueSriLanka.Api.Agents.PlannerAgent;
+using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
+using RescueSriLanka.Api.Features.ComponentA.Data;
+using RescueSriLanka.Api.Features.ComponentA.Services;
+using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
+using RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent;
+using RescueSriLanka.Api.Features.ComponentB.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'core/theme.dart';
-import 'services/auth_service.dart';
-import 'screens/splash_screen.dart';
+import 'shared/core/theme.dart';
+import 'shared/services/auth_service.dart';
+import 'shared/screens/splash_screen.dart';
 
 void main() {
   runApp(const RescueSriLankaApp());

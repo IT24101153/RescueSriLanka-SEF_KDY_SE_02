@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Features.ComponentA.Models;
 
 namespace RescueSriLanka.Api.Services.Email;
 
