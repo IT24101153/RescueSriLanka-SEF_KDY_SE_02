@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import 'login_screen.dart';
 import 'submit_request_screen.dart';
 import 'my_requests_screen.dart';
+import 'my_requests_map_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -49,6 +50,18 @@ class HomeScreen extends StatelessWidget {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SubmitRequestScreen()),
+                  );
+                },
+              ),
+              const SizedBox(height: 14),
+              _HomeCard(
+                icon: Icons.map_outlined,
+                title: 'My Request Map',
+                subtitle: 'See the locations and details you submitted',
+                color: const Color(0xFF2F6FB0),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const MyRequestsMapScreen()),
                   );
                 },
               ),

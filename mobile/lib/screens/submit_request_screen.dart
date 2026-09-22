@@ -1,6 +1,10 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/help_request_service.dart';
+import '../services/cloudinary_service.dart';
 
 class SubmitRequestScreen extends StatefulWidget {
   const SubmitRequestScreen({super.key});
@@ -11,10 +15,16 @@ class SubmitRequestScreen extends StatefulWidget {
 
 class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
   final _descriptionController = TextEditingController();
+  final _picker = ImagePicker();
+
   int _selectedType = 2; // default to Medical
   double? _latitude;
   double? _longitude;
+  File? _selectedImage;
+  String? _selectedImagePath; // works on both web (blob URL) and mobile
+
   bool _locating = false;
+  bool _uploadingImage = false;
   bool _submitting = false;
   String? _error;
 
@@ -59,6 +69,51 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
     }
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    final picked = await _picker.pickImage(source: source, imageQuality: 80, maxWidth: 1600);
+    if (picked != null) {
+      setState(() {
+        _selectedImagePath = picked.path;
+        _selectedImage = kIsWeb ? null : File(picked.path);
+      });
+    }
+  }
+
+  void _showImageSourceSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined, color: Color(0xFFE8960B)),
+              title: const Text('Take a photo'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined, color: Color(0xFFE8960B)),
+              title: const Text('Choose from gallery'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     if (_descriptionController.text.trim().isEmpty) {
       setState(() => _error = 'Please describe what help you need.');
@@ -74,11 +129,31 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
       _error = null;
     });
 
+    // Upload the photo first (if one was picked), then submit the request with its URL.
+    // NOTE: real upload only works on mobile — Flutter Web doesn't expose a real
+    // File for picked images, so we skip upload there (photo capture is a
+    // mobile-only feature by nature anyway — most citizens will use the phone app).
+    String? imageUrl;
+    if (_selectedImage != null && !kIsWeb) {
+      setState(() => _uploadingImage = true);
+      imageUrl = await CloudinaryService.uploadImage(_selectedImage!);
+      setState(() => _uploadingImage = false);
+
+      if (imageUrl == null) {
+        setState(() {
+          _submitting = false;
+          _error = 'Could not upload the photo. You can submit without it, or try again.';
+        });
+        return;
+      }
+    }
+
     final result = await HelpRequestService.submit(
       type: _selectedType,
       description: _descriptionController.text.trim(),
       latitude: _latitude!,
       longitude: _longitude!,
+      imageUrl: imageUrl,
     );
 
     setState(() => _submitting = false);
@@ -150,6 +225,42 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
               ),
 
               const SizedBox(height: 22),
+              const Text('Photo (optional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 10),
+              if (_selectedImagePath != null)
+                Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: kIsWeb
+                          ? Image.network(_selectedImagePath!, height: 180, width: double.infinity, fit: BoxFit.cover)
+                          : Image.file(_selectedImage!, height: 180, width: double.infinity, fit: BoxFit.cover),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: GestureDetector(
+                        onTap: () => setState(() {
+                          _selectedImage = null;
+                          _selectedImagePath = null;
+                        }),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                          child: const Icon(Icons.close, color: Colors.white, size: 16),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: _showImageSourceSheet,
+                  icon: const Icon(Icons.add_a_photo_outlined),
+                  label: const Text('Add a photo'),
+                ),
+
+              const SizedBox(height: 22),
               const Text('Your location', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
               const SizedBox(height: 10),
               if (_latitude != null && _longitude != null)
@@ -183,10 +294,17 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
               ElevatedButton(
                 onPressed: _submitting ? null : _submit,
                 child: _submitting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(_uploadingImage ? 'Uploading photo…' : 'Submitting…'),
+                        ],
                       )
                     : const Text('Submit request'),
               ),

@@ -3,9 +3,10 @@ import { useAuth } from "../context/AuthContext";
 import "./DashboardLayout.css";
 
 const NAV_ITEMS = [
-  { to: "/dashboard/help-requests", label: "Help Requests", icon: <RequestIcon /> },
-  { to: "/dashboard/users", label: "User Management", icon: <UsersIcon /> },
-  { to: "/dashboard/reports", label: "Reports", icon: <ReportsIcon /> },
+  { to: "/dashboard", label: "Dashboard", end: true, icon: <DashboardIcon /> },
+  { to: "/dashboard/help-requests", label: "Help Requests", end: false, icon: <RequestIcon /> },
+  { to: "/dashboard/users", label: "User Management", end: false, icon: <UsersIcon /> },
+  { to: "/dashboard/reports", label: "Reports", end: false, icon: <ReportsIcon /> },
 ];
 
 export default function DashboardLayout() {
@@ -20,6 +21,7 @@ export default function DashboardLayout() {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.end}
               className={({ isActive }) => `dash-nav-link${isActive ? " dash-nav-link--active" : ""}`}
             >
               <span className="dash-nav-icon">{item.icon}</span>
@@ -79,6 +81,17 @@ function LogoutIcon() {
     <svg viewBox="0 0 20 20" width="15" height="15" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M8 3.5H5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       <path d="M12.5 13.5 16 10l-3.5-3.5M16 10H7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DashboardIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="17" height="17" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3.5" y="3.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="11.5" y="3.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="3.5" y="11.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="11.5" y="11.5" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" />
     </svg>
   );
 }

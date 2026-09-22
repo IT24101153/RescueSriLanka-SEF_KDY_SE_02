@@ -6,6 +6,7 @@ import LoginPage from "./pages/LoginPage";
 import HelpRequestsReview from "./pages/HelpRequestsReview";
 import UserManagement from "./pages/UserManagement";
 import Reports from "./pages/Reports";
+import Dashboard from "./pages/Dashboard";
 
 function App() {
   return (
@@ -16,13 +17,14 @@ function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/dashboard/help-requests" element={<HelpRequestsReview />} />
               <Route path="/dashboard/users" element={<UserManagement />} />
               <Route path="/dashboard/reports" element={<Reports />} />
             </Route>
           </Route>
 
-          <Route path="*" element={<Navigate to="/dashboard/help-requests" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

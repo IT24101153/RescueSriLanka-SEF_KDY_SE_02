@@ -20,6 +20,7 @@ class HelpRequest {
   final int status;
   final int verificationStatus;
   final String? verificationNotes;
+  final String? imageUrl;
   final DateTime createdAt;
 
   HelpRequest({
@@ -32,6 +33,7 @@ class HelpRequest {
     required this.status,
     required this.verificationStatus,
     required this.verificationNotes,
+    required this.imageUrl,
     required this.createdAt,
   });
 
@@ -45,6 +47,7 @@ class HelpRequest {
         status: json['status'],
         verificationStatus: json['verificationStatus'],
         verificationNotes: json['verificationNotes'],
+        imageUrl: json['imageUrl'],
         createdAt: DateTime.parse(json['createdAt']),
       );
 }
@@ -76,6 +79,7 @@ class HelpRequestService {
     required String description,
     required double latitude,
     required double longitude,
+    String? imageUrl,
   }) async {
     final res = await ApiClient.post('/api/HelpRequests', {
       'type': type,
@@ -83,7 +87,7 @@ class HelpRequestService {
       'latitude': latitude,
       'longitude': longitude,
       'relatedIncidentId': null,
-      'imageUrl': null,
+      'imageUrl': imageUrl,
     });
 
     if (res.statusCode == 200 || res.statusCode == 201) {

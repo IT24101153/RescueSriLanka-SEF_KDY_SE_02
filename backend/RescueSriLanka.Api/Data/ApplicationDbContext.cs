@@ -38,6 +38,15 @@ namespace RescueSriLanka.Api.Data
                 .HasForeignKey(h => h.HelpRequestId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // The shared PostgreSQL schema stores request statuses as their readable
+            // enum names (for example, "Pending"), rather than integer values.
+            // Keeping that representation avoids a read failure in Npgsql and makes
+            // the value easier to inspect directly in the database.
+            modelBuilder.Entity<HelpRequest>()
+                .Property(r => r.Status)
+                .HasConversion<string>()
+                .HasColumnType("character varying");
+
             // AgentWorkflow <-> AgentStep relationship
             modelBuilder.Entity<AgentStep>()
                 .HasOne(s => s.AgentWorkflow)

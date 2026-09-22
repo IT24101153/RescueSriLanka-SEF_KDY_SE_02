@@ -24,6 +24,13 @@ dependencies:
   # For capturing the citizen's real GPS location on a help request
   geolocator: ^13.0.0
 
+  # For picking/capturing a photo to attach to a help request
+  image_picker: ^1.1.2
+
+  # OpenStreetMap view used to show citizens their own submitted request locations
+  flutter_map: ^8.3.2
+  latlong2: ^0.9.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

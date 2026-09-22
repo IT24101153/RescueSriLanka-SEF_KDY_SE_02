@@ -170,6 +170,13 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            if (r.imageUrl != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.network(r.imageUrl!, height: 200, width: double.infinity, fit: BoxFit.cover),
+              ),
+              const SizedBox(height: 16),
+            ],
             Text(r.description, style: const TextStyle(fontSize: 16)),
             const SizedBox(height: 8),
             Text(

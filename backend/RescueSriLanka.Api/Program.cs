@@ -27,7 +27,11 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://localhost:5080")
+        // Vite and Flutter Web choose development ports dynamically. Restrict this
+        // convenience rule to localhost so deployed clients still need explicit origins.
+        policy.SetIsOriginAllowed(origin =>
+                  Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
+                  uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
