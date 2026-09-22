@@ -4,6 +4,7 @@ export type Role =
   | 'EmergencyCoordinator'
   | 'ResourceManager'
   | 'RescueTeam'
+  | 'HelpRequestManager'
 
 /** Shape of UserDto returned by the API. */
 export type User = {
@@ -28,6 +29,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   EmergencyCoordinator: 'Emergency Coordinator',
   ResourceManager: 'Resource Manager',
   RescueTeam: 'Rescue Team',
+  HelpRequestManager: 'Help Request Manager',
 }
 
 export function getSession(): Session | null {

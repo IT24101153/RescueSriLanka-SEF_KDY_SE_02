@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { authFetch } from "./api";
 import { getSession } from "../../shared/auth/session";
-import type { HelpRequestDto, StatusHistoryDto } from "./types";
 import "./HelpRequestsReview.css";
 
 const TYPE_LABELS = ["Water", "Food", "Medical", "Rescue", "Shelter", "Other"] as const;
@@ -9,6 +8,29 @@ const STATUS_LABELS = ["Pending", "Assigned", "In Progress", "Resolved", "Cancel
 const VERIFICATION_LABELS = ["Pending Verification", "Verified", "Rejected (Fake)"] as const;
 
 type UrgencyTier = "danger" | "caution" | "safe";
+
+interface HelpRequestDto {
+  id: string;
+  citizenId: string;
+  type: number;
+  description: string;
+  latitude: number;
+  longitude: number;
+  urgencyScore: number;
+  status: number;
+  verificationStatus: number;
+  verificationNotes: string | null;
+  imageUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface StatusHistoryDto {
+  oldStatus: number;
+  newStatus: number;
+  notes: string | null;
+  changedAt: string;
+}
 
 function urgencyTier(score: number): UrgencyTier {
   if (score >= 70) return "danger";

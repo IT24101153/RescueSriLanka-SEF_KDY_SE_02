@@ -15,7 +15,8 @@ public static class DbSeeder
 
     private static readonly SeedUser[] Accounts =
     [
-        new("Lelum Jayasooriya", "coordinator@rescue.lk", "Rescue@123", UserRole.EmergencyCoordinator, "+94711000001")
+        new("Lelum Jayasooriya", "coordinator@rescue.lk", "Rescue@123", UserRole.EmergencyCoordinator, "+94711000001"),
+        new("Help Request Manager", "helprequests@rescue.lk", "Rescue@123", UserRole.HelpRequestManager, null)
     ];
 
     public static async Task SeedAsync(

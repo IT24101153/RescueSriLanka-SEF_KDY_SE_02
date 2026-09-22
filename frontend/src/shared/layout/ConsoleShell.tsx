@@ -1,11 +1,11 @@
+import type { ComponentType } from 'react'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import logoUrl from '../../assets/logo.jpg'
 import { ROLE_LABELS } from '../auth/session'
-import type { Session } from '../auth/session'
-import Dashboard from '../pages/Dashboard'
+import type { Role, Session } from '../auth/session'
+import DisasterDashboard from '../../components/componentA/DisasterDashboard'
+import HelpRequestDashboard from '../../components/componentB/HelpRequestDashboard'
 import HelpRequestsReview from '../../components/componentB/HelpRequestsReview'
-import UserManagement from '../pages/UserManagement'
-import Reports from '../pages/Reports'
 import './ConsoleShell.css'
 
 type ConsoleShellProps = {
@@ -13,16 +13,37 @@ type ConsoleShellProps = {
   onSignOut: () => void
 }
 
-const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/dashboard/help-requests', label: 'Request review', end: false },
-  { to: '/dashboard/users', label: 'Users', end: false },
-  { to: '/dashboard/reports', label: 'Reports', end: false },
+type Page = {
+  path: string
+  label: string
+  Component: ComponentType
+  end?: boolean
+}
+
+// Component A — incident & disaster map
+const DISASTER_PAGES: Page[] = [
+  { path: '/', label: 'Disaster dashboard', Component: DisasterDashboard, end: true },
 ]
+
+// Component B — help requests
+const HELP_REQUEST_PAGES: Page[] = [
+  { path: '/dashboard', label: 'Help request dashboard', Component: HelpRequestDashboard, end: true },
+  { path: '/dashboard/help-requests', label: 'Request review', Component: HelpRequestsReview },
+]
+
+/**
+ * Each account sees only its own component's dashboard: Help Request
+ * Managers get the help-request pages, everyone else the disaster
+ * dashboard. The first page listed is where sign-in lands.
+ */
+function pagesFor(role: Role): Page[] {
+  return role === 'HelpRequestManager' ? HELP_REQUEST_PAGES : DISASTER_PAGES
+}
 
 /** Signed-in frame. Component screens render inside <main>. */
 export default function ConsoleShell({ session, onSignOut }: ConsoleShellProps) {
   const { user } = session
+  const pages = pagesFor(user.role)
 
   return (
     <div className="shell">
@@ -44,33 +65,29 @@ export default function ConsoleShell({ session, onSignOut }: ConsoleShellProps) 
       </header>
 
       <nav className="shell__nav" aria-label="Console pages">
-        {NAV_ITEMS.map((item) => (
+        {pages.map((page) => (
           <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
+            key={page.path}
+            to={page.path}
+            end={page.end}
             className={({ isActive }) =>
               `shell__nav-link${isActive ? ' is-active' : ''}`
             }
           >
-            {item.label}
+            {page.label}
           </NavLink>
         ))}
       </nav>
 
       <main className="shell__body">
         <Routes>
-          {/* Shared home: Component A and Component B dashboards */}
-          <Route path="/" element={<Dashboard />} />
+          {pages.map(({ path, Component }) => (
+            <Route key={path} path={path} element={<Component />} />
+          ))}
 
-          {/* Component B — help requests */}
-          <Route path="/dashboard/help-requests" element={<HelpRequestsReview />} />
-
-          {/* Shared placeholders — not built yet */}
-          <Route path="/dashboard/users" element={<UserManagement />} />
-          <Route path="/dashboard/reports" element={<Reports />} />
-
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* Anything else — including the other component's dashboard —
+              goes back to this account's own dashboard. */}
+          <Route path="*" element={<Navigate to={pages[0].path} replace />} />
         </Routes>
       </main>
     </div>

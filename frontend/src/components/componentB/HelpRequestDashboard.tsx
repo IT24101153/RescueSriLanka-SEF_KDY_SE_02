@@ -4,12 +4,24 @@ import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { authFetch } from "./api";
-import type { HelpRequestDto } from "./types";
-import "./ComponentBDashboard.css";
+import "./HelpRequestDashboard.css";
 
 const TYPE_LABELS = ["Water", "Food", "Medical", "Rescue", "Shelter", "Other"] as const;
 const STATUS_LABELS = ["Pending", "Assigned", "In Progress", "Resolved", "Cancelled"] as const;
 const TYPE_COLORS = ["#1687d3", "#ed8a22", "#df4552", "#8258d5", "#20a56a", "#7b8190"] as const;
+
+interface HelpRequestDto {
+  id: string;
+  type: number;
+  description: string;
+  latitude: number;
+  longitude: number;
+  urgencyScore: number;
+  status: number;
+  verificationStatus: number;
+  imageUrl: string | null;
+  createdAt: string;
+}
 
 function requestIcon(type: number, urgency: number) {
   const color = TYPE_COLORS[type] ?? TYPE_COLORS[5];
@@ -42,7 +54,7 @@ function timeAgo(iso: string) {
   return `${Math.floor(minutes / 1440)}d ago`;
 }
 
-export default function ComponentBDashboard() {
+export default function Dashboard() {
   const [requests, setRequests] = useState<HelpRequestDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

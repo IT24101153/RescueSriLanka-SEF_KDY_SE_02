@@ -17,7 +17,7 @@ import AgentActivity from './sections/AgentActivity'
 import ReviewPanel from './sections/ReviewPanel'
 import IncidentPhotos from './sections/IncidentPhotos'
 import { SEVERITY_TOKEN, STATUS_LABEL, timeAgo } from './severity'
-import './ComponentADashboard.css'
+import './DisasterDashboard.css'
 
 const SEVERITIES: IncidentSeverity[] = ['Low', 'Moderate', 'High', 'Critical']
 const STATUSES: IncidentStatus[] = ['Reported', 'Verified', 'InProgress']
@@ -41,7 +41,7 @@ const TABS: { id: TabId; label: string; hint: string }[] = [
   { id: 'agent', label: 'Agent activity', hint: 'Runs and approvals' },
 ]
 
-export default function ComponentADashboard() {
+export default function DisasterDashboard() {
   const [tab, setTab] = useState<TabId>('overview')
 
   const [stats, setStats] = useState<DashboardStatistics | null>(null)

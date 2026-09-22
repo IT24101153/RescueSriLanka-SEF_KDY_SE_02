@@ -1,6 +1,6 @@
 /**
  * Types shared by every component. Component-specific types live next to
- * their component (components/componentA/types.ts, components/componentB/types.ts).
+ * their component (e.g. components/componentA/types.ts).
  */
 
 export type AgentRunStatus =

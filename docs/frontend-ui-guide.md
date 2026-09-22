@@ -23,7 +23,12 @@ dotnet run           # needs .NET 10
 
 The backend reads its database connection string from `appsettings.Development.json`. That file is gitignored, so **ask Lelum for a copy** and don't commit it. When `SeedSampleIncidents` is `true` in that file, the API loads sample incidents, which gives the dashboard data to show.
 
-**Sign in with:** `coordinator@rescue.lk` / `Rescue@123` (role: Emergency Coordinator, which can take every action).
+**Sign in with** (one login page; the account decides which dashboard opens):
+
+| Account | Role | Opens |
+|---|---|---|
+| `coordinator@rescue.lk` / `Rescue@123` | Emergency Coordinator | Disaster dashboard (Component A) |
+| `helprequests@rescue.lk` / `Rescue@123` | Help Request Manager | Help request dashboard (Component B) |
 
 ### Environment variables (`frontend/.env`, gitignored)
 
@@ -49,7 +54,7 @@ CI builds the frontend on every push, so `npm run build` must pass before you pu
 - **Leaflet / react-leaflet 5** for maps
 - **Plain CSS** with custom properties (design tokens). No Tailwind, no component library.
 - **React Router** for top-level console pages only. `App.tsx` shows the login page or the console depending on whether a session exists; the console shell maps URLs to pages. Dashboard tabs are React state, not URLs.
-- **No state library.** `ComponentADashboard.tsx` fetches the data and passes it down as props.
+- **No state library.** `DisasterDashboard.tsx` fetches the data and passes it down as props.
 
 ```
 frontend/src/
@@ -60,21 +65,19 @@ frontend/src/
 │   ├── auth/                      # signIn(), session storage, role labels
 │   ├── config/tiles.ts            # Mapbox / OSM tile switch
 │   ├── layout/ConsoleShell.tsx    # top bar, nav bar and routes
-│   ├── pages/Login/               # LoginPage.tsx + .css
-│   ├── pages/Dashboard.tsx        # home: switches between the component dashboards
+│   ├── pages/Login/               # LoginPage.tsx + .css — the one sign-in page
 │   └── types.ts                   # types shared across components (AgentRun)
 └── components/
     ├── componentA/                # Incident & Disaster Map
-    │   ├── ComponentADashboard.tsx  # tabs, filters, data loading, detail drawer
-    │   ├── ComponentADashboard.css  # ~1,450 lines — all dashboard styling
+    │   ├── DisasterDashboard.tsx  # Disaster dashboard (/): tabs, filters, detail drawer
+    │   ├── DisasterDashboard.css  # ~1,450 lines — all dashboard styling
     │   ├── severity.ts            # colour / size / label maps, timeAgo()
     │   ├── types.ts               # TS types mirroring the incident API DTOs
     │   └── sections/              # one file per panel (see §4)
     └── componentB/                # Help requests
-        ├── ComponentBDashboard.tsx  # request map and priority queue
+        ├── HelpRequestDashboard.tsx  # Help request dashboard (/dashboard): map, priority queue
         ├── HelpRequestsReview.tsx   # coordinator review and verification
-        ├── api.ts                 # authFetch() on the shared session
-        └── types.ts               # TS types mirroring the help-request DTOs
+        └── api.ts                 # authFetch() on the shared session
 ```
 
 ---
@@ -119,9 +122,9 @@ Two columns: an amber brand panel with a tagline, three feature ticks and a Safe
 
 ### 4.2 Console shell — `shared/layout/ConsoleShell.tsx`
 
-A top bar with the logo, the user's full name and role label, and a ghost **Sign out** button, then a nav bar for the top-level pages. The matching route renders inside `<main>`. The home route (`shared/pages/Dashboard.tsx`) switches between Component A's and Component B's dashboards.
+A top bar with the logo, the user's full name and role label, and a ghost **Sign out** button, then a nav bar for the top-level pages. The matching route renders inside `<main>`. Each component has its own dashboard page: **Disaster dashboard** (`/`, Component A) and **Help request dashboard** (`/dashboard`, Component B), plus B's **Request review**. There is one sign-in page; the account's role decides which pages the nav shows (`pagesFor()`): Help Request Managers get B's pages, everyone else A's. Any other URL redirects to the account's own dashboard.
 
-### 4.3 Dashboard frame — `components/componentA/ComponentADashboard.tsx`
+### 4.3 Dashboard frame — `components/componentA/DisasterDashboard.tsx`
 
 - Header: title, subtitle, "Updated HH:MM:SS" stamp, **Refresh** button (shows "Refreshing…" while loading).
 - **Tabs:** each tab shows a label with a small hint underneath.
@@ -165,7 +168,7 @@ Shows the log of every AI agent run (up to the latest 100).
 - Stat row: Total runs, Model-backed, Rule-engine fallback, Approved, Avg duration (ms).
 - Table: Agent, Status badge (ok / warn / bad; `SucceededWithFallback` shows as "Fallback"), Model, Duration, Approval (Awaiting / Approved / Rejected), Started, Note.
 
-### 4.9 Incident detail drawer (in `ComponentADashboard.tsx`)
+### 4.9 Incident detail drawer (in `DisasterDashboard.tsx`)
 
 A 420px panel that slides in from the right over a scrim (full width on phones). Clicking the scrim or × closes it. From top to bottom:
 
@@ -308,7 +311,7 @@ Note that `UserDto` now also carries `district` and `emailNotificationsEnabled`,
 - **Status:** `Reported` `Verified` `InProgress` `Resolved` `Rejected` (display `InProgress` as "In progress" via `STATUS_LABEL`)
 - **Type:** `Flood` `Landslide` `Fire` `Accident` `Storm` `Tsunami` `Other`
 - **Zone status:** `Safe` `Caution` `Danger`, with zone source `DerivedFromIncident` or `ManualOverride`
-- **Roles:** `Citizen` `EmergencyCoordinator` `ResourceManager` `RescueTeam`
+- **Roles:** `Citizen` `EmergencyCoordinator` `ResourceManager` `RescueTeam` `HelpRequestManager`
 
 ### Things to watch out for
 

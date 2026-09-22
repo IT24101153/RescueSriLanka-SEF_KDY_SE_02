@@ -18,6 +18,11 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
     [Route("api/[controller]")]
     public class HelpRequestsController : ControllerBase
     {
+        // Either coordinator may triage help requests; the web console sends
+        // HelpRequestManager accounts to the Help request dashboard.
+        private const string Coordinators =
+            nameof(UserRole.EmergencyCoordinator) + "," + nameof(UserRole.HelpRequestManager);
+
         private readonly IHelpRequestService _service;
         private readonly IAiAnalysisService _aiAnalysis;
         private readonly AppDbContext _db;
@@ -51,7 +56,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         // GET /api/helprequests
         // Coordinator's review screen (React) — all requests, most urgent first
         [HttpGet]
-        [Authorize(Roles = nameof(UserRole.EmergencyCoordinator))]
+        [Authorize(Roles = Coordinators)]
         public async Task<ActionResult<List<HelpRequestResponseDto>>> GetAll()
         {
             var result = await _service.GetAllAsync();
@@ -200,7 +205,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         // PATCH /api/helprequests/{id}/status
         // Coordinator changes status (or system/agent does, post-approval)
         [HttpPatch("{id}/status")]
-        [Authorize(Roles = nameof(UserRole.EmergencyCoordinator))]
+        [Authorize(Roles = Coordinators)]
         public async Task<ActionResult<HelpRequestResponseDto>> UpdateStatus(Guid id, [FromBody] UpdateHelpRequestStatusDto dto)
         {
             // TODO once JWT auth is wired up: read the real user id making the change
@@ -227,7 +232,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         // PATCH /api/helprequests/{id}/verify
         // Admin marks a citizen report as real or fake before it's treated as legitimate.
         [HttpPatch("{id}/verify")]
-        [Authorize(Roles = nameof(UserRole.EmergencyCoordinator))]
+        [Authorize(Roles = Coordinators)]
         public async Task<ActionResult<HelpRequestResponseDto>> Verify(Guid id, [FromBody] VerifyHelpRequestDto dto)
         {
             // TODO once JWT auth is wired in the frontend: read the real admin user id from claims
@@ -241,7 +246,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         private bool CanAccess(HelpRequestResponseDto request)
         {
             var citizenId = GetUserId();
-            return User.IsInRole(nameof(UserRole.EmergencyCoordinator)) || citizenId == request.CitizenId;
+            return User.IsInRole(nameof(UserRole.EmergencyCoordinator))
+                || User.IsInRole(nameof(UserRole.HelpRequestManager))
+                || citizenId == request.CitizenId;
         }
     }
 }
