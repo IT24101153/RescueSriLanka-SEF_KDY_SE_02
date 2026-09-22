@@ -18,6 +18,7 @@ public interface IGeminiSafetyValidationClient
     Task<GeminiSafetyAgentResponse> GetNextResponseAsync(
         AssignmentValidationContextDto context,
         IReadOnlyList<object> priorToolResults,
+        string? previousInteractionId,
         CancellationToken cancellationToken);
 }
 
@@ -72,6 +73,7 @@ public sealed class GeminiSafetyValidationAgent : IAssignmentSafetyValidationAge
         string? modelSummary = null;
         IReadOnlyList<string>? modelActions = null;
         string? providerFailure = null;
+        string? previousInteractionId = null;
         var stepNumber = 0;
 
         for (var iteration = 1; iteration <= MaxAgentSteps && modelDecision is null && providerFailure is null; iteration++)
@@ -79,7 +81,7 @@ public sealed class GeminiSafetyValidationAgent : IAssignmentSafetyValidationAge
             GeminiSafetyAgentResponse response;
             try
             {
-                response = await _gemini.GetNextResponseAsync(context, priorResults, cancellationToken);
+                response = await _gemini.GetNextResponseAsync(context, priorResults, previousInteractionId, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -96,17 +98,37 @@ public sealed class GeminiSafetyValidationAgent : IAssignmentSafetyValidationAge
                 break;
             }
 
+            previousInteractionId = response.InteractionId;
+
             if (response.ToolCalls.Count == 0)
             {
                 providerFailure = "Gemini returned neither a valid decision nor a tool call.";
                 break;
             }
 
+            if (string.IsNullOrWhiteSpace(previousInteractionId))
+            {
+                providerFailure = "Gemini function-call response omitted the required interaction ID.";
+                break;
+            }
+
+            // Interactions API continuations accept only the results for the
+            // immediately preceding interaction, not an accumulated history.
+            priorResults.Clear();
+
             foreach (var call in response.ToolCalls)
             {
                 if (++stepNumber > MaxAgentSteps)
                 {
                     providerFailure = $"Safety validation exceeded the {MaxAgentSteps}-step limit.";
+                    break;
+                }
+
+                if (string.IsNullOrWhiteSpace(call.CallId))
+                {
+                    providerFailure = "Gemini function call omitted the required call ID.";
+                    await PersistStepAsync(workflow.Id, stepNumber, call.Name, call.Arguments.GetRawText(),
+                        new SafetyValidationCheckDto("TOOL_CALL", false, providerFailure), StepStatus.Failed, cancellationToken);
                     break;
                 }
 
@@ -121,7 +143,13 @@ public sealed class GeminiSafetyValidationAgent : IAssignmentSafetyValidationAge
 
                 await PersistStepAsync(workflow.Id, stepNumber, call.Name, call.Arguments.GetRawText(), check,
                     StepStatus.Completed, cancellationToken);
-                priorResults.Add(new { name = call.Name, result = check });
+                priorResults.Add(new
+                {
+                    type = "function_result",
+                    name = call.Name,
+                    call_id = call.CallId,
+                    result = check
+                });
             }
         }
 
@@ -210,29 +238,58 @@ public sealed class GeminiSafetyValidationClient : IGeminiSafetyValidationClient
     private readonly HttpClient _httpClient;
     private readonly string _model;
     private readonly string _apiKey;
+    private readonly IHostEnvironment _environment;
+    private readonly ILogger<GeminiSafetyValidationClient> _logger;
 
-    public GeminiSafetyValidationClient(HttpClient httpClient, IConfiguration configuration)
+    public GeminiSafetyValidationClient(
+        HttpClient httpClient,
+        IConfiguration configuration,
+        IHostEnvironment environment,
+        ILogger<GeminiSafetyValidationClient> logger)
     {
         _httpClient = httpClient;
         _httpClient.BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/");
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         _model = configuration["Gemini:Model"] ?? "gemini-3-flash-preview";
         _apiKey = configuration["Gemini:ApiKey"] ?? throw new InvalidOperationException("Gemini:ApiKey is not configured.");
+        _environment = environment;
+        _logger = logger;
     }
 
     public async Task<GeminiSafetyAgentResponse> GetNextResponseAsync(
-        AssignmentValidationContextDto context, IReadOnlyList<object> priorToolResults, CancellationToken cancellationToken)
+        AssignmentValidationContextDto context, IReadOnlyList<object> priorToolResults,
+        string? previousInteractionId, CancellationToken cancellationToken)
     {
-        const string instruction = "You are a safety-validation agent. Use only supplied read-only tools. Operational facts come only from tool results; never assume missing facts. You cannot dispatch or mutate anything. A human EmergencyCoordinator must approve any recommendation. Return APPROVE, REVISE, or REJECT only after checks.";
-        var payload = new
+        const string instruction = "You are a safety-validation agent. Use only supplied read-only tools. Operational facts come only from tool results; never assume missing facts. You cannot dispatch or mutate anything. A human EmergencyCoordinator must approve any recommendation. After tool use, return only a JSON object matching the required decision schema; do not return prose or Markdown.";
+        var payload = new Dictionary<string, object?>
         {
-            model = _model,
-            input = priorToolResults.Count == 0
+            ["model"] = _model,
+            ["input"] = priorToolResults.Count == 0
                 ? (object)$"Validate assignment {context.AssignmentId} at plan version {context.PlanVersion}."
                 : priorToolResults,
-            tools = new SafetyValidationToolsSchemas().Schemas,
-            system_instruction = instruction
+            ["tools"] = new SafetyValidationToolsSchemas().Schemas,
+            ["system_instruction"] = instruction,
+            ["response_format"] = new
+            {
+                type = "text",
+                mime_type = "application/json",
+                schema = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        decision = new { type = "string", @enum = new[] { "APPROVE", "REVISE", "REJECT" } },
+                        summary = new { type = "string" },
+                        failedChecks = new { type = "array", items = new { type = "string" } },
+                        suggestedActions = new { type = "array", items = new { type = "string" } }
+                    },
+                    required = new[] { "decision", "summary", "failedChecks", "suggestedActions" },
+                    additionalProperties = false
+                }
+            }
         };
+        if (!string.IsNullOrWhiteSpace(previousInteractionId))
+            payload["previous_interaction_id"] = previousInteractionId;
         using var request = new HttpRequestMessage(HttpMethod.Post, "interactions")
         {
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
@@ -240,15 +297,34 @@ public sealed class GeminiSafetyValidationClient : IGeminiSafetyValidationClient
         request.Headers.Add("x-goog-api-key", _apiKey);
         request.Headers.Add("Api-Revision", "2026-05-20");
         using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            _logger.LogWarning("Gemini safety validation returned HTTP status {StatusCode}.", (int)response.StatusCode);
         response.EnsureSuccessStatusCode();
-        return Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var raw = await response.Content.ReadAsStringAsync(cancellationToken);
+        LogDevelopmentResponseMetadata(raw);
+        return Parse(raw);
     }
 
-    private static GeminiSafetyAgentResponse Parse(string raw)
+    public static GeminiSafetyAgentResponse Parse(string raw)
+    {
+        try
+        {
+            return ParseCore(raw);
+        }
+        catch (JsonException)
+        {
+            return new([], null, null, null);
+        }
+    }
+
+    private static GeminiSafetyAgentResponse ParseCore(string raw)
     {
         using var document = JsonDocument.Parse(raw);
         var calls = new List<GeminiSafetyToolCall>();
         string? text = null;
+        var interactionId = document.RootElement.TryGetProperty("id", out var interactionIdElement)
+            ? interactionIdElement.GetString()
+            : null;
         if (document.RootElement.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
         {
             foreach (var step in steps.EnumerateArray())
@@ -264,28 +340,80 @@ public sealed class GeminiSafetyValidationClient : IGeminiSafetyValidationClient
                 else if (step.TryGetProperty("type", out type) && type.GetString() == "model_output"
                     && step.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
                 {
-                    text = content.EnumerateArray().FirstOrDefault(c => c.TryGetProperty("type", out var t) && t.GetString() == "text")
-                        .GetProperty("text").GetString();
+                    foreach (var item in content.EnumerateArray())
+                    {
+                        if (item.TryGetProperty("type", out var contentType) && contentType.GetString() == "text"
+                            && item.TryGetProperty("text", out var textValue))
+                        {
+                            text = textValue.GetString();
+                            break;
+                        }
+                    }
                 }
             }
         }
-        if (calls.Count > 0) return new(calls, null, null, null);
-        if (string.IsNullOrWhiteSpace(text)) return new([], null, null, null);
+        if (calls.Count > 0) return new(calls, null, null, null, interactionId);
+        if (string.IsNullOrWhiteSpace(text)) return new([], null, null, null, interactionId);
         try
         {
-            var parsed = JsonSerializer.Deserialize<GeminiFinalDecision>(text, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            return parsed is not null && Enum.TryParse<SafetyValidationDecision>(parsed.Decision, true, out var decision)
-                ? new([], decision, parsed.Summary, parsed.SuggestedActions)
-                : new([], null, null, null);
+            var parsed = JsonSerializer.Deserialize<GeminiFinalDecision>(NormalizeJson(text), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return parsed is not null
+                && !string.IsNullOrWhiteSpace(parsed.Summary)
+                && parsed.FailedChecks is not null
+                && parsed.SuggestedActions is not null
+                && Enum.TryParse<SafetyValidationDecision>(parsed.Decision, true, out var decision)
+                ? new([], decision, parsed.Summary, parsed.SuggestedActions, interactionId)
+                : new([], null, null, null, interactionId);
         }
-        catch (JsonException) { return new([], null, null, null); }
+        catch (JsonException) { return new([], null, null, null, interactionId); }
     }
 
     private sealed class GeminiFinalDecision
     {
         public string? Decision { get; set; }
         public string? Summary { get; set; }
+        public List<string>? FailedChecks { get; set; }
         public List<string>? SuggestedActions { get; set; }
+    }
+
+    private static string NormalizeJson(string text)
+    {
+        var trimmed = text.Trim();
+        if (!trimmed.StartsWith("```", StringComparison.Ordinal)) return trimmed;
+
+        var firstNewline = trimmed.IndexOf('\n');
+        if (firstNewline < 0) return trimmed;
+        var body = trimmed[(firstNewline + 1)..];
+        var closingFence = body.LastIndexOf("```", StringComparison.Ordinal);
+        return (closingFence >= 0 ? body[..closingFence] : body).Trim();
+    }
+
+    private void LogDevelopmentResponseMetadata(string raw)
+    {
+        if (!_environment.IsDevelopment()) return;
+        try
+        {
+            using var document = JsonDocument.Parse(raw);
+            var root = document.RootElement;
+            var hasInteractionId = root.TryGetProperty("id", out _);
+            var steps = root.TryGetProperty("steps", out var stepValue) && stepValue.ValueKind == JsonValueKind.Array
+                ? stepValue.EnumerateArray().ToList()
+                : [];
+            var stepTypes = steps
+                .Select(step => step.TryGetProperty("type", out var type) ? type.GetString() : null)
+                .Where(type => !string.IsNullOrWhiteSpace(type))
+                .ToArray();
+            var functionCallCount = stepTypes.Count(type => type == "function_call");
+            var hasText = steps.Any(step => step.TryGetProperty("content", out var content)
+                && content.ValueKind == JsonValueKind.Array
+                && content.EnumerateArray().Any(item => item.TryGetProperty("type", out var type) && type.GetString() == "text"));
+            _logger.LogInformation("Gemini safety response metadata: InteractionIdPresent={InteractionIdPresent}, StepCount={StepCount}, StepTypes={StepTypes}, FunctionCallCount={FunctionCallCount}, HasText={HasText}.",
+                hasInteractionId, steps.Count, string.Join(',', stepTypes), functionCallCount, hasText);
+        }
+        catch (JsonException)
+        {
+            _logger.LogWarning("Gemini safety response metadata could not be inspected because the response was not valid JSON.");
+        }
     }
 
     private sealed class SafetyValidationToolsSchemas

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using RescueSriLanka.Api.Agents.SafetyValidation;
 using RescueSriLanka.Api.DTOs;
@@ -47,6 +48,122 @@ public class GeminiSafetyValidationAgentTests
 
         Assert.NotEqual(SafetyValidationDecision.APPROVE, result.Decision);
         Assert.NotEmpty(result.FailedChecks);
+    }
+
+    [Fact]
+    public async Task AvailableMemberWithFirstAid_PassesRequiredSkillCheckWithPositiveReason()
+    {
+        using var db = TestDbFactory.Create();
+        var assignment = await SeedValidAssignmentAsync(db);
+        var member = (await db.RescueTeams.Include(t => t.Members).SingleAsync()).Members.Single();
+        member.Skill = SkillType.FirstAid;
+        assignment.RequiredSkill = SkillType.FirstAid;
+        await db.SaveChangesAsync();
+
+        var check = (await new SafetyValidationTools(db).RunMandatoryChecksAsync(assignment.Id, assignment.PlanVersion))
+            .Single(c => c.Name == "REQUIRED_SKILL_PRESENT");
+
+        Assert.True(check.Passed);
+        Assert.Equal("An available member has the required skill.", check.Reason);
+    }
+
+    [Fact]
+    public async Task NoAvailableMemberWithFirstAid_FailsRequiredSkillCheckWithFailureReason()
+    {
+        using var db = TestDbFactory.Create();
+        var assignment = await SeedValidAssignmentAsync(db);
+        var member = (await db.RescueTeams.Include(t => t.Members).SingleAsync()).Members.Single();
+        member.Skill = SkillType.FirstAid;
+        member.IsAvailable = false;
+        assignment.RequiredSkill = SkillType.FirstAid;
+        await db.SaveChangesAsync();
+
+        var check = (await new SafetyValidationTools(db).RunMandatoryChecksAsync(assignment.Id, assignment.PlanVersion))
+            .Single(c => c.Name == "REQUIRED_SKILL_PRESENT");
+
+        Assert.False(check.Passed);
+        Assert.Equal("No available member has the required skill.", check.Reason);
+    }
+
+    [Fact]
+    public void InteractionsResponse_FunctionCall_IsParsedWithItsProviderCallId()
+    {
+        var result = GeminiSafetyValidationClient.Parse("""
+            {"id":"int-1","steps":[{"type":"function_call","name":"check_required_skill","id":"call-1","arguments":{"assignmentId":"00000000-0000-0000-0000-000000000001","planVersion":1}}]}
+            """);
+
+        var call = Assert.Single(result.ToolCalls);
+        Assert.Equal("check_required_skill", call.Name);
+        Assert.Equal("call-1", call.CallId);
+        Assert.Equal("int-1", result.InteractionId);
+    }
+
+    [Theory]
+    [InlineData("APPROVE")]
+    [InlineData("REVISE")]
+    [InlineData("REJECT")]
+    public void InteractionsResponse_StructuredFinalDecision_IsParsed(string decision)
+    {
+        var result = GeminiSafetyValidationClient.Parse($$"""
+            {"id":"int-final","steps":[{"type":"model_output","content":[{"type":"text","text":"{\"decision\":\"{{decision}}\",\"summary\":\"Structured result.\",\"failedChecks\":[],\"suggestedActions\":[]}"}]}]}
+            """);
+
+        Assert.Equal(Enum.Parse<SafetyValidationDecision>(decision), result.Decision);
+        Assert.Equal("Structured result.", result.Summary);
+    }
+
+    [Fact]
+    public void InteractionsResponse_MarkdownFencedStructuredDecision_IsParsed()
+    {
+        var result = GeminiSafetyValidationClient.Parse("""
+            {"id":"int-final","steps":[{"type":"model_output","content":[{"type":"text","text":"```json\n{\"decision\":\"REVISE\",\"summary\":\"Review needed.\",\"failedChecks\":[\"TEAM_CONFLICT\"],\"suggestedActions\":[\"Revise\"]}\n```"}]}]}
+            """);
+
+        Assert.Equal(SafetyValidationDecision.REVISE, result.Decision);
+        Assert.Equal("Review needed.", result.Summary);
+    }
+
+    [Theory]
+    [InlineData("{\"steps\":[]}")]
+    [InlineData("{ not json }")]
+    public void InteractionsResponse_EmptyOrMalformedOutput_HasNoDecision(string raw)
+    {
+        var result = GeminiSafetyValidationClient.Parse(raw);
+
+        Assert.Null(result.Decision);
+        Assert.Empty(result.ToolCalls);
+    }
+
+    [Fact]
+    public async Task ToolContinuation_PreservesInteractionAndFunctionCallIds()
+    {
+        using var db = TestDbFactory.Create();
+        var assignment = await SeedValidAssignmentAsync(db);
+        var client = new RecordingGeminiClient(new Queue<GeminiSafetyAgentResponse>([
+            Tool("check_team_availability", assignment.Id, assignment.PlanVersion, "int-1", "call-1"),
+            Approve("int-2")]));
+        var agent = new GeminiSafetyValidationAgent(db, new SafetyValidationTools(db), client, NullLogger<GeminiSafetyValidationAgent>.Instance);
+
+        var result = await agent.ValidateAsync(assignment.Id);
+
+        Assert.Equal(SafetyValidationDecision.APPROVE, result.Decision);
+        Assert.Equal("int-1", client.Calls[1].PreviousInteractionId);
+        var continuation = JsonSerializer.Serialize(client.Calls[1].ToolResults);
+        Assert.Contains("\"type\":\"function_result\"", continuation);
+        Assert.Contains("\"call_id\":\"call-1\"", continuation);
+    }
+
+    [Fact]
+    public async Task MissingFunctionCallId_FailsClosedWithoutExecutingTool()
+    {
+        using var db = TestDbFactory.Create();
+        var assignment = await SeedValidAssignmentAsync(db);
+        var result = await CreateAgent(db, _ => Tool("check_team_availability", assignment.Id, assignment.PlanVersion, "int-1", null))
+            .ValidateAsync(assignment.Id);
+
+        Assert.Equal(SafetyValidationDecision.REVISE, result.Decision);
+        Assert.Contains("GEMINI_PROVIDER", result.FailedChecks);
+        Assert.DoesNotContain(db.AgentSteps, step => step.Action == "check_team_availability" && step.Status == Models.Agents.StepStatus.Completed);
     }
 
     [Fact]
@@ -275,12 +392,12 @@ public class GeminiSafetyValidationAgentTests
         Func<AssignmentValidationContextDto, GeminiSafetyAgentResponse> response) =>
         new(db, new SafetyValidationTools(db), new FakeGeminiClient(response), NullLogger<GeminiSafetyValidationAgent>.Instance);
 
-    private static GeminiSafetyAgentResponse Approve() => new([], SafetyValidationDecision.APPROVE, "Deterministic facts support human review.", []);
+    private static GeminiSafetyAgentResponse Approve(string? interactionId = null) => new([], SafetyValidationDecision.APPROVE, "Deterministic facts support human review.", [], interactionId);
 
-    private static GeminiSafetyAgentResponse Tool(string name, Guid assignmentId, int version)
+    private static GeminiSafetyAgentResponse Tool(string name, Guid assignmentId, int version, string interactionId = "int-1", string? callId = "call-1")
     {
         var arguments = JsonDocument.Parse($"{{\"assignmentId\":\"{assignmentId}\",\"planVersion\":{version}}}").RootElement.Clone();
-        return new([new GeminiSafetyToolCall(name, arguments, "call-1")], null, null, null);
+        return new([new GeminiSafetyToolCall(name, arguments, callId)], null, null, null, interactionId);
     }
 
     private static async Task<Assignment> SeedValidAssignmentAsync(Data.ComponentDDbContext db)
@@ -302,7 +419,19 @@ public class GeminiSafetyValidationAgentTests
 
     private sealed class FakeGeminiClient(Func<AssignmentValidationContextDto, GeminiSafetyAgentResponse> response) : IGeminiSafetyValidationClient
     {
-        public Task<GeminiSafetyAgentResponse> GetNextResponseAsync(AssignmentValidationContextDto context, IReadOnlyList<object> _, CancellationToken __)
+        public Task<GeminiSafetyAgentResponse> GetNextResponseAsync(AssignmentValidationContextDto context, IReadOnlyList<object> _, string? ___, CancellationToken __)
             => Task.FromResult(response(context));
+    }
+
+    private sealed class RecordingGeminiClient(Queue<GeminiSafetyAgentResponse> responses) : IGeminiSafetyValidationClient
+    {
+        public List<(IReadOnlyList<object> ToolResults, string? PreviousInteractionId)> Calls { get; } = [];
+
+        public Task<GeminiSafetyAgentResponse> GetNextResponseAsync(
+            AssignmentValidationContextDto _, IReadOnlyList<object> toolResults, string? previousInteractionId, CancellationToken __)
+        {
+            Calls.Add((toolResults.ToList(), previousInteractionId));
+            return Task.FromResult(responses.Dequeue());
+        }
     }
 }

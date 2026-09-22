@@ -45,4 +45,5 @@ public record GeminiSafetyAgentResponse(
     IReadOnlyList<GeminiSafetyToolCall> ToolCalls,
     SafetyValidationDecision? Decision,
     string? Summary,
-    IReadOnlyList<string>? SuggestedActions);
+    IReadOnlyList<string>? SuggestedActions,
+    string? InteractionId = null);

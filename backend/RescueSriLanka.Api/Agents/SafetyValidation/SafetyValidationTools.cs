@@ -73,7 +73,11 @@ public sealed class SafetyValidationTools
             new("TEAM_AVAILABLE", team?.Status == TeamStatus.Available,
                 team is null ? "Rescue team was not found." : team.Status == TeamStatus.Available ? "Rescue team is available." : "Rescue team is not available."),
             new("REQUIRED_SKILL_PRESENT", team?.Members.Any(m => m.IsAvailable && m.Skill == assignment.RequiredSkill) == true,
-                team is null ? "Rescue team was not found." : "No available member has the required skill."),
+                team is null
+                    ? "Rescue team was not found."
+                    : team.Members.Any(m => m.IsAvailable && m.Skill == assignment.RequiredSkill)
+                        ? "An available member has the required skill."
+                        : "No available member has the required skill."),
             new("TEAM_CONFLICT", !hasTeamConflict,
                 hasTeamConflict ? "Rescue team has another active assignment or dispatch." : "No active rescue-team conflict."),
             new("VEHICLE_EXISTS", vehicle is not null,
