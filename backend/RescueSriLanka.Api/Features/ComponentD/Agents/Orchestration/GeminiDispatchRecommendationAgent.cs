@@ -53,8 +53,9 @@ namespace RescueSriLanka.Api.Features.ComponentD.Agents.Orchestration
             _httpClient.BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/");
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
 
-            _model = configuration["Gemini:Model"] ?? "gemini-3-flash-preview";
+            _model = configuration["Gemini:Model"] ?? configuration["GoogleAi:Model"] ?? "gemini-3-flash-preview";
             _apiKey = configuration["Gemini:ApiKey"]
+            ?? configuration["GoogleAi:ApiKey"]
                 ?? throw new InvalidOperationException(
                     "Gemini:ApiKey is not configured. Set it in appsettings.Development.json " +
                     "(gitignored — never commit a real key).");

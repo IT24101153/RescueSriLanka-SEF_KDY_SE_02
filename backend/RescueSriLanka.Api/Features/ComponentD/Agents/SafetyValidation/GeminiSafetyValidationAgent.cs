@@ -251,8 +251,10 @@ public sealed class GeminiSafetyValidationClient : IGeminiSafetyValidationClient
         _httpClient = httpClient;
         _httpClient.BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/");
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
-        _model = configuration["Gemini:Model"] ?? "gemini-3-flash-preview";
-        _apiKey = configuration["Gemini:ApiKey"] ?? throw new InvalidOperationException("Gemini:ApiKey is not configured.");
+        _model = configuration["Gemini:Model"] ?? configuration["GoogleAi:Model"] ?? "gemini-3-flash-preview";
+        _apiKey = configuration["Gemini:ApiKey"]
+        ?? configuration["GoogleAi:ApiKey"]
+        ?? throw new InvalidOperationException("Gemini:ApiKey is not configured.");
         _environment = environment;
         _logger = logger;
     }
