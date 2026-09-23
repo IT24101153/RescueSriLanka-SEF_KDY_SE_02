@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -21,18 +22,14 @@ class ResourceApi {
     required String needType,
     required String description,
   }) async {
-    final response = await _client.post(
-      Uri.parse('$_baseUrl/api/resources/help-requests'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'requesterName': name,
-        'contactNumber': phone,
-        'needType': needType,
-        'description': description,
-        'latitude': null,
-        'longitude': null,
-      }),
-    );
+    final response = await _post('/api/resources/help-requests', {
+      'requesterName': name,
+      'contactNumber': phone,
+      'needType': needType,
+      'description': description,
+      'latitude': null,
+      'longitude': null,
+    });
     return _decode<HelpRequest>(response, HelpRequest.fromJson);
   }
 
@@ -44,48 +41,107 @@ class ResourceApi {
     required String unit,
     String? notes,
   }) async {
-    final response = await _client.post(
-      Uri.parse('$_baseUrl/api/resources/donations'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'donorName': name,
-        'contactNumber': phone,
-        'donationType': donationType,
-        'quantity': quantity,
-        'unit': unit,
-        'notes': notes,
-      }),
-    );
+    final response = await _post('/api/resources/donations', {
+      'donorName': name,
+      'contactNumber': phone,
+      'donationType': donationType,
+      'quantity': quantity,
+      'unit': unit,
+      'notes': notes,
+    });
     return _decode<Donation>(response, Donation.fromJson);
   }
 
   Future<List<HelpRequest>> getHelpRequests() async {
-    final response = await _client.get(
-      Uri.parse('$_baseUrl/api/resources/help-requests'),
-    );
+    final response = await _get('/api/resources/help-requests');
     return _decodeList(response, HelpRequest.fromJson);
   }
 
   void dispose() => _client.close();
 
+  static const Duration _timeout = Duration(seconds: 15);
+
+  Future<http.Response> _get(String path) =>
+      _send(() => _client.get(Uri.parse('$_baseUrl$path')));
+
+  Future<http.Response> _post(String path, Map<String, dynamic> body) => _send(
+    () => _client.post(
+      Uri.parse('$_baseUrl$path'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    ),
+  );
+
+  /// Keeps a server that answered badly distinct from one that never
+  /// answered, and names the address either way — on an emulator a wrong
+  /// host is the likeliest reason nothing loads.
+  Future<http.Response> _send(Future<http.Response> Function() request) async {
+    try {
+      return await request().timeout(_timeout);
+    } on TimeoutException {
+      throw Exception('The resource service at $_baseUrl did not respond.');
+    } on http.ClientException {
+      throw Exception('Cannot reach the resource service at $_baseUrl.');
+    } catch (_) {
+      throw Exception('Cannot reach the resource service at $_baseUrl.');
+    }
+  }
+
+  /// Whether a response succeeded. Anything else carries a reason worth
+  /// showing, so it is never silently turned into an empty list.
+  bool _ok(http.Response response) =>
+      response.statusCode >= 200 && response.statusCode < 300;
+
+  /// What went wrong, in words the screen can show.
+  ///
+  /// The status is always named, because "HTTP 500" is what distinguishes a
+  /// server fault from a rejected form. The API sends `{ "error": ... }` for
+  /// the faults it expects; an unhandled one sends a plain-text stack trace
+  /// instead, so the body is parsed defensively and its first line is used.
+  Exception _failure(http.Response response) {
+    final status = response.statusCode;
+    final body = response.body.trim();
+
+    String? reason;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        reason =
+            (decoded['error'] ?? decoded['detail'] ?? decoded['title'])
+                as String?;
+      }
+    } catch (_) {
+      // Not JSON: a stack trace or an HTML error page. Its first line says
+      // more than nothing.
+      if (body.isNotEmpty && !body.startsWith('<')) {
+        reason = body.split('\n').first;
+      }
+    }
+
+    if (status >= 500) {
+      return Exception(
+        'The resource service failed (HTTP $status).'
+        '${reason == null ? '' : ' $reason'}',
+      );
+    }
+    return Exception(
+      reason ?? 'The request could not be completed (HTTP $status).',
+    );
+  }
+
   T _decode<T>(
     http.Response response,
     T Function(Map<String, dynamic>) factory,
   ) {
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(body['error'] ?? 'The request could not be completed.');
-    }
-    return factory(body);
+    if (!_ok(response)) throw _failure(response);
+    return factory(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   List<T> _decodeList<T>(
     http.Response response,
     T Function(Map<String, dynamic>) factory,
   ) {
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Unable to load your requests.');
-    }
+    if (!_ok(response)) throw _failure(response);
     return (jsonDecode(response.body) as List<dynamic>)
         .map((item) => factory(item as Map<String, dynamic>))
         .toList();
