@@ -5,13 +5,21 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mobile/features/component_c/screens/resource_home_screen.dart';
+import 'package:mobile/shared/core/theme.dart';
 
 void main() {
-  testWidgets('resource request and donation tabs are available', (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+  testWidgets('resource request and donation tabs are available', (
+    WidgetTester tester,
+  ) async {
+    // The section is a tab inside the app shell now, so the test supplies
+    // the frame the shell would.
+    await tester.pumpWidget(
+      MaterialApp(theme: buildAppTheme(), home: const ResourceHomePage()),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('What do you need?'), findsOneWidget);

@@ -1,36 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/core/theme.dart';
+import '../../../shared/widgets/app_ui.dart';
 import '../services/resource_api.dart';
 
-void main() {
-  runApp(const RescueSriLankaApp());
-}
-
-class RescueSriLankaApp extends StatelessWidget {
-  const RescueSriLankaApp({super.key});
-
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'Rescue Sri Lanka',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff0b6b68)),
-          scaffoldBackgroundColor: const Color(0xfff4f8f7),
-          inputDecorationTheme: const InputDecorationTheme(
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide.none),
-          ),
-          useMaterial3: true,
-        ),
-        home: const ResourceHomePage(),
-      );
-}
-
-class MyApp extends RescueSriLankaApp {
-  const MyApp({super.key});
-}
-
+/// The Resources tab: ask the resource team for supplies, or offer some.
+///
+/// Two sections behind one segmented switch, both posting to
+/// /api/resources/*. Styling comes from the shared kit, so this reads like the
+/// disaster map and the report form.
 class ResourceHomePage extends StatefulWidget {
   const ResourceHomePage({super.key});
 
@@ -40,9 +18,11 @@ class ResourceHomePage extends StatefulWidget {
 
 class _ResourceHomePageState extends State<ResourceHomePage> {
   final _api = ResourceApi();
-  int _selectedIndex = 0;
+
+  int _section = 0;
   List<HelpRequest> _requests = [];
-  bool _loadingRequests = true;
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -50,51 +30,122 @@ class _ResourceHomePageState extends State<ResourceHomePage> {
     _loadRequests();
   }
 
+  @override
+  void dispose() {
+    _api.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadRequests() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final requests = await _api.getHelpRequests();
       if (mounted) setState(() => _requests = requests);
-    } catch (_) {
-      // The empty state remains useful when the API is not running locally.
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _error = error.toString().replaceFirst('Exception: ', ''),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _loadingRequests = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Resources', style: TextStyle(fontWeight: FontWeight.w800)),
-          actions: [IconButton(onPressed: _loadRequests, icon: const Icon(Icons.refresh), tooltip: 'Refresh requests')],
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        titleSpacing: 16,
+        title: const Text(
+          'Resources',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: SegmentedButton<int>(
-                  segments: const [
-                    ButtonSegment(value: 0, icon: Icon(Icons.volunteer_activism_outlined), label: Text('Resource request')),
-                    ButtonSegment(value: 1, icon: Icon(Icons.inventory_2_outlined), label: Text('Donate')),
-                  ],
-                  selected: {_selectedIndex},
-                  onSelectionChanged: (selection) => setState(() => _selectedIndex = selection.first),
+        actions: [
+          IconButton(
+            onPressed: _loading ? null : _loadRequests,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh requests',
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (_error != null)
+              AppErrorBanner(message: _error!, onRetry: _loadRequests),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(
+                    value: 0,
+                    icon: Icon(Icons.volunteer_activism_outlined, size: 18),
+                    label: Text('Resource request'),
+                  ),
+                  ButtonSegment(
+                    value: 1,
+                    icon: Icon(Icons.inventory_2_outlined, size: 18),
+                    label: Text('Donate'),
+                  ),
+                ],
+                selected: {_section},
+                onSelectionChanged: (selection) =>
+                    setState(() => _section = selection.first),
+                style: SegmentedButton.styleFrom(
+                  selectedBackgroundColor: AppColors.brand.withValues(
+                    alpha: 0.18,
+                  ),
+                  selectedForegroundColor: AppColors.ink,
+                  side: const BorderSide(color: AppColors.border),
                 ),
               ),
-              Expanded(
-                child: IndexedStack(index: _selectedIndex, children: [RequestHelpPage(api: _api, requests: _requests, loadingRequests: _loadingRequests, onSubmitted: _loadRequests), DonatePage(api: _api)]),
+            ),
+            Expanded(
+              child: IndexedStack(
+                index: _section,
+                children: [
+                  RequestHelpPage(
+                    api: _api,
+                    requests: _requests,
+                    loadingRequests: _loading,
+                    onSubmitted: _loadRequests,
+                  ),
+                  DonatePage(api: _api),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        floatingActionButton: _selectedIndex == 0 && _requests.isNotEmpty
-            ? FloatingActionButton.small(onPressed: _loadRequests, child: const Icon(Icons.sync))
-            : null,
-      );
+      ),
+    );
+  }
+}
+
+/// Which colour a request's status earns. Pending is a caution, anything
+/// settled reads as safe, a rejection as critical.
+Color _statusTone(String status) {
+  final value = status.toLowerCase();
+  if (value.contains('reject') || value.contains('cancel')) {
+    return AppColors.critical;
+  }
+  if (value.contains('pending') || value.contains('review')) {
+    return AppColors.caution;
+  }
+  return AppColors.safe;
 }
 
 class RequestHelpPage extends StatefulWidget {
-  const RequestHelpPage({required this.api, required this.requests, required this.loadingRequests, required this.onSubmitted, super.key});
+  const RequestHelpPage({
+    required this.api,
+    required this.requests,
+    required this.loadingRequests,
+    required this.onSubmitted,
+    super.key,
+  });
 
   final ResourceApi api;
   final List<HelpRequest> requests;
@@ -110,70 +161,184 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _description = TextEditingController();
+
   String _needType = 'Food and water';
   bool _submitting = false;
 
   @override
   void dispose() {
-    _name.dispose();
-    _phone.dispose();
-    _description.dispose();
+    for (final controller in [_name, _phone, _description]) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
     setState(() => _submitting = true);
     try {
-      await widget.api.createHelpRequest(name: _name.text, phone: _phone.text, needType: _needType, description: _description.text);
+      await widget.api.createHelpRequest(
+        name: _name.text,
+        phone: _phone.text,
+        needType: _needType,
+        description: _description.text,
+      );
       if (!mounted) return;
       _description.clear();
       await widget.onSubmitted();
-      _showMessage('Your request was sent to the resource manager.');
+      _toast('Your request was sent to the resource manager.');
     } catch (error) {
-      _showMessage(error.toString().replaceFirst('Exception: ', ''), isError: true);
+      _toast(error.toString().replaceFirst('Exception: ', ''), isError: true);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  void _showMessage(String message, {bool isError = false}) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: isError ? Colors.red.shade700 : null));
-
-  @override
-  Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
-        children: [
-          const _PageIntro(icon: Icons.health_and_safety, title: 'What do you need?', subtitle: 'Tell our resource team what support is needed. Every request is reviewed by the admin team.'),
-          const SizedBox(height: 20),
-          Form(
-            key: _formKey,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              _field(_name, 'Your name', Icons.person_outline),
-              const SizedBox(height: 12),
-              _field(_phone, 'Contact number', Icons.phone_outlined, keyboardType: TextInputType.phone),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _needType,
-                decoration: const InputDecoration(labelText: 'Type of help needed', prefixIcon: Icon(Icons.category_outlined)),
-                items: const ['Food and water', 'Medical aid', 'Rescue', 'Shelter', 'Other'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
-                onChanged: (value) => setState(() => _needType = value!),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(controller: _description, maxLines: 4, decoration: const InputDecoration(labelText: 'Describe what is needed', alignLabelWithHint: true, prefixIcon: Icon(Icons.notes_outlined)), validator: (value) => value == null || value.trim().isEmpty ? 'Please describe the need.' : null),
-              const SizedBox(height: 18),
-              FilledButton.icon(onPressed: _submitting ? null : _submit, icon: const Icon(Icons.send), label: Text(_submitting ? 'Sending request...' : 'Send request'), style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16))),
-            ]),
-          ),
-          const SizedBox(height: 28),
-          const Text('Your requests', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 10),
-          if (widget.loadingRequests) const Center(child: CircularProgressIndicator()),
-          if (!widget.loadingRequests && widget.requests.isEmpty) const Text('Submitted requests appear here with their latest status.', style: TextStyle(color: Colors.black54)),
-          ...widget.requests.map((request) => Card(margin: const EdgeInsets.only(top: 10), child: ListTile(leading: const Icon(Icons.assignment_outlined), title: Text(request.needType), subtitle: Text(request.description), trailing: Chip(label: Text(request.status))))),
-        ],
+  void _toast(String message, {bool isError = false}) =>
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError ? AppColors.critical : null,
+        ),
       );
 
-  Widget _field(TextEditingController controller, String label, IconData icon, {TextInputType? keyboardType}) => TextFormField(controller: controller, keyboardType: keyboardType, decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)), validator: (value) => value == null || value.trim().isEmpty ? 'This field is required.' : null);
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.gutter,
+        4,
+        AppSpacing.gutter,
+        32,
+      ),
+      children: [
+        const _SectionIntro(
+          icon: Icons.health_and_safety_outlined,
+          title: 'What do you need?',
+          subtitle:
+              'Tell the resource team what support is needed. Every request '
+              'is reviewed by a resource manager.',
+        ),
+        const SizedBox(height: AppSpacing.gap),
+        Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _RequiredField(
+                controller: _name,
+                label: 'Your name',
+                icon: Icons.person_outline,
+              ),
+              const SizedBox(height: AppSpacing.gap),
+              _RequiredField(
+                controller: _phone,
+                label: 'Contact number',
+                icon: Icons.phone_outlined,
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: AppSpacing.gap),
+              DropdownButtonFormField<String>(
+                initialValue: _needType,
+                decoration: const InputDecoration(
+                  labelText: 'Type of help needed',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
+                items:
+                    const [
+                          'Food and water',
+                          'Medical aid',
+                          'Rescue',
+                          'Shelter',
+                          'Other',
+                        ]
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value),
+                          ),
+                        )
+                        .toList(),
+                onChanged: (value) => setState(() => _needType = value!),
+              ),
+              const SizedBox(height: AppSpacing.gap),
+              TextFormField(
+                controller: _description,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Describe what is needed',
+                  alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.notes_outlined),
+                ),
+                validator: (value) => (value?.trim() ?? '').isEmpty
+                    ? 'Please describe the need.'
+                    : null,
+              ),
+              const SizedBox(height: 18),
+              AppPrimaryButton(
+                label: _submitting ? 'Sending request…' : 'Send request',
+                icon: Icons.send,
+                busy: _submitting,
+                onPressed: _submit,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 28),
+        const AppSectionTitle('Your requests'),
+        if (widget.loadingRequests)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (widget.requests.isEmpty)
+          const AppEmptyState(
+            icon: Icons.inbox_outlined,
+            title: 'No requests yet',
+            message: 'Requests you send appear here with their latest status.',
+          )
+        else
+          for (final request in widget.requests)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.gap),
+              child: AppCard(
+                accent: _statusTone(request.status),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            request.needType,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                        AppPill(
+                          request.status,
+                          tone: _statusTone(request.status),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      request.description,
+                      style: const TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+      ],
+    );
+  }
 }
 
 class DonatePage extends StatefulWidget {
@@ -192,77 +357,259 @@ class _DonatePageState extends State<DonatePage> {
   final _quantity = TextEditingController();
   final _unit = TextEditingController();
   final _notes = TextEditingController();
+
   String _donationType = 'Food and water';
   bool _submitting = false;
 
   @override
   void dispose() {
-    _name.dispose();
-    _phone.dispose();
-    _quantity.dispose();
-    _unit.dispose();
-    _notes.dispose();
+    for (final controller in [_name, _phone, _quantity, _unit, _notes]) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
     setState(() => _submitting = true);
     try {
-      await widget.api.createDonation(name: _name.text, phone: _phone.text, donationType: _donationType, quantity: double.parse(_quantity.text), unit: _unit.text, notes: _notes.text);
+      await widget.api.createDonation(
+        name: _name.text,
+        phone: _phone.text,
+        donationType: _donationType,
+        quantity: double.parse(_quantity.text),
+        unit: _unit.text,
+        notes: _notes.text,
+      );
       if (!mounted) return;
       _quantity.clear();
       _unit.clear();
       _notes.clear();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thank you. The resource manager will contact you.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Thank you. The resource manager will contact you.'),
+        ),
+      );
     } catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.red.shade700));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.critical,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
-        children: [
-          const _PageIntro(icon: Icons.volunteer_activism, title: 'Give what you can', subtitle: 'Offer food, water, medical supplies or other resources directly to the resource manager.'),
-          const SizedBox(height: 20),
-          Form(
-            key: _formKey,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              _field(_name, 'Your name', Icons.person_outline),
-              const SizedBox(height: 12),
-              _field(_phone, 'Contact number', Icons.phone_outlined, keyboardType: TextInputType.phone),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(initialValue: _donationType, decoration: const InputDecoration(labelText: 'What are you donating?', prefixIcon: Icon(Icons.category_outlined)), items: const ['Food and water', 'Medical supplies', 'Clothing', 'Other'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(), onChanged: (value) => setState(() => _donationType = value!)),
-              const SizedBox(height: 12),
-              Row(children: [Expanded(child: _field(_quantity, 'Quantity', Icons.numbers, keyboardType: const TextInputType.numberWithOptions(decimal: true))), const SizedBox(width: 12), Expanded(child: _field(_unit, 'Unit (kg, boxes...)', Icons.straighten))]),
-              const SizedBox(height: 12),
-              TextFormField(controller: _notes, maxLines: 3, decoration: const InputDecoration(labelText: 'Notes (optional)', alignLabelWithHint: true, prefixIcon: Icon(Icons.notes_outlined))),
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.gutter,
+        4,
+        AppSpacing.gutter,
+        32,
+      ),
+      children: [
+        const _SectionIntro(
+          icon: Icons.volunteer_activism_outlined,
+          title: 'Give what you can',
+          subtitle:
+              'Offer food, water, medical supplies or other resources. A '
+              'resource manager reviews every offer and contacts you.',
+        ),
+        const SizedBox(height: AppSpacing.gap),
+        Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _RequiredField(
+                controller: _name,
+                label: 'Your name',
+                icon: Icons.person_outline,
+              ),
+              const SizedBox(height: AppSpacing.gap),
+              _RequiredField(
+                controller: _phone,
+                label: 'Contact number',
+                icon: Icons.phone_outlined,
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: AppSpacing.gap),
+              DropdownButtonFormField<String>(
+                initialValue: _donationType,
+                decoration: const InputDecoration(
+                  labelText: 'What are you donating?',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
+                items:
+                    const [
+                          'Food and water',
+                          'Medical supplies',
+                          'Clothing',
+                          'Other',
+                        ]
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value),
+                          ),
+                        )
+                        .toList(),
+                onChanged: (value) => setState(() => _donationType = value!),
+              ),
+              const SizedBox(height: AppSpacing.gap),
+              Row(
+                children: [
+                  Expanded(
+                    child: _RequiredField(
+                      controller: _quantity,
+                      label: 'Quantity',
+                      icon: Icons.numbers,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.gap),
+                  Expanded(
+                    child: _RequiredField(
+                      controller: _unit,
+                      label: 'Unit (kg, boxes…)',
+                      icon: Icons.straighten,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.gap),
+              TextFormField(
+                controller: _notes,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.notes_outlined),
+                ),
+              ),
               const SizedBox(height: 18),
-              FilledButton.icon(onPressed: _submitting ? null : _submit, icon: const Icon(Icons.volunteer_activism), label: Text(_submitting ? 'Sending donation...' : 'Offer donation'), style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16))),
-            ]),
+              AppPrimaryButton(
+                label: _submitting ? 'Sending donation…' : 'Offer donation',
+                icon: Icons.volunteer_activism,
+                busy: _submitting,
+                onPressed: _submit,
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-          const Card(child: Padding(padding: EdgeInsets.all(16), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.info_outline), SizedBox(width: 12), Expanded(child: Text('Your offer is sent to the admin resource manager for review and coordination.'))]))),
-        ],
-      );
-
-  Widget _field(TextEditingController controller, String label, IconData icon, {TextInputType? keyboardType}) => TextFormField(controller: controller, keyboardType: keyboardType, decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)), validator: (value) => value == null || value.trim().isEmpty ? 'This field is required.' : null);
+        ),
+        const SizedBox(height: AppSpacing.gap),
+        const AppCard(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, size: 18, color: AppColors.body),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Your offer goes to the resource manager for review and '
+                  'coordination.',
+                  style: TextStyle(fontSize: 13, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
-class _PageIntro extends StatelessWidget {
-  const _PageIntro({required this.icon, required this.title, required this.subtitle});
+/// The heading each section opens with: icon, title, one line of context.
+class _SectionIntro extends StatelessWidget {
+  const _SectionIntro({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
 
   final IconData icon;
   final String title;
   final String subtitle;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(color: const Color(0xffd9eeeb), borderRadius: BorderRadius.circular(22)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, size: 34, color: const Color(0xff0b6b68)), const SizedBox(height: 14), Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)), const SizedBox(height: 6), Text(subtitle, style: const TextStyle(height: 1.4, color: Colors.black54))]),
-      );
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.brand.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 20, color: AppColors.brandInk),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            fontSize: 13,
+            height: 1.45,
+            color: AppColors.body,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A required text field, styled like the report form's.
+class _RequiredField extends StatelessWidget {
+  const _RequiredField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    this.keyboardType,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final TextInputType? keyboardType;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        prefixIcon: Icon(icon),
+      ),
+      validator: (value) =>
+          (value?.trim() ?? '').isEmpty ? 'This field is required.' : null,
+    );
+  }
 }

@@ -2,10 +2,15 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../../shared/core/config.dart';
+
 class ResourceApi {
+  // The base URL comes from the shared config, like every other section's
+  // client, so this works on iOS and the web too and not only on the Android
+  // emulator.
   ResourceApi({http.Client? client, String? baseUrl})
-      : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ?? 'http://10.0.2.2:5093';
+    : _client = client ?? http.Client(),
+      _baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
 
   final http.Client _client;
   final String _baseUrl;
@@ -55,11 +60,18 @@ class ResourceApi {
   }
 
   Future<List<HelpRequest>> getHelpRequests() async {
-    final response = await _client.get(Uri.parse('$_baseUrl/api/resources/help-requests'));
+    final response = await _client.get(
+      Uri.parse('$_baseUrl/api/resources/help-requests'),
+    );
     return _decodeList(response, HelpRequest.fromJson);
   }
 
-  T _decode<T>(http.Response response, T Function(Map<String, dynamic>) factory) {
+  void dispose() => _client.close();
+
+  T _decode<T>(
+    http.Response response,
+    T Function(Map<String, dynamic>) factory,
+  ) {
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(body['error'] ?? 'The request could not be completed.');
@@ -67,7 +79,10 @@ class ResourceApi {
     return factory(body);
   }
 
-  List<T> _decodeList<T>(http.Response response, T Function(Map<String, dynamic>) factory) {
+  List<T> _decodeList<T>(
+    http.Response response,
+    T Function(Map<String, dynamic>) factory,
+  ) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Unable to load your requests.');
     }
@@ -78,7 +93,12 @@ class ResourceApi {
 }
 
 class HelpRequest {
-  const HelpRequest({required this.needType, required this.description, required this.status, required this.createdAt});
+  const HelpRequest({
+    required this.needType,
+    required this.description,
+    required this.status,
+    required this.createdAt,
+  });
 
   final String needType;
   final String description;
@@ -86,15 +106,20 @@ class HelpRequest {
   final DateTime createdAt;
 
   factory HelpRequest.fromJson(Map<String, dynamic> json) => HelpRequest(
-        needType: json['needType'] as String,
-        description: json['description'] as String,
-        status: json['status'] as String,
-        createdAt: DateTime.parse(json['createdAtUtc'] as String),
-      );
+    needType: json['needType'] as String,
+    description: json['description'] as String,
+    status: json['status'] as String,
+    createdAt: DateTime.parse(json['createdAtUtc'] as String),
+  );
 }
 
 class Donation {
-  const Donation({required this.donationType, required this.quantity, required this.unit, required this.status});
+  const Donation({
+    required this.donationType,
+    required this.quantity,
+    required this.unit,
+    required this.status,
+  });
 
   final String donationType;
   final double quantity;
@@ -102,9 +127,9 @@ class Donation {
   final String status;
 
   factory Donation.fromJson(Map<String, dynamic> json) => Donation(
-        donationType: json['donationType'] as String,
-        quantity: (json['quantity'] as num).toDouble(),
-        unit: json['unit'] as String,
-        status: json['status'] as String,
-      );
+    donationType: json['donationType'] as String,
+    quantity: (json['quantity'] as num).toDouble(),
+    unit: json['unit'] as String,
+    status: json['status'] as String,
+  );
 }
