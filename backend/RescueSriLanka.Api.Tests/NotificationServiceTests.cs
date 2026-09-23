@@ -269,6 +269,137 @@ public class NotificationServiceTests
         Assert.Equal(0, await service.SendReportReceivedAsync(incident.Id));
     }
 
+    // -------------------------------------------------------------- welcome
+
+    /// <summary>A warning a coordinator has confirmed and that is still open.</summary>
+    private static Incident ConfirmedWarning(
+        string title,
+        IncidentSeverity severity = IncidentSeverity.Critical,
+        string district = "Colombo")
+    {
+        var incident = NewIncident(severity, district);
+        incident.Title = title;
+        incident.Status = IncidentStatus.Verified;
+        incident.VerifiedAt = DateTime.UtcNow;
+        return incident;
+    }
+
+    [Fact]
+    public async Task Welcome_GoesToTheNewCitizen()
+    {
+        using var db = NewDb();
+        var user = NewUser("new@example.com");
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var (service, sender) = NewService(db);
+
+        Assert.Equal(1, await service.SendWelcomeAsync(user.Id));
+        var message = Assert.Single(sender.Sent);
+        Assert.Equal("new@example.com", message.ToAddress);
+        Assert.Equal("Welcome to RescueSriLanka", message.Subject);
+    }
+
+    [Fact]
+    public async Task Welcome_ListsOnlyConfirmedOpenWarningsInTheirDistrict()
+    {
+        using var db = NewDb();
+        var user = NewUser("new@example.com", district: "Colombo");
+        db.Users.Add(user);
+
+        var unconfirmed = NewIncident();
+        unconfirmed.Title = "Unconfirmed report";
+
+        var closed = ConfirmedWarning("Closed flood");
+        closed.IsActive = false;
+
+        db.Incidents.AddRange(
+            ConfirmedWarning("Galle Road flood"),
+            ConfirmedWarning("Kandy landslide", district: "Kandy"),
+            ConfirmedWarning("Minor storm", severity: IncidentSeverity.Moderate),
+            unconfirmed,
+            closed);
+        await db.SaveChangesAsync();
+
+        var (service, sender) = NewService(db);
+        await service.SendWelcomeAsync(user.Id);
+
+        var message = Assert.Single(sender.Sent);
+        Assert.Contains("1 active warning(s) in Colombo", message.Subject);
+        Assert.Contains("Galle Road flood", message.TextBody);
+        Assert.DoesNotContain("Kandy landslide", message.TextBody);
+        Assert.DoesNotContain("Minor storm", message.TextBody);
+        Assert.DoesNotContain("Unconfirmed report", message.TextBody);
+        Assert.DoesNotContain("Closed flood", message.TextBody);
+    }
+
+    [Fact]
+    public async Task Welcome_AsksForADistrictWhenNoneIsSet()
+    {
+        using var db = NewDb();
+        var user = NewUser("new@example.com", district: null);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var (service, sender) = NewService(db);
+        await service.SendWelcomeAsync(user.Id);
+
+        Assert.Contains("have not set a district", Assert.Single(sender.Sent).TextBody);
+    }
+
+    // ------------------------------------------------------------- briefing
+
+    [Fact]
+    public async Task Briefing_SendsWarningsAlreadyInForce()
+    {
+        using var db = NewDb();
+        var user = NewUser("mover@example.com", district: "Colombo");
+        db.Users.Add(user);
+        db.Incidents.AddRange(
+            ConfirmedWarning("Galle Road flood", IncidentSeverity.High),
+            ConfirmedWarning("Wellawatte fire", IncidentSeverity.Critical));
+        await db.SaveChangesAsync();
+
+        var (service, sender) = NewService(db);
+
+        Assert.Equal(1, await service.SendDistrictBriefingAsync(user.Id));
+        var message = Assert.Single(sender.Sent);
+        Assert.StartsWith("CRITICAL warning in force", message.Subject);
+        // Most severe first.
+        Assert.True(
+            message.TextBody.IndexOf("Wellawatte fire", StringComparison.Ordinal) <
+            message.TextBody.IndexOf("Galle Road flood", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Briefing_IsSkippedForAQuietDistrict()
+    {
+        using var db = NewDb();
+        var user = NewUser("mover@example.com", district: "Colombo");
+        db.Users.Add(user);
+        db.Incidents.Add(ConfirmedWarning("Kandy landslide", district: "Kandy"));
+        await db.SaveChangesAsync();
+
+        var (service, sender) = NewService(db);
+
+        Assert.Equal(0, await service.SendDistrictBriefingAsync(user.Id));
+        Assert.Empty(sender.Sent);
+    }
+
+    [Fact]
+    public async Task Briefing_RespectsTheOptOut()
+    {
+        using var db = NewDb();
+        var user = NewUser("mover@example.com", notifications: false);
+        db.Users.Add(user);
+        db.Incidents.Add(ConfirmedWarning("Galle Road flood"));
+        await db.SaveChangesAsync();
+
+        var (service, _) = NewService(db);
+
+        Assert.Equal(0, await service.SendDistrictBriefingAsync(user.Id));
+    }
+
     [Fact]
     public async Task NothingIsSentWhenEmailIsTurnedOffEntirely()
     {

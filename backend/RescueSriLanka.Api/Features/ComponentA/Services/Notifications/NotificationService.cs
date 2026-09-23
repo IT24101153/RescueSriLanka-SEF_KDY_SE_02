@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using RescueSriLanka.Api.Data;
+using RescueSriLanka.Api.Features.ComponentA.Models;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services.Email;
 
@@ -15,6 +16,20 @@ public interface INotificationService
     /// call more than once for the same incident — only the first call sends.
     /// </summary>
     Task<int> SendDistrictWarningAsync(Guid incidentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Welcome to a newly registered citizen, listing any warnings already in
+    /// force in the district they chose.
+    /// </summary>
+    Task<int> SendWelcomeAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The warnings already in force in a citizen's district, sent when they
+    /// choose or change it. District warnings go out once, at confirmation, so
+    /// without this someone who moves into a district mid-emergency would
+    /// never hear about it. Sends nothing when the district is quiet.
+    /// </summary>
+    Task<int> SendDistrictBriefingAsync(Guid userId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -133,5 +148,76 @@ public class NotificationService(
             sent, recipients.Count, district, incidentId, incident.Severity);
 
         return sent;
+    }
+
+    public async Task<int> SendWelcomeAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (!_options.Enabled) return 0;
+
+        var user = await FindReachableUserAsync(userId, ct);
+        if (user is null) return 0;
+
+        var warnings = await ActiveWarningsInAsync(user.District, ct);
+
+        var sent = await sender.SendAsync(EmailTemplates.Welcome(user, warnings), ct);
+        return sent ? 1 : 0;
+    }
+
+    public async Task<int> SendDistrictBriefingAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (!_options.Enabled) return 0;
+
+        var user = await FindReachableUserAsync(userId, ct);
+        if (user?.District is not string district) return 0;
+
+        var warnings = await ActiveWarningsInAsync(district, ct);
+
+        if (warnings.Count == 0)
+        {
+            // A quiet district is not news. The next confirmed warning will
+            // reach them through SendDistrictWarningAsync like everyone else.
+            return 0;
+        }
+
+        var sent = await sender.SendAsync(
+            EmailTemplates.DistrictBriefing(user, district, warnings), ct);
+        return sent ? 1 : 0;
+    }
+
+    private async Task<User?> FindReachableUserAsync(Guid userId, CancellationToken ct)
+    {
+        var user = await db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(entity => entity.Id == userId, ct);
+
+        return user is { IsActive: true, EmailNotificationsEnabled: true } ? user : null;
+    }
+
+    /// <summary>
+    /// What a subscriber to this district would already have been warned about:
+    /// open, at or above the warning threshold, and confirmed by a human —
+    /// the same bar <see cref="SendDistrictWarningAsync"/> holds itself to.
+    /// Most severe first.
+    /// </summary>
+    private async Task<IReadOnlyList<Incident>> ActiveWarningsInAsync(
+        string? district, CancellationToken ct)
+    {
+        if (SriLankaDistricts.Normalise(district) is not string canonical) return [];
+
+        var candidates = await db.Incidents.AsNoTracking()
+            .Where(incident =>
+                incident.IsActive &&
+                incident.Severity >= _options.MinimumWarningSeverity &&
+                (incident.DistrictWarningSentAt != null ||
+                 incident.VerifiedAt != null ||
+                 incident.Status == IncidentStatus.Verified ||
+                 incident.Status == IncidentStatus.InProgress))
+            .ToListAsync(ct);
+
+        // Incident districts are free text from the reporter, so they are
+        // matched after normalising rather than in SQL.
+        return [.. candidates
+            .Where(incident => SriLankaDistricts.Normalise(incident.District) == canonical)
+            .OrderByDescending(incident => incident.Severity)
+            .ThenByDescending(incident => incident.ReportedAt)];
     }
 }

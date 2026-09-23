@@ -33,22 +33,7 @@ public class ImageStorageService(
         Guid incidentId, IFormFile file, string? caption, Guid? userId,
         CancellationToken ct = default)
     {
-        if (file.Length == 0)
-        {
-            throw new ArgumentException("The uploaded file is empty.");
-        }
-
-        if (file.Length > MaxFileBytes)
-        {
-            throw new ArgumentException($"Images must be {MaxFileBytes / 1024 / 1024} MB or smaller.");
-        }
-
-        var contentType = file.ContentType.ToLowerInvariant();
-        if (!AllowedTypes.Contains(contentType))
-        {
-            throw new ArgumentException(
-                $"Unsupported image type '{file.ContentType}'. Allowed: {string.Join(", ", AllowedTypes)}.");
-        }
+        var contentType = Validate(file);
 
         var stored = await store.SaveAsync(incidentId, file, ct);
 
@@ -71,6 +56,35 @@ public class ImageStorageService(
             image.Id, incidentId, store.Name);
 
         return image;
+    }
+
+    /// <summary>
+    /// Throws <see cref="ArgumentException"/> for a file that would be refused.
+    /// Public so a report filed together with its photo can be turned away
+    /// before the report is created, rather than leaving a report behind whose
+    /// photo was always going to fail.
+    /// </summary>
+    /// <returns>The content type, lower-cased.</returns>
+    public static string Validate(IFormFile file)
+    {
+        if (file.Length == 0)
+        {
+            throw new ArgumentException("The uploaded file is empty.");
+        }
+
+        if (file.Length > MaxFileBytes)
+        {
+            throw new ArgumentException($"Images must be {MaxFileBytes / 1024 / 1024} MB or smaller.");
+        }
+
+        var contentType = file.ContentType.ToLowerInvariant();
+        if (!AllowedTypes.Contains(contentType))
+        {
+            throw new ArgumentException(
+                $"Unsupported image type '{file.ContentType}'. Allowed: {string.Join(", ", AllowedTypes)}.");
+        }
+
+        return contentType;
     }
 
     public async Task<IReadOnlyList<(string MimeType, byte[] Data)>> LoadForAnalysisAsync(

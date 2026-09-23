@@ -26,6 +26,14 @@ public record RegisterRequest
 
     [Phone, MaxLength(20)]
     public string? PhoneNumber { get; init; }
+
+    /// <summary>
+    /// Where the citizen lives, for district warnings. Optional — it can be set
+    /// later from the profile. Must be a name from
+    /// <see cref="RescueSriLanka.Api.Models.SriLankaDistricts.All"/>.
+    /// </summary>
+    [MaxLength(50)]
+    public string? District { get; init; }
 }
 
 /// <summary>

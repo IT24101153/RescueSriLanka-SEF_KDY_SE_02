@@ -81,17 +81,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       email: _email.text,
       password: _password.text,
       phoneNumber: _phone.text,
+      district: _district,
     );
 
     if (!mounted) return;
 
     if (result.ok) {
-      // Registration only takes name, email, password and phone, so the
-      // district is saved straight after with the token it just returned.
-      if (_district != null) {
-        await widget.auth.updatePreferences(district: _district);
-      }
-      if (!mounted) return;
       // Registration returns a token, so there is no second sign-in step.
       Navigator.of(context).pop(true);
       return;

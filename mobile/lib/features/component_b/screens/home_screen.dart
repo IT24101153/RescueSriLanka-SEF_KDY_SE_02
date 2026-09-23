@@ -52,6 +52,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadSummary() async {
+    // Set on every load, not just the first: that one finishes while the tab
+    // is still hidden, so a refresh is when the header's bar is actually seen.
+    setState(() {
+      _loadingSummary = true;
+      _summaryError = null;
+    });
+
     final result = await HelpRequestService.getMineWithStatus();
     if (!mounted) return;
     setState(() {
@@ -67,25 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final resolved = _requests.where((r) => r.status == 3).length;
 
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: const Text(
-          'Help',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: _loadingSummary ? null : _loadSummary,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Log out',
-            onPressed: () => widget.auth.signOut(),
-          ),
-        ],
-      ),
+      appBar: AppHeader(title: 'Help', loading: _loadingSummary),
       body: SafeArea(
         child: Column(
           children: [
@@ -113,6 +102,9 @@ class _HomeScreenState extends State<HomeScreen> {
               child: RefreshIndicator(
                 onRefresh: _loadSummary,
                 child: ListView(
+                  // Pull-to-refresh needs a scrollable, even when everything
+                  // fits on screen.
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.gutter,
                     18,

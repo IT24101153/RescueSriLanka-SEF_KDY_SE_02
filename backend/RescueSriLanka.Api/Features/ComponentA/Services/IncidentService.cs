@@ -20,6 +20,16 @@ public interface IIncidentService
     Task<IncidentDto> CreateAsync(
         CreateIncidentRequest request, Guid? reportedByUserId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Files a report and its photo together, storing the photo before the
+    /// analysis agent is asked to look — so the agent actually sees it.
+    /// Throws <see cref="ArgumentException"/>, before anything is created, for
+    /// a photo that would be refused.
+    /// </summary>
+    Task<CreateIncidentResponse> CreateWithPhotoAsync(
+        CreateIncidentRequest request, IFormFile photo, string? caption,
+        Guid? reportedByUserId, CancellationToken ct = default);
+
     Task<IncidentDto?> UpdateStatusAsync(
         Guid id, IncidentStatus status, Guid actingUserId, CancellationToken ct = default);
 
@@ -34,6 +44,7 @@ public class IncidentService(
     ISafetyZoneService zoneService,
     IIncidentAnalysisQueue analysisQueue,
     INotificationQueue notificationQueue,
+    IImageStorageService imageStorage,
     ILogger<IncidentService> logger) : IIncidentService
 {
     public async Task<IReadOnlyList<IncidentDto>> QueryAsync(
@@ -97,6 +108,46 @@ public class IncidentService(
     public async Task<IncidentDto> CreateAsync(
         CreateIncidentRequest request, Guid? reportedByUserId, CancellationToken ct = default)
     {
+        var incident = await SaveNewAsync(request, reportedByUserId, ct);
+        QueueFollowUps(incident.Id);
+        return IncidentDto.FromIncident(incident);
+    }
+
+    public async Task<CreateIncidentResponse> CreateWithPhotoAsync(
+        CreateIncidentRequest request, IFormFile photo, string? caption,
+        Guid? reportedByUserId, CancellationToken ct = default)
+    {
+        // Refuse a bad file up front: a report left behind without the photo
+        // the citizen meant to send is worse than asking them to pick another.
+        ImageStorageService.Validate(photo);
+
+        var incident = await SaveNewAsync(request, reportedByUserId, ct);
+
+        string? photoError = null;
+        try
+        {
+            await imageStorage.SaveAsync(incident.Id, photo, caption, reportedByUserId, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // The storage backend failed (Cloudinary down, bad credentials).
+            // The report itself is real and must stand; the citizen is told
+            // the photo did not make it.
+            photoError = ex.Message;
+            logger.LogWarning(
+                "Incident {Id} filed, but its photo was not stored: {Reason}", incident.Id, ex.Message);
+        }
+
+        // Only now, with the photo stored, does the agent get to look.
+        QueueFollowUps(incident.Id);
+
+        var saved = await GetAsync(incident.Id, ct) ?? IncidentDto.FromIncident(incident);
+        return new CreateIncidentResponse { Incident = saved, PhotoError = photoError };
+    }
+
+    private async Task<Incident> SaveNewAsync(
+        CreateIncidentRequest request, Guid? reportedByUserId, CancellationToken ct)
+    {
         var incident = new Incident
         {
             Title = request.Title.Trim(),
@@ -119,20 +170,28 @@ public class IncidentService(
         // A new incident changes the map's zone layer immediately.
         await zoneService.RecomputeAsync(ct);
 
+        logger.LogInformation("Incident {Id} created ({Type}, {Severity})",
+            incident.Id, incident.Type, incident.Severity);
+
+        return incident;
+    }
+
+    /// <summary>
+    /// Background work for a new report. Queued last, after any photo is
+    /// stored: the analysis worker starts at once, so queuing any earlier means
+    /// the agent grades the report without ever seeing the picture.
+    /// </summary>
+    private void QueueFollowUps(Guid incidentId)
+    {
         // The agent scores it in the background so the coordinator finds a
         // proposal waiting rather than a button to press. Nothing it produces
         // is applied without approval.
-        analysisQueue.Enqueue(incident.Id);
+        analysisQueue.Enqueue(incidentId);
 
         // Tell the reporter we have it. No district warning yet — nobody has
         // confirmed this is real.
         notificationQueue.Enqueue(
-            new NotificationJob(NotificationKind.ReportReceived, incident.Id));
-
-        logger.LogInformation("Incident {Id} created ({Type}, {Severity})",
-            incident.Id, incident.Type, incident.Severity);
-
-        return IncidentDto.FromIncident(incident);
+            new NotificationJob(NotificationKind.ReportReceived, incidentId));
     }
 
     public async Task<IncidentDto?> UpdateStatusAsync(

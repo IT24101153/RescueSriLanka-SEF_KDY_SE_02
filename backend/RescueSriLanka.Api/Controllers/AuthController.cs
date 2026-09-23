@@ -31,16 +31,24 @@ public class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("register")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<AuthResponse>> Register(
         [FromBody] RegisterRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await authService.RegisterCitizenAsync(request, cancellationToken);
+        try
+        {
+            var result = await authService.RegisterCitizenAsync(request, cancellationToken);
 
-        return result is null
-            ? Conflict(new { message = "An account with that email already exists." })
-            : Ok(result);
+            return result is null
+                ? Conflict(new { message = "An account with that email already exists." })
+                : Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>Returns the signed-in user — used by both clients to restore a session.</summary>

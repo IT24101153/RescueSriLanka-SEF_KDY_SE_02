@@ -89,6 +89,7 @@ class AuthService extends ChangeNotifier {
     required String email,
     required String password,
     String? phoneNumber,
+    String? district,
   }) =>
       _authenticate('/api/auth/register', {
         'fullName': fullName.trim(),
@@ -96,6 +97,9 @@ class AuthService extends ChangeNotifier {
         'password': password,
         if (phoneNumber != null && phoneNumber.trim().isNotEmpty)
           'phoneNumber': phoneNumber.trim(),
+        // Sent with the account itself so the welcome email can already name
+        // the district, and list any warnings in force there.
+        'district': ?district,
       });
 
   /// Saves the notification settings, then folds the user the API returns back

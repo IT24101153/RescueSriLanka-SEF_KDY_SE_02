@@ -41,7 +41,7 @@ class _HomeShellState extends State<HomeShell> {
         destination: const NavigationDestination(
           icon: Icon(Icons.map_outlined),
           selectedIcon: Icon(Icons.map),
-          label: 'Disaster map',
+          label: 'Map',
         ),
       ),
       if (signedIn) ...[
@@ -111,6 +111,17 @@ class _HomeShellState extends State<HomeShell> {
             onDestinationSelected: (value) => setState(() => _index = value),
             backgroundColor: AppColors.surface,
             indicatorColor: AppColors.brand.withValues(alpha: 0.18),
+            // Six tabs share the width, so labels run a size below the
+            // Material default; the selected one stays bolder to stand out.
+            labelTextStyle: WidgetStateProperty.resolveWith(
+              (states) => TextStyle(
+                fontSize: 11,
+                fontWeight: states.contains(WidgetState.selected)
+                    ? FontWeight.w600
+                    : FontWeight.w500,
+                color: AppColors.ink,
+              ),
+            ),
             destinations: [for (final tab in tabs) tab.destination],
           ),
         );

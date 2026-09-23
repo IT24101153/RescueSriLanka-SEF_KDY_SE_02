@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -14,6 +16,7 @@ import '../../widgets/map_legend.dart';
 import '../../widgets/severity_chip.dart';
 import '../../widgets/zone_banner.dart';
 import 'incident_sheet.dart';
+import '../../../../shared/widgets/app_ui.dart';
 
 /// Component A on mobile: the live disaster map, its safety zones, and the
 /// list of what is active. Open to everyone — no sign-in.
@@ -61,10 +64,18 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
   String? _error;
   String _severityFilter = 'All';
 
-  /// Place search (Nominatim). Results show until one is picked or dismissed.
+  /// Place search. Suggestions show as you type, until one is picked or
+  /// the search is cleared; the picked place stays pinned on the map.
   bool _searching = false;
   List<Place> _results = [];
   String? _searchError;
+  Place? _pickedPlace;
+  Timer? _searchDebounce;
+
+  /// How long typing must pause before a search goes out — short enough to
+  /// feel live, long enough not to send one request per keystroke.
+  static const Duration _searchPause = Duration(milliseconds: 350);
+  static const int _minSearchLength = 2;
 
   @override
   void initState() {
@@ -75,6 +86,7 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
   @override
   void dispose() {
     _api.dispose();
+    _searchDebounce?.cancel();
     _places.dispose();
     _searchField.dispose();
     super.dispose();
@@ -150,7 +162,26 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
 
   /// Steps the zoom, holding the current centre.
   ///
+  /// Called on every keystroke; the search itself waits for a pause.
+  void _onSearchChanged(String query) {
+    _searchDebounce?.cancel();
+
+    if (query.trim().length < _minSearchLength) {
+      setState(() {
+        _results = [];
+        _searchError = null;
+        _searching = false;
+      });
+      return;
+    }
+
+    setState(() {});
+    _searchDebounce = Timer(_searchPause, () => _searchPlaces(query));
+  }
+
   Future<void> _searchPlaces(String query) async {
+    _searchDebounce?.cancel();
+
     if (query.trim().isEmpty) {
       setState(() {
         _results = [];
@@ -166,38 +197,45 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
 
     try {
       final results = await _places.search(query);
-      if (!mounted) return;
+      // Null: a newer search has started, and its answer is the one to show.
+      if (!mounted || results == null) return;
       setState(() {
         _results = results;
         _searchError = results.isEmpty ? 'No place matched "$query".' : null;
+        _searching = false;
       });
     } on PlaceSearchException catch (error) {
       if (!mounted) return;
       setState(() {
         _results = [];
         _searchError = error.message;
+        _searching = false;
       });
-    } finally {
-      if (mounted) setState(() => _searching = false);
     }
   }
 
   void _goToPlace(Place place) {
     FocusScope.of(context).unfocus();
+    _searchDebounce?.cancel();
     setState(() {
       _results = [];
       _searchError = null;
+      _searching = false;
+      _pickedPlace = place;
       _searchField.text = place.shortName;
     });
-    _map.move(LatLng(place.latitude, place.longitude), 12);
+    _map.move(LatLng(place.latitude, place.longitude), 13);
   }
 
   void _clearSearch() {
     FocusScope.of(context).unfocus();
+    _searchDebounce?.cancel();
     _searchField.clear();
     setState(() {
       _results = [];
       _searchError = null;
+      _searching = false;
+      _pickedPlace = null;
     });
   }
 
@@ -237,12 +275,9 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: const Text(
-          'Rescue SriLanka',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
+      appBar: AppHeader(
+        title: 'Rescue SriLanka',
+        loading: _loading,
         actions: [
           IconButton(
             onPressed: () => setState(() => _showZones = !_showZones),
@@ -368,17 +403,15 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
     );
   }
 
-  /// Place search over Nominatim. It runs on submit rather than per
-  /// keystroke, which their usage policy asks for.
+  /// Place search: suggestions appear once typing pauses; pressing search on
+  /// the keyboard looks straight away.
   Widget _searchBar() => Padding(
     padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
     child: TextField(
       controller: _searchField,
       textInputAction: TextInputAction.search,
       onSubmitted: _searchPlaces,
-      // Rebuild so the clear button appears as soon as there is text. The
-      // search itself still waits for submit.
-      onChanged: (_) => setState(() {}),
+      onChanged: _onSearchChanged,
       decoration: InputDecoration(
         isDense: true,
         hintText: 'Search a place in Sri Lanka',
@@ -393,12 +426,12 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
                 ),
               )
             : (_searchField.text.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: _clearSearch,
-                    tooltip: 'Clear search',
-                  )),
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: _clearSearch,
+                      tooltip: 'Clear search',
+                    )),
         filled: true,
         fillColor: AppColors.surfaceAlt,
         contentPadding: const EdgeInsets.symmetric(vertical: 10),
@@ -456,13 +489,13 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
                   ),
                   onTap: () => _goToPlace(place),
                 ),
-              // Nominatim's policy asks for this credit alongside results.
+              // Photon's results are OpenStreetMap data, which asks for credit.
               const Padding(
                 padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    'Search by OpenStreetMap Nominatim',
+                    'Search by Photon · OpenStreetMap',
                     style: TextStyle(fontSize: 10.5, color: AppColors.body),
                   ),
                 ),
@@ -604,13 +637,29 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
                   child: _marker(incident),
                 ),
               ),
+            // The searched-for place, pinned so it can be found again after
+            // the map is panned. Its tip sits on the spot.
+            if (_pickedPlace case final place?)
+              Marker(
+                point: LatLng(place.latitude, place.longitude),
+                width: 40,
+                height: 40,
+                alignment: Alignment.topCenter,
+                child: Tooltip(
+                  message: place.name,
+                  child: const Icon(
+                    Icons.location_on,
+                    size: 40,
+                    color: AppColors.brand,
+                    shadows: [Shadow(color: Colors.black38, blurRadius: 4)],
+                  ),
+                ),
+              ),
           ],
         ),
         // OpenStreetMap's tile policy requires crediting contributors.
         const RichAttributionWidget(
-          attributions: [
-            TextSourceAttribution('OpenStreetMap contributors'),
-          ],
+          attributions: [TextSourceAttribution('OpenStreetMap contributors')],
         ),
       ],
     );

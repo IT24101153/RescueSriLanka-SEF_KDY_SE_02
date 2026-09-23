@@ -9,6 +9,7 @@ import '../../../../shared/core/theme.dart';
 import '../../services/api_client.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/screens/auth/login_screen.dart';
+import '../../../../shared/widgets/app_ui.dart';
 
 /// The disaster types the API accepts, in IncidentType order.
 const List<String> _incidentTypes = [
@@ -125,7 +126,9 @@ class _ReportScreenState extends State<ReportScreen> {
       if (!mounted) return;
       setState(() {
         _locating = false;
-        _locationError = error is String ? error : 'Could not read your location.';
+        _locationError = error is String
+            ? error
+            : 'Could not read your location.';
       });
     }
   }
@@ -166,7 +169,9 @@ class _ReportScreenState extends State<ReportScreen> {
 
     final position = _position;
     if (position == null) {
-      setState(() => _error = 'A location is needed before a report can be filed.');
+      setState(
+        () => _error = 'A location is needed before a report can be filed.',
+      );
       return;
     }
 
@@ -178,32 +183,34 @@ class _ReportScreenState extends State<ReportScreen> {
     final api = ApiClient(auth: widget.auth);
 
     try {
-      final incident = await api.createIncident(
-        title: _title.text,
-        description: _description.text,
-        type: _type,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        district: _district.text,
-        addressText: _address.text,
-        estimatedAffectedPeople: int.tryParse(_people.text.trim()),
-      );
-
-      // The report is already filed at this point. A photo that fails to
-      // upload is worth telling someone about, but it must not read as though
-      // the whole report was lost.
+      // With a photo, report and photo go up together so the analysis agent
+      // sees the picture. The report is filed even if only the photo fails.
       String? photoWarning;
-      if (_photo != null) {
-        try {
-          await api.uploadIncidentImage(
-            incidentId: incident.id,
-            file: _photo!,
-          );
-        } catch (error) {
-          photoWarning = error is ApiException
-              ? error.message
-              : 'The photo could not be uploaded.';
-        }
+      final photo = _photo;
+      if (photo != null) {
+        final result = await api.createIncidentWithPhoto(
+          title: _title.text,
+          description: _description.text,
+          type: _type,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          district: _district.text,
+          addressText: _address.text,
+          estimatedAffectedPeople: int.tryParse(_people.text.trim()),
+          photo: photo,
+        );
+        photoWarning = result.photoError;
+      } else {
+        await api.createIncident(
+          title: _title.text,
+          description: _description.text,
+          type: _type,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          district: _district.text,
+          addressText: _address.text,
+          estimatedAffectedPeople: int.tryParse(_people.text.trim()),
+        );
       }
 
       if (!mounted) return;
@@ -212,7 +219,9 @@ class _ReportScreenState extends State<ReportScreen> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error = error is ApiException ? error.message : 'Could not file the report.';
+        _error = error is ApiException
+            ? error.message
+            : 'Could not file the report.';
       });
     } finally {
       api.dispose();
@@ -224,8 +233,11 @@ class _ReportScreenState extends State<ReportScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.check_circle_outline,
-            color: AppColors.low, size: 34),
+        icon: const Icon(
+          Icons.check_circle_outline,
+          color: AppColors.low,
+          size: 34,
+        ),
         title: const Text('Report submitted'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -296,181 +308,193 @@ class _ReportScreenState extends State<ReportScreen> {
 
   Widget _buildForm(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Report a disaster')),
+      appBar: AppHeader(
+        title: 'Report a disaster',
+        loading: _locating || _submitting,
+      ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-          children: [
-            const Text(
-              'Describe what you can see. A coordinator confirms every report '
-              'before it is acted on — you do not need to judge how serious it is.',
-              style: TextStyle(fontSize: 13.5, height: 1.45),
-            ),
-            const SizedBox(height: 20),
-
-            if (_error != null) ...[
-              _Banner(
-                message: _error!,
-                color: AppColors.critical,
-                icon: Icons.error_outline,
+        child: RefreshIndicator(
+          // A form has nothing to reload but where you are, so a pull
+          // re-reads the location. Anything already typed is kept.
+          onRefresh: _locate,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            children: [
+              const Text(
+                'Describe what you can see. A coordinator confirms every report '
+                'before it is acted on — you do not need to judge how serious it is.',
+                style: TextStyle(fontSize: 13.5, height: 1.45),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
+
+              if (_error != null) ...[
+                _Banner(
+                  message: _error!,
+                  color: AppColors.critical,
+                  icon: Icons.error_outline,
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              _LocationCard(
+                position: _position,
+                busy: _locating,
+                error: _locationError,
+                outOfBounds: _position != null && !_inSriLanka,
+                onRetry: _locate,
+              ),
+              const SizedBox(height: 20),
+
+              Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _FieldLabel('What kind of disaster?'),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final type in _incidentTypes)
+                          ChoiceChip(
+                            label: Text(type),
+                            avatar: Icon(
+                              _typeIcons[type] ?? Icons.report_problem_outlined,
+                              size: 17,
+                            ),
+                            selected: _type == type,
+                            onSelected: (_) => setState(() => _type = type),
+                            selectedColor: AppColors.brand.withValues(
+                              alpha: 0.22,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    TextFormField(
+                      controller: _title,
+                      maxLength: 200,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'Short summary',
+                        hintText: 'Main road flooded near the bridge',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        final text = value?.trim() ?? '';
+                        if (text.isEmpty) {
+                          return 'Give the report a short summary.';
+                        }
+                        if (text.length < 8) return 'Add a little more detail.';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 6),
+
+                    TextFormField(
+                      controller: _description,
+                      maxLines: 5,
+                      maxLength: 4000,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'What is happening?',
+                        alignLabelWithHint: true,
+                        hintText: 'Water is waist deep and rising. Several houses cut off.',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        final text = value?.trim() ?? '';
+                        if (text.isEmpty) return 'Describe what you can see.';
+                        if (text.length < 15) {
+                          return 'A fuller description helps responders decide.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 6),
+
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _district,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: const InputDecoration(
+                              labelText: 'District',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _people,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'People affected',
+                              hintText: 'Estimate',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              final text = value?.trim() ?? '';
+                              if (text.isEmpty) return null;
+                              final parsed = int.tryParse(text);
+                              if (parsed == null || parsed < 0) {
+                                return 'Enter a number.';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    TextFormField(
+                      controller: _address,
+                      maxLength: 300,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'Landmark or address (optional)',
+                        hintText: 'Near the Kelani bridge, Peliyagoda side',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 4),
+              _PhotoField(
+                photo: _photo,
+                onCamera: () => _addPhoto(ImageSource.camera),
+                onGallery: () => _addPhoto(ImageSource.gallery),
+                onRemove: () => setState(() => _photo = null),
+              ),
+
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: _submitting || _position == null ? null : _submit,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                  backgroundColor: AppColors.brand,
+                  foregroundColor: AppColors.brandInk,
+                ),
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2.2),
+                      )
+                    : const Icon(Icons.send_outlined, size: 19),
+                label: Text(_submitting ? 'Submitting…' : 'Submit report'),
+              ),
             ],
-
-            _LocationCard(
-              position: _position,
-              busy: _locating,
-              error: _locationError,
-              outOfBounds: _position != null && !_inSriLanka,
-              onRetry: _locate,
-            ),
-            const SizedBox(height: 20),
-
-            Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _FieldLabel('What kind of disaster?'),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final type in _incidentTypes)
-                        ChoiceChip(
-                          label: Text(type),
-                          avatar: Icon(
-                            _typeIcons[type] ?? Icons.report_problem_outlined,
-                            size: 17,
-                          ),
-                          selected: _type == type,
-                          onSelected: (_) => setState(() => _type = type),
-                          selectedColor: AppColors.brand.withValues(alpha: 0.22),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  TextFormField(
-                    controller: _title,
-                    maxLength: 200,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      labelText: 'Short summary',
-                      hintText: 'Main road flooded near the bridge',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      final text = value?.trim() ?? '';
-                      if (text.isEmpty) return 'Give the report a short summary.';
-                      if (text.length < 8) return 'Add a little more detail.';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 6),
-
-                  TextFormField(
-                    controller: _description,
-                    maxLines: 5,
-                    maxLength: 4000,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      labelText: 'What is happening?',
-                      alignLabelWithHint: true,
-                      hintText:
-                          'Water is waist deep and rising. Several houses cut off.',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      final text = value?.trim() ?? '';
-                      if (text.isEmpty) return 'Describe what you can see.';
-                      if (text.length < 15) {
-                        return 'A fuller description helps responders decide.';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 6),
-
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _district,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            labelText: 'District',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _people,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'People affected',
-                            hintText: 'Estimate',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            final text = value?.trim() ?? '';
-                            if (text.isEmpty) return null;
-                            final parsed = int.tryParse(text);
-                            if (parsed == null || parsed < 0) {
-                              return 'Enter a number.';
-                            }
-                            return null;
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  TextFormField(
-                    controller: _address,
-                    maxLength: 300,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      labelText: 'Landmark or address (optional)',
-                      hintText: 'Near the Kelani bridge, Peliyagoda side',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 4),
-            _PhotoField(
-              photo: _photo,
-              onCamera: () => _addPhoto(ImageSource.camera),
-              onGallery: () => _addPhoto(ImageSource.gallery),
-              onRemove: () => setState(() => _photo = null),
-            ),
-
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _submitting || _position == null ? null : _submit,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-                backgroundColor: AppColors.brand,
-                foregroundColor: AppColors.brandInk,
-              ),
-              icon: _submitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2.2),
-                    )
-                  : const Icon(Icons.send_outlined, size: 19),
-              label: Text(_submitting ? 'Submitting…' : 'Submit report'),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -487,22 +511,26 @@ class _SignInPrompt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Report a disaster')),
+      appBar: const AppHeader(title: 'Report a disaster'),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.campaign_outlined, size: 54, color: AppColors.brand),
+              const Icon(
+                Icons.campaign_outlined,
+                size: 54,
+                color: AppColors.brand,
+              ),
               const SizedBox(height: 18),
               Text(
                 'Sign in to file a report',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ink,
-                    ),
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ink,
+                ),
               ),
               const SizedBox(height: 10),
               const Text(
@@ -580,12 +608,19 @@ class _LocationCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 if (busy)
-                  const Text('Finding your location…',
-                      style: TextStyle(fontSize: 13))
+                  const Text(
+                    'Finding your location…',
+                    style: TextStyle(fontSize: 13),
+                  )
                 else if (error != null)
-                  Text(error!,
-                      style: const TextStyle(
-                          fontSize: 13, height: 1.4, color: AppColors.high))
+                  Text(
+                    error!,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.4,
+                      color: AppColors.high,
+                    ),
+                  )
                 else if (resolved != null) ...[
                   Text(
                     '${resolved.latitude.toStringAsFixed(5)}, '
@@ -603,7 +638,10 @@ class _LocationCard extends StatelessWidget {
                         'This position is outside Sri Lanka. It can still be '
                         'filed, but check it is right.',
                         style: TextStyle(
-                            fontSize: 12, height: 1.4, color: AppColors.high),
+                          fontSize: 12,
+                          height: 1.4,
+                          color: AppColors.high,
+                        ),
                       ),
                     ),
                 ] else
@@ -666,7 +704,11 @@ class _PhotoField extends StatelessWidget {
                   color: Colors.black54,
                   shape: const CircleBorder(),
                   child: IconButton(
-                    icon: const Icon(Icons.close, size: 18, color: Colors.white),
+                    icon: const Icon(
+                      Icons.close,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                     onPressed: onRemove,
                     tooltip: 'Remove photo',
                   ),
@@ -712,13 +754,13 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: AppColors.ink,
-        ),
-      );
+    text,
+    style: const TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+      color: AppColors.ink,
+    ),
+  );
 }
 
 class _Banner extends StatelessWidget {

@@ -20,10 +20,7 @@ class RescueCoordinatorTab extends StatelessWidget {
       builder: (context, _) {
         final session = auth.session;
         if (session == null) return _SignInPrompt(auth: auth);
-        return RescueCoordinatorDashboard(
-          session: session,
-          onLogout: auth.signOut,
-        );
+        return RescueCoordinatorDashboard(session: session);
       },
     );
   }
@@ -37,13 +34,7 @@ class _SignInPrompt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: const Text(
-          'Rescue',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-      ),
+      appBar: const AppHeader(title: 'Rescue'),
       body: Center(
         child: AppEmptyState(
           icon: Icons.groups_outlined,

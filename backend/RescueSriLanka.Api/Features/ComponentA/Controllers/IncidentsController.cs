@@ -79,6 +79,35 @@ public class IncidentsController(
         return CreatedAtAction(nameof(Get), new { id = incident.Id }, incident);
     }
 
+    /// <summary>
+    /// Report an incident with a photo, in one multipart request. This is what
+    /// the Flutter report form posts to when a photo is attached: filing the
+    /// two separately let the analysis agent run before the photo arrived, so
+    /// it graded the report blind.
+    /// </summary>
+    [HttpPost("with-photo")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    [ProducesResponseType(typeof(CreateIncidentResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CreateIncidentResponse>> CreateWithPhoto(
+        [FromForm] CreateIncidentRequest request,
+        IFormFile photo,
+        [FromForm] string? caption,
+        CancellationToken ct)
+    {
+        try
+        {
+            var result = await incidentService.CreateWithPhotoAsync(
+                request, photo, caption, CurrentUserId(), ct);
+            return CreatedAtAction(nameof(Get), new { id = result.Incident.Id }, result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPatch("{id:guid}/status")]
     [Authorize(Roles = Coordinator)]
     public async Task<ActionResult<IncidentDto>> UpdateStatus(

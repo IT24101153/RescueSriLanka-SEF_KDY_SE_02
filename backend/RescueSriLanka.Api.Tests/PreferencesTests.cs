@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using RescueSriLanka.Api.DTOs.Auth;
 using RescueSriLanka.Api.Data;
+using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services;
 
@@ -32,9 +33,17 @@ public class PreferencesTests
             .UseInMemoryDatabase($"prefs-{Guid.NewGuid()}")
             .Options);
 
-    private static AuthService NewService(AppDbContext db) =>
+    /// <summary>Records what emails were asked for instead of sending them.</summary>
+    private sealed class RecordingQueue : INotificationQueue
+    {
+        public List<NotificationJob> Jobs { get; } = [];
+
+        public void Enqueue(NotificationJob job) => Jobs.Add(job);
+    }
+
+    private static AuthService NewService(AppDbContext db, RecordingQueue? queue = null) =>
         new(db, new StubTokenService(), new PasswordHasher<User>(),
-            NullLogger<AuthService>.Instance);
+            queue ?? new RecordingQueue(), NullLogger<AuthService>.Instance);
 
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
@@ -143,5 +152,74 @@ public class PreferencesTests
 
         Assert.Equal("Kandy", updated!.District);
         Assert.True(updated.EmailNotificationsEnabled);
+    }
+
+    // ------------------------------------------------------ emails triggered
+
+    private static RegisterRequest NewRegistration(string? district) => new()
+    {
+        FullName = "New Citizen",
+        Email = "New@Example.com",
+        Password = "correct-horse",
+        District = district
+    };
+
+    [Fact]
+    public async Task RegisteringQueuesAWelcomeAndStoresTheDistrictCanonically()
+    {
+        using var db = NewDb();
+        var queue = new RecordingQueue();
+
+        var response = await NewService(db, queue)
+            .RegisterCitizenAsync(NewRegistration("  nuwara-eliya "));
+
+        Assert.NotNull(response);
+        Assert.Equal("Nuwara Eliya", response.User.District);
+        Assert.Equal(
+            new NotificationJob(NotificationKind.Welcome, response.User.Id),
+            Assert.Single(queue.Jobs));
+    }
+
+    [Fact]
+    public async Task RegisteringWithAnUnknownDistrictIsRejected()
+    {
+        using var db = NewDb();
+        var queue = new RecordingQueue();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            NewService(db, queue).RegisterCitizenAsync(NewRegistration("Atlantis")));
+
+        Assert.Empty(queue.Jobs);
+        Assert.Empty(db.Users);
+    }
+
+    [Fact]
+    public async Task ChangingTheDistrictQueuesABriefing()
+    {
+        using var db = NewDb();
+        var user = await NewUserAsync(db, district: "Colombo");
+        var queue = new RecordingQueue();
+
+        await NewService(db, queue).UpdatePreferencesAsync(
+            user.Id, FromJson("""{ "district": "Kandy" }"""));
+
+        Assert.Equal(
+            new NotificationJob(NotificationKind.DistrictBriefing, user.Id),
+            Assert.Single(queue.Jobs));
+    }
+
+    [Theory]
+    [InlineData("""{ "emailNotificationsEnabled": false }""")]
+    [InlineData("""{ "district": "colombo" }""")]
+    [InlineData("""{ "district": null }""")]
+    public async Task NoBriefingUnlessTheDistrictActuallyChanges(string json)
+    {
+        using var db = NewDb();
+        var user = await NewUserAsync(db, district: "Colombo");
+        var queue = new RecordingQueue();
+
+        await NewService(db, queue).UpdatePreferencesAsync(user.Id, FromJson(json));
+
+        Assert.Empty(queue.Jobs);
     }
 }

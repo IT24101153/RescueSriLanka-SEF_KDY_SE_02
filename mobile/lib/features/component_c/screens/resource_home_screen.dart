@@ -58,20 +58,7 @@ class _ResourceHomePageState extends State<ResourceHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: const Text(
-          'Resources',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          IconButton(
-            onPressed: _loading ? null : _loadRequests,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh requests',
-          ),
-        ],
-      ),
+      appBar: AppHeader(title: 'Resources', loading: _loading),
       body: SafeArea(
         child: Column(
           children: [
@@ -113,8 +100,9 @@ class _ResourceHomePageState extends State<ResourceHomePage> {
                     requests: _requests,
                     loadingRequests: _loading,
                     onSubmitted: _loadRequests,
+                    onRefresh: _loadRequests,
                   ),
-                  DonatePage(api: _api),
+                  DonatePage(api: _api, onRefresh: _loadRequests),
                 ],
               ),
             ),
@@ -144,6 +132,7 @@ class RequestHelpPage extends StatefulWidget {
     required this.requests,
     required this.loadingRequests,
     required this.onSubmitted,
+    required this.onRefresh,
     super.key,
   });
 
@@ -151,6 +140,9 @@ class RequestHelpPage extends StatefulWidget {
   final List<HelpRequest> requests;
   final bool loadingRequests;
   final Future<void> Function() onSubmitted;
+
+  /// Pull-to-refresh on the list reloads the citizen's requests.
+  final Future<void> Function() onRefresh;
 
   @override
   State<RequestHelpPage> createState() => _RequestHelpPageState();
@@ -205,7 +197,15 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
 
   @override
   Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: widget.onRefresh,
+      child: _buildList(context),
+    );
+  }
+
+  Widget _buildList(BuildContext context) {
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.gutter,
         4,
@@ -342,9 +342,12 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
 }
 
 class DonatePage extends StatefulWidget {
-  const DonatePage({required this.api, super.key});
+  const DonatePage({required this.api, required this.onRefresh, super.key});
 
   final ResourceApi api;
+
+  /// Pull-to-refresh reloads the section, as it does on the request tab.
+  final Future<void> Function() onRefresh;
 
   @override
   State<DonatePage> createState() => _DonatePageState();
@@ -406,7 +409,15 @@ class _DonatePageState extends State<DonatePage> {
 
   @override
   Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: widget.onRefresh,
+      child: _buildList(context),
+    );
+  }
+
+  Widget _buildList(BuildContext context) {
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.gutter,
         4,

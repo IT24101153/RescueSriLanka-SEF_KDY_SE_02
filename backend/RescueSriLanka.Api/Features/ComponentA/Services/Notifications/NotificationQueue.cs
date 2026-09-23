@@ -7,10 +7,21 @@ public enum NotificationKind
     ReportReceived,
 
     /// <summary>Risk warning to everyone subscribed to the incident's district.</summary>
-    DistrictWarning
+    DistrictWarning,
+
+    /// <summary>Welcome to a citizen who has just registered.</summary>
+    Welcome,
+
+    /// <summary>Warnings already in force, to a citizen who has just chosen a district.</summary>
+    DistrictBriefing
 }
 
-public readonly record struct NotificationJob(NotificationKind Kind, Guid IncidentId);
+/// <param name="SubjectId">
+/// The incident for <see cref="NotificationKind.ReportReceived"/> and
+/// <see cref="NotificationKind.DistrictWarning"/>; the user for
+/// <see cref="NotificationKind.Welcome"/> and <see cref="NotificationKind.DistrictBriefing"/>.
+/// </param>
+public readonly record struct NotificationJob(NotificationKind Kind, Guid SubjectId);
 
 public interface INotificationQueue
 {
@@ -46,8 +57,8 @@ public class NotificationQueue(ILogger<NotificationQueue> logger) : INotificatio
         if (!_channel.Writer.TryWrite(job))
         {
             logger.LogWarning(
-                "Notification queue rejected {Kind} for incident {IncidentId}.",
-                job.Kind, job.IncidentId);
+                "Notification queue rejected {Kind} for {SubjectId}.",
+                job.Kind, job.SubjectId);
         }
     }
 }
@@ -87,9 +98,13 @@ public class NotificationWorker(
                 _ = job.Kind switch
                 {
                     NotificationKind.ReportReceived =>
-                        await notifications.SendReportReceivedAsync(job.IncidentId, stoppingToken),
+                        await notifications.SendReportReceivedAsync(job.SubjectId, stoppingToken),
+                    NotificationKind.Welcome =>
+                        await notifications.SendWelcomeAsync(job.SubjectId, stoppingToken),
+                    NotificationKind.DistrictBriefing =>
+                        await notifications.SendDistrictBriefingAsync(job.SubjectId, stoppingToken),
                     _ =>
-                        await notifications.SendDistrictWarningAsync(job.IncidentId, stoppingToken)
+                        await notifications.SendDistrictWarningAsync(job.SubjectId, stoppingToken)
                 };
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -101,8 +116,8 @@ public class NotificationWorker(
                 // A failed email must never take the worker down, or one bad
                 // address would silence every warning that follows it.
                 logger.LogError(
-                    ex, "Notification {Kind} failed for incident {IncidentId}",
-                    job.Kind, job.IncidentId);
+                    ex, "Notification {Kind} failed for {SubjectId}",
+                    job.Kind, job.SubjectId);
             }
         }
     }

@@ -6,7 +6,7 @@ using RescueSriLanka.Api.Services.Email;
 
 namespace RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 /// <summary>
-/// The two emails this platform sends. Both are built here so the wording of a
+/// Every email this platform sends. All are built here so the wording of a
 /// public safety message lives in one reviewable place rather than being
 /// assembled inside whichever service happened to trigger it.
 ///
@@ -228,6 +228,188 @@ public static class EmailTemplates
             TextBody = text
         };
     }
+
+    /// <summary>
+    /// First email a new citizen gets. Tells them what they signed up for and,
+    /// if their district is already under warning, says so up front — someone
+    /// registering during a flood is probably registering because of it.
+    /// </summary>
+    public static EmailMessage Welcome(User user, IReadOnlyList<Incident> activeWarnings)
+    {
+        var district = user.District;
+        var underWarning = district is not null && activeWarnings.Count > 0;
+
+        var subject = underWarning
+            ? $"Welcome to RescueSriLanka — {activeWarnings.Count} active warning(s) in {district}"
+            : "Welcome to RescueSriLanka";
+
+        var districtHtml = district is null
+            ? $"""
+              <p style="margin:0 0 16px">
+                You have not set a district yet, so we cannot warn you about disasters
+                near you. Open <strong style="color:{Ink}">Profile → Notification settings</strong>
+                in the app and choose where you live.
+              </p>
+              """
+            : $"""
+              <p style="margin:0 0 16px">
+                You will be emailed whenever a coordinator confirms a high-risk disaster in
+                <strong style="color:{Ink}">{Escape(district)}</strong>.
+              </p>
+              """;
+
+        var warningsHtml = underWarning
+            ? $"""
+              <p style="margin:20px 0 8px;color:{Ink};font-weight:600">
+                Warnings in force in {Escape(district!)} right now
+              </p>
+              {WarningList(activeWarnings)}
+              """
+            : string.Empty;
+
+        var html = Wrap(
+            heading: $"Welcome, {Escape(user.ShortName())}",
+            accent: underWarning ? SeverityColour(activeWarnings[0].Severity) : Brand,
+            bodyHtml: $"""
+                <p style="margin:0 0 16px">
+                  Your RescueSriLanka account is ready. With it you can report a disaster,
+                  follow it as coordinators respond, and see safe and danger zones on the map.
+                </p>
+                {districtHtml}
+                {warningsHtml}
+                <p style="margin:20px 0 0">
+                  Emergency numbers: <strong style="color:{Ink}">119</strong> Police ·
+                  <strong style="color:{Ink}">110</strong> Fire &amp; Rescue ·
+                  <strong style="color:{Ink}">1990</strong> Ambulance.
+                </p>
+                <p style="margin:16px 0 0;font-size:12.5px;color:{Body}">
+                  You can turn these emails off at any time under Profile → Notification settings.
+                </p>
+                """);
+
+        var text = new StringBuilder()
+            .AppendLine($"Welcome, {user.ShortName()}")
+            .AppendLine()
+            .AppendLine("Your RescueSriLanka account is ready. With it you can report a disaster,")
+            .AppendLine("follow it as coordinators respond, and see safe and danger zones on the map.")
+            .AppendLine()
+            .AppendLine(district is null
+                ? "You have not set a district yet, so we cannot warn you about disasters near\n"
+                  + "you. Choose where you live under Profile > Notification settings in the app."
+                : $"You will be emailed whenever a coordinator confirms a high-risk disaster in\n{district}.")
+            .AppendLine();
+
+        if (underWarning)
+        {
+            text.AppendLine($"WARNINGS IN FORCE IN {district!.ToUpperInvariant()} RIGHT NOW")
+                .AppendLine(WarningListText(activeWarnings))
+                .AppendLine();
+        }
+
+        text.AppendLine("Emergency numbers: 119 Police, 110 Fire & Rescue, 1990 Ambulance.")
+            .AppendLine()
+            .AppendLine("You can turn these emails off under Profile > Notification settings.")
+            .AppendLine()
+            .AppendLine("— RescueSriLanka");
+
+        return new EmailMessage
+        {
+            ToAddress = user.Email,
+            ToName = user.FullName,
+            Subject = subject,
+            HtmlBody = html,
+            TextBody = text.ToString()
+        };
+    }
+
+    /// <summary>
+    /// The warnings already in force in a district, for a citizen who has just
+    /// chosen it and so missed the original alerts.
+    /// </summary>
+    public static EmailMessage DistrictBriefing(
+        User recipient, string district, IReadOnlyList<Incident> activeWarnings)
+    {
+        var worst = activeWarnings[0].Severity;
+        var subject = $"{worst.ToString().ToUpperInvariant()} warning in force — "
+                      + $"{activeWarnings.Count} active in {district}";
+
+        var html = Wrap(
+            heading: $"Warnings in force in {Escape(district)}",
+            accent: SeverityColour(worst),
+            bodyHtml: $"""
+                <p style="margin:0 0 16px">Hello {Escape(recipient.ShortName())},</p>
+                <p style="margin:0 0 16px">
+                  You have just set your district to
+                  <strong style="color:{Ink}">{Escape(district)}</strong>. These warnings were
+                  confirmed there before you joined, and are still in force:
+                </p>
+                {WarningList(activeWarnings)}
+                <p style="margin:20px 0 0">
+                  Emergency numbers: <strong style="color:{Ink}">119</strong> Police ·
+                  <strong style="color:{Ink}">110</strong> Fire &amp; Rescue ·
+                  <strong style="color:{Ink}">1990</strong> Ambulance.
+                </p>
+                <p style="margin:16px 0 0;font-size:12.5px;color:{Body}">
+                  From now on you will be emailed as each new warning for {Escape(district)} is
+                  confirmed. Change your district, or turn warnings off, under
+                  Profile → Notification settings.
+                </p>
+                """);
+
+        var text = new StringBuilder()
+            .AppendLine($"WARNINGS IN FORCE — {district.ToUpperInvariant()}")
+            .AppendLine()
+            .AppendLine($"Hello {recipient.ShortName()},")
+            .AppendLine()
+            .AppendLine($"You have just set your district to {district}. These warnings were")
+            .AppendLine("confirmed there before you joined, and are still in force:")
+            .AppendLine()
+            .AppendLine(WarningListText(activeWarnings))
+            .AppendLine()
+            .AppendLine("Emergency numbers: 119 Police, 110 Fire & Rescue, 1990 Ambulance.")
+            .AppendLine()
+            .AppendLine($"You will be emailed as each new warning for {district} is confirmed.")
+            .AppendLine("Change your district, or turn warnings off, under")
+            .AppendLine("Profile > Notification settings.")
+            .AppendLine()
+            .AppendLine("— RescueSriLanka")
+            .ToString();
+
+        return new EmailMessage
+        {
+            ToAddress = recipient.Email,
+            ToName = recipient.FullName,
+            Subject = subject,
+            HtmlBody = html,
+            TextBody = text
+        };
+    }
+
+    /// <summary>
+    /// One block per incident: severity, title, and the first line of advice for
+    /// its type — enough to act on without opening the app.
+    /// </summary>
+    private static string WarningList(IReadOnlyList<Incident> warnings) =>
+        string.Join("\n", warnings.Select(incident =>
+        {
+            var colour = SeverityColour(incident.Severity);
+            return $"""
+                <div style="margin:0 0 10px;padding:10px 12px;border:1px solid {Border};
+                            border-left:4px solid {colour};border-radius:6px">
+                  <p style="margin:0;font-size:12px;font-weight:700;letter-spacing:0.06em;
+                            text-transform:uppercase;color:{colour}">
+                    {incident.Severity} · {incident.Type}
+                  </p>
+                  <p style="margin:2px 0 4px;color:{Ink};font-weight:600">{Escape(incident.Title)}</p>
+                  <p style="margin:0;font-size:13.5px;color:{Body}">{Escape(SafetyAdvice(incident.Type)[0])}</p>
+                </div>
+                """;
+        }));
+
+    private static string WarningListText(IReadOnlyList<Incident> warnings) =>
+        string.Join(Environment.NewLine, warnings.Select(incident =>
+            $"- [{incident.Severity.ToString().ToUpperInvariant()}] {incident.Type}: {incident.Title}"
+            + $"{Environment.NewLine}  {SafetyAdvice(incident.Type)[0]}"));
 
     // ---------------------------------------------------------------- layout
 

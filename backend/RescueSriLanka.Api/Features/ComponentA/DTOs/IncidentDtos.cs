@@ -100,6 +100,18 @@ public record CreateIncidentRequest
     public int? EstimatedAffectedPeople { get; init; }
 }
 
+/// <summary>
+/// A report filed together with its photo. The report can succeed while the
+/// photo does not — <see cref="PhotoError"/> says why, so the app can tell the
+/// citizen their report is safe but the picture needs sending again.
+/// </summary>
+public record CreateIncidentResponse
+{
+    public required IncidentDto Incident { get; init; }
+
+    public string? PhotoError { get; init; }
+}
+
 public record UpdateIncidentStatusRequest
 {
     [Required]

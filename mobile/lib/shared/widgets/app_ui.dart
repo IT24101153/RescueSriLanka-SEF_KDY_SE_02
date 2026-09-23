@@ -23,6 +23,56 @@ class AppSpacing {
   static const BorderRadius radius = BorderRadius.all(Radius.circular(12));
 }
 
+/// The header at the top of every section, so each tab opens the same way:
+/// same title size, weight and inset. Signing out lives on the Profile tab and
+/// reloading is a pull-to-refresh, so a header carries only actions that
+/// belong to its own screen, such as the map's zone toggle.
+///
+/// While [loading] is true a thin bar runs along its bottom edge. The 2px it
+/// needs are reserved either way, so the screen never jumps as it appears.
+class AppHeader extends StatelessWidget implements PreferredSizeWidget {
+  const AppHeader({
+    super.key,
+    required this.title,
+    this.actions,
+    this.loading = false,
+  });
+
+  final String title;
+  final List<Widget>? actions;
+  final bool loading;
+
+  static const double _barHeight = 2;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight + _barHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    return AppBar(
+      titleSpacing: 16,
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: AppColors.ink,
+        ),
+      ),
+      actions: actions,
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(_barHeight),
+        child: loading
+            ? LinearProgressIndicator(
+                semanticsLabel: 'Loading $title',
+                minHeight: _barHeight,
+              )
+            : const SizedBox(height: _barHeight),
+      ),
+    );
+  }
+}
+
 /// A bordered white card — the one container shape used everywhere.
 class AppCard extends StatelessWidget {
   const AppCard({

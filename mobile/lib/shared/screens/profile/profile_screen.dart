@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../auth/login_screen.dart';
 import '../auth/register_screen.dart';
 import 'notification_settings.dart';
+import '../../../shared/widgets/app_ui.dart';
 
 /// Profile tab. Shows who is signed in, or offers the two ways to get there.
 class ProfileScreen extends StatelessWidget {
@@ -19,7 +20,7 @@ class ProfileScreen extends StatelessWidget {
       animation: auth,
       builder: (context, _) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Profile')),
+          appBar: const AppHeader(title: 'Profile'),
           body: SafeArea(
             child: auth.isSignedIn
                 ? _SignedIn(auth: auth)

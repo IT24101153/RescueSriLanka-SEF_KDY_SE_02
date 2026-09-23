@@ -126,6 +126,19 @@ else
     builder.Services.AddScoped<IImageStore, LocalDiskImageStore>();
 }
 
+// Some Cloudinary settings but not all is a mistake, not a choice — photos
+// would quietly land on local disk instead. Say which one is missing.
+var missingCloudinary = new[]
+    {
+        ("CloudName", cloudName),
+        ("ApiKey", cloudinaryApiKey),
+        ("ApiSecret", cloudinaryApiSecret)
+    }
+    .Where(setting => string.IsNullOrWhiteSpace(setting.Item2))
+    .Select(setting => $"Cloudinary:{setting.Item1}")
+    .ToList();
+var cloudinaryHalfConfigured = missingCloudinary.Count is > 0 and < 3;
+
 // ---------------------------------------------------------------- email
 // Two notifications: a receipt to whoever files a report, and a district-wide
 // warning once a coordinator confirms a High or Critical risk.
@@ -266,6 +279,14 @@ using (var startupScope = app.Services.CreateScope())
     startupLogger.LogInformation(
         "Incident photos are stored via {Store}.",
         startupScope.ServiceProvider.GetRequiredService<IImageStore>().Name);
+
+    if (cloudinaryHalfConfigured)
+    {
+        startupLogger.LogWarning(
+            "Cloudinary is only partly configured — {Missing} is empty — so photos are "
+            + "going to local disk instead. Fill it in to upload to Cloudinary.",
+            string.Join(", ", missingCloudinary));
+    }
 
     var llm = startupScope.ServiceProvider.GetRequiredService<ILlmClient>();
     startupLogger.LogInformation(

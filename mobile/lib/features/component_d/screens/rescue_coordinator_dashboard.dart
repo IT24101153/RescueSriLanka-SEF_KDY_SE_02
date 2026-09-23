@@ -10,17 +10,9 @@ import 'ai_safety_review_screen.dart';
 import 'active_dispatches_screen.dart';
 
 class RescueCoordinatorDashboard extends StatefulWidget {
-  const RescueCoordinatorDashboard({
-    super.key,
-    required this.session,
-    required this.onLogout,
-  });
+  const RescueCoordinatorDashboard({super.key, required this.session});
 
   final AuthSession session;
-
-  /// Signing out is the app shell's business; the tab shows the sign-in
-  /// prompt again once the session is gone.
-  final VoidCallback onLogout;
 
   @override
   State<RescueCoordinatorDashboard> createState() =>
@@ -198,25 +190,7 @@ class _RescueCoordinatorDashboardState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: const Text(
-          'Rescue',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          IconButton(
-            onPressed: _isLoading ? null : _loadDashboard,
-            tooltip: 'Refresh overview',
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            onPressed: widget.onLogout,
-            tooltip: 'Log out',
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
+      appBar: AppHeader(title: 'Rescue', loading: _isLoading),
       body: SafeArea(
         child: Column(
           children: [
@@ -228,15 +202,11 @@ class _RescueCoordinatorDashboardState
                   onRetry: _isLoading ? null : _loadDashboard,
                 ),
               ),
-            if (_isLoading)
-              const LinearProgressIndicator(
-                semanticsLabel: 'Loading overview',
-                minHeight: 2,
-              ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _loadDashboard,
                 child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.gutter,
                     18,

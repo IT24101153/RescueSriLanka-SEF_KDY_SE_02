@@ -130,16 +130,48 @@ class ApiClient {
     );
   }
 
-  /// Attaches a photo to a report that already exists.
-  Future<void> uploadIncidentImage({
-    required String incidentId,
-    required File file,
-    String? caption,
+  /// Files a report and its photo in one request.
+  ///
+  /// Sent together, not one after the other, because the server starts the
+  /// analysis agent the moment a report exists — a photo that follows a
+  /// second later is one the agent never sees.
+  ///
+  /// The report can be filed while the photo is not (the image host is down,
+  /// say): [photoError] then says why, and the report still stands. A file the
+  /// server would refuse outright throws before any report is created.
+  Future<({Incident incident, String? photoError})> createIncidentWithPhoto({
+    required String title,
+    required String description,
+    required String type,
+    required double latitude,
+    required double longitude,
+    required File photo,
+    int affectedRadiusMeters = 1000,
+    String? district,
+    String? addressText,
+    int? estimatedAffectedPeople,
   }) async {
-    final request =
-        http.MultipartRequest('POST', _uri('/api/incidents/$incidentId/images'));
+    final request = http.MultipartRequest(
+      'POST',
+      _uri('/api/incidents/with-photo'),
+    );
 
-    final extension = file.path.split('.').last.toLowerCase();
+    request.fields.addAll({
+      'title': title.trim(),
+      'description': description.trim(),
+      'type': type,
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
+      'affectedRadiusMeters': affectedRadiusMeters.toString(),
+      if (district != null && district.trim().isNotEmpty)
+        'district': district.trim(),
+      if (addressText != null && addressText.trim().isNotEmpty)
+        'addressText': addressText.trim(),
+      if (estimatedAffectedPeople != null)
+        'estimatedAffectedPeople': estimatedAffectedPeople.toString(),
+    });
+
+    final extension = photo.path.split('.').last.toLowerCase();
     final subtype = switch (extension) {
       'png' => 'png',
       'webp' => 'webp',
@@ -150,17 +182,19 @@ class ApiClient {
     request.files.add(
       await http.MultipartFile.fromPath(
         // Must match the IFormFile parameter name on the controller.
-        'file',
-        file.path,
+        'photo',
+        photo.path,
         contentType: MediaType('image', subtype),
       ),
     );
 
-    if (caption != null && caption.trim().isNotEmpty) {
-      request.fields['caption'] = caption.trim();
-    }
+    final response = await _send(request, timeout: _uploadTimeout);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
 
-    await _send(request, timeout: _uploadTimeout);
+    return (
+      incident: Incident.fromJson(body['incident'] as Map<String, dynamic>),
+      photoError: body['photoError'] as String?,
+    );
   }
 
   // ---------------------------------------------------------------- plumbing
