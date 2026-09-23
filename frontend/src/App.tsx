@@ -1,20 +1,28 @@
 import { useState } from 'react'
-import { clearSession, getSession } from './auth/session'
-import type { Session } from './auth/session'
-import LoginPage from './pages/Login/LoginPage'
-import Dashboard from './pages/Dashboard/Dashboard'
-import RescueCoordinatorDashboard from './pages/RescueCoordinator/RescueCoordinatorDashboard'
+import { BrowserRouter } from 'react-router-dom'
+import LoginPage from './shared/pages/Login/LoginPage'
+import ConsoleShell from './shared/layout/ConsoleShell'
+import { clearSession, getSession } from './shared/auth/session'
+import type { Session } from './shared/auth/session'
 
-export default function App() {
+function App() {
   const [session, setSession] = useState<Session | null>(() => getSession())
-  const signOut = () => {
+
+  function handleSignOut() {
     clearSession()
     setSession(null)
   }
 
-  if (!session) return <LoginPage onSignedIn={setSession} />
+  if (!session) {
+    return <LoginPage onSignedIn={setSession} />
+  }
 
-  return session.user.role === 'EmergencyCoordinator'
-    ? <RescueCoordinatorDashboard user={session.user} onLogout={signOut} />
-    : <Dashboard role={session.user.role} />
+  // The console's pages (incident map, help requests, …) are URL routes.
+  return (
+    <BrowserRouter>
+      <ConsoleShell session={session} onSignOut={handleSignOut} />
+    </BrowserRouter>
+  )
 }
+
+export default App

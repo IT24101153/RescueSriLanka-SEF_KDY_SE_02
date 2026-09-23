@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.DTOs.Auth;
@@ -11,6 +12,13 @@ public interface IAuthService
     Task<AuthResponse?> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default);
     Task<AuthResponse?> RegisterCitizenAsync(RegisterRequest request, CancellationToken cancellationToken = default);
     Task<User?> FindByIdAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <returns>
+    /// The updated user, or null when the account is gone. Throws
+    /// <see cref="ArgumentException"/> when the district is not one of Sri Lanka's.
+    /// </returns>
+    Task<User?> UpdatePreferencesAsync(
+        Guid id, UpdatePreferencesRequest request, CancellationToken cancellationToken = default);
 }
 
 public class AuthService(
@@ -98,6 +106,61 @@ public class AuthService(
 
     public Task<User?> FindByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         db.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+
+    /// <summary>
+    /// Sets the district a citizen wants warnings for, and whether they want
+    /// email at all. The district is stored in its canonical spelling — warnings
+    /// are matched on that string, so accepting "colombo" verbatim would leave
+    /// someone quietly subscribed to a district that never matches.
+    /// </summary>
+    public async Task<User?> UpdatePreferencesAsync(
+        Guid id,
+        UpdatePreferencesRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        if (user is null) return null;
+
+        // Omitted leaves the district alone; an explicit null clears it. See
+        // UpdatePreferencesRequest.District for why this is not a string?.
+        switch (request.District.ValueKind)
+        {
+            case JsonValueKind.Undefined:
+                break;
+
+            case JsonValueKind.Null:
+                user.District = null;
+                break;
+
+            case JsonValueKind.String:
+                var name = request.District.GetString();
+                user.District = string.IsNullOrWhiteSpace(name)
+                    ? null
+                    : SriLankaDistricts.Normalise(name)
+                      ?? throw new ArgumentException(
+                          $"'{name}' is not a district of Sri Lanka.");
+                break;
+
+            default:
+                throw new ArgumentException(
+                    "district must be a district name or null.");
+        }
+
+        if (request.EmailNotificationsEnabled is bool enabled)
+        {
+            user.EmailNotificationsEnabled = enabled;
+        }
+
+        user.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Updated notification settings for {Email}: district {District}, email {State}",
+            user.Email, user.District ?? "(none)",
+            user.EmailNotificationsEnabled ? "on" : "off");
+
+        return user;
+    }
 
     private AuthResponse BuildResponse(User user)
     {

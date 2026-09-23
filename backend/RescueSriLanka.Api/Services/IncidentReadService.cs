@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
-using RescueSriLanka.Api.DTOs.Incidents;
-using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Features.ComponentA.DTOs;
+using RescueSriLanka.Api.Features.ComponentA.Models;
 
 namespace RescueSriLanka.Api.Services;
 

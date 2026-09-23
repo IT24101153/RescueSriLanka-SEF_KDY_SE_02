@@ -1,8 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using RescueSriLanka.Api.Controllers;
+﻿using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
-using RescueSriLanka.Api.DTOs.Incidents;
+using RescueSriLanka.Api.Features.ComponentA.DTOs;
+using RescueSriLanka.Api.Features.ComponentA.Models;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services;
 using Xunit;
@@ -27,8 +26,7 @@ public class IncidentReadTests
         db.Incidents.AddRange(CreateIncident(), CreateIncident(false));
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
-        var response = await new IncidentsController(new IncidentReadService(db)).List();
-        var rows = Assert.IsAssignableFrom<IReadOnlyList<IncidentDto>>(Assert.IsType<OkObjectResult>(response.Result).Value);
+        var rows = await new IncidentReadService(db).QueryAsync();
         Assert.True(Assert.Single(rows).IsActive);
         Assert.Empty(db.ChangeTracker.Entries());
     }
@@ -53,9 +51,9 @@ public class IncidentReadTests
         db.Incidents.Add(incident);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
-        var response = await new IncidentsController(new IncidentReadService(db)).Get(incident.Id);
-        var dto = Assert.IsType<IncidentDto>(Assert.IsType<OkObjectResult>(response.Result).Value);
-        Assert.Equal(incident.Id, dto.Id);
+        var dto = await new IncidentReadService(db).GetAsync(incident.Id);
+        Assert.NotNull(dto);
+        Assert.Equal(incident.Id, dto!.Id);
         Assert.Equal(1, dto.ImageCount);
         Assert.Equal("/uploads/test.jpg", Assert.Single(dto.Images).Url);
         Assert.Empty(db.ChangeTracker.Entries());
@@ -65,8 +63,7 @@ public class IncidentReadTests
     public async Task MissingIdReturns404()
     {
         await using var db = CreateDb();
-        var response = await new IncidentsController(new IncidentReadService(db)).Get(Guid.NewGuid());
-        Assert.IsType<NotFoundResult>(response.Result);
+        Assert.Null(await new IncidentReadService(db).GetAsync(Guid.NewGuid()));
     }
 
     [Fact]
