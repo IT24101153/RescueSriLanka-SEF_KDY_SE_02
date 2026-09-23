@@ -8,14 +8,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
 {
     [ApiController]
     [Route("api/agentworkflows")]
-    public class AgentWorkflowsController : ControllerBase
+    public class AgentWorkflowsController(IPlannerAgentService plannerAgent) : ControllerBase
     {
-        private readonly IPlannerAgentService _plannerAgent;
-
-        public AgentWorkflowsController(IPlannerAgentService plannerAgent)
-        {
-            _plannerAgent = plannerAgent;
-        }
+        private readonly IPlannerAgentService _plannerAgent = plannerAgent;
 
         // POST /api/agentworkflows/trigger
         // Starts a new workflow for a given HelpRequest (or Incident, once that exists).

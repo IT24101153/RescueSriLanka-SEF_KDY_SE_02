@@ -36,10 +36,11 @@ public class PreferencesTests
         new(db, new StubTokenService(), new PasswordHasher<User>(),
             NullLogger<AuthService>.Instance);
 
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
     /// <summary>Builds the request as the JSON body would actually arrive.</summary>
     private static UpdatePreferencesRequest FromJson(string json) =>
-        JsonSerializer.Deserialize<UpdatePreferencesRequest>(
-            json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        JsonSerializer.Deserialize<UpdatePreferencesRequest>(json, WebJson)!;
 
     private static async Task<User> NewUserAsync(AppDbContext db, string? district = "Colombo")
     {

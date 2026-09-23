@@ -22,16 +22,12 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
     // analysis and credibility signal for a citizen's help request description.
     // Source: leader's direction — Gemini free tier, replacing the originally
     // proposed Ollama for the no-cost LLM requirement.
-    public class GeminiAnalysisService : IAiAnalysisService
+    public class GeminiAnalysisService(HttpClient http, IConfiguration config) : IAiAnalysisService
     {
-        private readonly HttpClient _http;
-        private readonly IConfiguration _config;
+        private static readonly JsonSerializerOptions CaseInsensitive = new() { PropertyNameCaseInsensitive = true };
 
-        public GeminiAnalysisService(HttpClient http, IConfiguration config)
-        {
-            _http = http;
-            _config = config;
-        }
+        private readonly HttpClient _http = http;
+        private readonly IConfiguration _config = config;
 
         public async Task<AiAnalysisResult?> AnalyzeHelpRequestAsync(string type, string description, int urgencyScore)
         {
@@ -94,10 +90,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 // Gemini sometimes wraps JSON in ```json fences despite instructions — strip if present.
                 var cleaned = text.Trim().Trim('`').Replace("json", "", StringComparison.OrdinalIgnoreCase).Trim();
 
-                var parsed = JsonSerializer.Deserialize<AiAnalysisResult>(cleaned, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                var parsed = JsonSerializer.Deserialize<AiAnalysisResult>(cleaned, CaseInsensitive);
 
                 return parsed;
             }

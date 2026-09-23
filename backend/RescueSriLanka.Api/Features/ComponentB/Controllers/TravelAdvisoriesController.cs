@@ -8,14 +8,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class TravelAdvisoriesController : ControllerBase
+    public class TravelAdvisoriesController(ITravelAdvisoryService service) : ControllerBase
     {
-        private readonly ITravelAdvisoryService _service;
-
-        public TravelAdvisoriesController(ITravelAdvisoryService service)
-        {
-            _service = service;
-        }
+        private readonly ITravelAdvisoryService _service = service;
 
         // POST /api/traveladvisories
         // Coordinator registers a new advisory (e.g. "flooding near Kalutara town centre")

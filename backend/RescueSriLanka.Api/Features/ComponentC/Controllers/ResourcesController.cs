@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RescueSriLanka.Api.Features.ComponentC.DTOs;
 using RescueSriLanka.Api.Features.ComponentC.Services;
+using RescueSriLanka.Api.Models;
 
 namespace RescueSriLanka.Api.Features.ComponentC.Controllers;
 
@@ -8,10 +10,17 @@ namespace RescueSriLanka.Api.Features.ComponentC.Controllers;
 [Route("api/resources")]
 public class ResourcesController(IResourceManagementService resourceService) : ControllerBase
 {
+    // Changing stock, shelters and allocations is staff work. Reads stay open,
+    // as do the citizen-facing resource request and donation posts, which the
+    // Flutter app sends without an account.
+    private const string Managers =
+        nameof(UserRole.ResourceManager) + "," + nameof(UserRole.EmergencyCoordinator);
+
     [HttpGet("shelters")]
     public async Task<IActionResult> GetShelters(CancellationToken cancellationToken) =>
         Ok(await resourceService.GetSheltersAsync(cancellationToken));
 
+    [Authorize(Roles = Managers)]
     [HttpPost("shelters")]
     public async Task<IActionResult> CreateShelter(
         CreateShelterRequest request,
@@ -28,6 +37,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         }
     }
 
+    [Authorize(Roles = Managers)]
     [HttpPut("shelters/{id:guid}")]
     public async Task<IActionResult> UpdateShelter(Guid id, UpdateShelterRequest request, CancellationToken cancellationToken)
     {
@@ -39,6 +49,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
     }
 
+    [Authorize(Roles = Managers)]
     [HttpDelete("shelters/{id:guid}")]
     public async Task<IActionResult> DeleteShelter(Guid id, CancellationToken cancellationToken) =>
         await resourceService.DeleteShelterAsync(id, cancellationToken) ? NoContent() : NotFound(new { error = "Shelter was not found." });
@@ -47,6 +58,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
     public async Task<IActionResult> GetMedicalSupplies(CancellationToken cancellationToken) =>
         Ok(await resourceService.GetMedicalSuppliesAsync(cancellationToken));
 
+    [Authorize(Roles = Managers)]
     [HttpPost("medical-supplies")]
     public async Task<IActionResult> CreateMedicalSupply(
         CreateMedicalSupplyRequest request,
@@ -63,6 +75,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         }
     }
 
+    [Authorize(Roles = Managers)]
     [HttpPut("medical-supplies/{id:guid}")]
     public async Task<IActionResult> UpdateMedicalSupply(Guid id, UpdateMedicalSupplyRequest request, CancellationToken cancellationToken)
     {
@@ -74,6 +87,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
     }
 
+    [Authorize(Roles = Managers)]
     [HttpDelete("medical-supplies/{id:guid}")]
     public async Task<IActionResult> DeleteMedicalSupply(Guid id, CancellationToken cancellationToken) =>
         await resourceService.DeleteMedicalSupplyAsync(id, cancellationToken) ? NoContent() : NotFound(new { error = "Medical supply was not found." });
@@ -82,6 +96,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
     public async Task<IActionResult> GetFoodWaterStock(CancellationToken cancellationToken) =>
         Ok(await resourceService.GetFoodWaterStockAsync(cancellationToken));
 
+    [Authorize(Roles = Managers)]
     [HttpPost("food-water-stock")]
     public async Task<IActionResult> CreateFoodWaterStock(
         CreateFoodWaterStockRequest request,
@@ -98,6 +113,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         }
     }
 
+    [Authorize(Roles = Managers)]
     [HttpPut("food-water-stock/{id:guid}")]
     public async Task<IActionResult> UpdateFoodWaterStock(Guid id, UpdateFoodWaterStockRequest request, CancellationToken cancellationToken)
     {
@@ -109,6 +125,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
     }
 
+    [Authorize(Roles = Managers)]
     [HttpDelete("food-water-stock/{id:guid}")]
     public async Task<IActionResult> DeleteFoodWaterStock(Guid id, CancellationToken cancellationToken) =>
         await resourceService.DeleteFoodWaterStockAsync(id, cancellationToken) ? NoContent() : NotFound(new { error = "Food/water stock was not found." });
@@ -117,6 +134,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
     public async Task<IActionResult> GetLowStockAlerts(CancellationToken cancellationToken) =>
         Ok(await resourceService.GetLowStockAlertsAsync(cancellationToken));
 
+    [Authorize(Roles = Managers)]
     [HttpPost("allocations")]
     public async Task<IActionResult> Allocate(
         AllocateResourceRequest request,
@@ -141,6 +159,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         }
     }
 
+    [Authorize(Roles = Managers)]
     [HttpPost("allocations/match")]
     public async Task<IActionResult> MatchAndAllocate(
         MatchResourceRequest request,
@@ -161,6 +180,7 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         }
     }
 
+    [Authorize(Roles = Managers)]
     [HttpPost("allocations/{allocationId:guid}/release")]
     public async Task<IActionResult> Release(
         Guid allocationId,

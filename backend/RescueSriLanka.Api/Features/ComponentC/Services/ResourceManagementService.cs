@@ -259,7 +259,7 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
                 stock.Unit))
             .ToListAsync(cancellationToken);
 
-        return supplyAlerts.Concat(stockAlerts).ToList();
+        return [.. supplyAlerts.Concat(stockAlerts)];
     }
 
     public async Task<HelpRequestResponse> CreateHelpRequestAsync(
@@ -291,12 +291,11 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
     }
 
     public async Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken) =>
-        (await dbContext.ResourceHelpRequests
+        [.. (await dbContext.ResourceHelpRequests
             .AsNoTracking()
             .OrderByDescending(request => request.CreatedAtUtc)
             .ToListAsync(cancellationToken))
-        .Select(ToResponse)
-        .ToList();
+        .Select(ToResponse)];
 
     public async Task<DonationResponse> CreateDonationAsync(
         CreateDonationRequest request,
@@ -328,12 +327,11 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
     }
 
     public async Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken) =>
-        (await dbContext.Donations
+        [.. (await dbContext.Donations
             .AsNoTracking()
             .OrderByDescending(donation => donation.CreatedAtUtc)
             .ToListAsync(cancellationToken))
-        .Select(ToResponse)
-        .ToList();
+        .Select(ToResponse)];
 
     private static HelpRequestResponse ToResponse(HelpRequest request) => new(
         request.Id,
@@ -407,7 +405,7 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
         }
 
         var resourceType = request.ResourceType.Trim();
-        Guid? resourceId = resourceType.ToLowerInvariant() switch
+        Guid resourceId = resourceType.ToLowerInvariant() switch
         {
             "shelter" => await dbContext.Shelters
                 .Where(shelter => shelter.IsActive && shelter.Capacity - shelter.OccupiedCapacity >= request.Quantity)
@@ -425,17 +423,12 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
                 .Select(stock => (Guid?)stock.Id)
                 .FirstOrDefaultAsync(cancellationToken),
             _ => throw new ArgumentException("Resource type must be Shelter, MedicalSupply, or FoodWaterStock.")
-        };
-
-        if (resourceId is null)
-        {
-            throw new InvalidOperationException("No active resource has enough availability.");
-        }
+        } ?? throw new InvalidOperationException("No active resource has enough availability.");
 
         return await AllocateAsync(
             new AllocateResourceRequest(
                 resourceType,
-                resourceId.Value,
+                resourceId,
                 request.Quantity,
                 request.HelpRequestId,
                 request.IncidentId),
@@ -486,12 +479,8 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
 
         var shelter = await dbContext.Shelters.SingleOrDefaultAsync(
             item => item.Id == request.ResourceId && item.IsActive,
-            cancellationToken);
-
-        if (shelter is null)
-        {
-            throw new KeyNotFoundException("Shelter was not found.");
-        }
+            cancellationToken)
+            ?? throw new KeyNotFoundException("Shelter was not found.");
 
         if (shelter.AvailableCapacity < request.Quantity)
         {
@@ -510,12 +499,8 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
 
         var supply = await dbContext.MedicalSupplies.SingleOrDefaultAsync(
             item => item.Id == request.ResourceId && item.IsActive,
-            cancellationToken);
-
-        if (supply is null)
-        {
-            throw new KeyNotFoundException("Medical supply was not found.");
-        }
+            cancellationToken)
+            ?? throw new KeyNotFoundException("Medical supply was not found.");
 
         if (supply.QuantityOnHand < request.Quantity)
         {
@@ -530,12 +515,8 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
     {
         var stock = await dbContext.FoodWaterStocks.SingleOrDefaultAsync(
             item => item.Id == request.ResourceId && item.IsActive,
-            cancellationToken);
-
-        if (stock is null)
-        {
-            throw new KeyNotFoundException("Food/water stock item was not found.");
-        }
+            cancellationToken)
+            ?? throw new KeyNotFoundException("Food/water stock item was not found.");
 
         if (stock.QuantityOnHand < request.Quantity)
         {

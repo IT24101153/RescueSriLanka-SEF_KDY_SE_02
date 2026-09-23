@@ -106,11 +106,10 @@ public class TestmailOptions
     /// </summary>
     public static string TagFor(string emailAddress)
     {
-        var tag = new string(emailAddress
+        var tag = new string([.. emailAddress
             .ToLowerInvariant()
             .Where(char.IsLetterOrDigit)
-            .Take(32)
-            .ToArray());
+            .Take(32)]);
 
         return tag.Length == 0 ? "unknown" : tag;
     }

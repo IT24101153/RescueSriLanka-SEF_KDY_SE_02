@@ -39,6 +39,6 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation property
-        public ICollection<RequestStatusHistory> StatusHistory { get; set; } = new List<RequestStatusHistory>();
+        public ICollection<RequestStatusHistory> StatusHistory { get; set; } = [];
     }
 }

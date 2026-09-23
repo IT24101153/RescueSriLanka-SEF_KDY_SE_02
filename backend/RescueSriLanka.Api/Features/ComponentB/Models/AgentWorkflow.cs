@@ -35,7 +35,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-        public ICollection<AgentStep> Steps { get; set; } = new List<AgentStep>();
+        public ICollection<AgentStep> Steps { get; set; } = [];
     }
 
     public class AgentStep

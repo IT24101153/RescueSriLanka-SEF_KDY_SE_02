@@ -105,7 +105,6 @@ public class GoogleAiClient(
             : 3;
 
         HttpResponseMessage? response = null;
-        string? lastDetail = null;
 
         for (var attempt = 1; attempt <= attempts; attempt++)
         {
@@ -127,7 +126,7 @@ public class GoogleAiClient(
 
             if (response.IsSuccessStatusCode) break;
 
-            lastDetail = await response.Content.ReadAsStringAsync(ct);
+            var lastDetail = await response.Content.ReadAsStringAsync(ct);
             var transient = (int)response.StatusCode is 429 or 500 or 502 or 503 or 504;
 
             if (!transient || attempt == attempts)

@@ -26,7 +26,7 @@ public class SafetyZoneService(AppDbContext db, ILogger<SafetyZoneService> logge
             .OrderBy(zone => zone.Status)
             .ToListAsync(ct);
 
-        return zones.Select(SafetyZoneDto.FromZone).ToList();
+        return [.. zones.Select(SafetyZoneDto.FromZone)];
     }
 
     /// <summary>The worst zone containing the point wins — caution never masks danger.</summary>
@@ -67,7 +67,7 @@ public class SafetyZoneService(AppDbContext db, ILogger<SafetyZoneService> logge
             Status = status.ToString(),
             Latitude = latitude,
             Longitude = longitude,
-            MatchingZones = matching.Select(SafetyZoneDto.FromZone).ToList(),
+            MatchingZones = [.. matching.Select(SafetyZoneDto.FromZone)],
             NearbyIncidentCount = nearbyIncidents,
             Message = message
         };

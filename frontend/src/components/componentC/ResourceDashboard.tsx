@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react'
+import { getSession } from '../../shared/auth/session'
 import './ResourceDashboard.css'
+
+/**
+ * Creating, changing and deleting resources is staff work, so those calls
+ * carry the signed-in Resource Manager's token. Reads stay anonymous.
+ */
+function authHeaders(base?: Record<string, string>): Record<string, string> {
+  const token = getSession()?.token
+  return { ...(base ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+}
 
 type Shelter = { id: string; name: string; address: string; latitude: number; longitude: number; capacity: number; occupiedCapacity: number }
 type Supply = { id: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number }
@@ -67,7 +77,7 @@ function ResourceDashboard() {
     try {
       const response = await fetch(editingId ? `/api/resources/shelters/${editingId}` : '/api/resources/shelters', {
         method: editingId ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           name: shelterForm.name,
           address: shelterForm.address,
@@ -102,7 +112,7 @@ function ResourceDashboard() {
       ? { name: supplyForm.name, unit: supplyForm.unit, quantityOnHand: Number(supplyForm.quantityOnHand), lowStockThreshold: Number(supplyForm.lowStockThreshold) }
       : { itemName: stockForm.itemName, unit: stockForm.unit, quantityOnHand: Number(stockForm.quantityOnHand), lowStockThreshold: Number(stockForm.lowStockThreshold) }
     try {
-      const response = await fetch(editingId ? `/api/resources/${path}/${editingId}` : `/api/resources/${path}`, { method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const response = await fetch(editingId ? `/api/resources/${path}/${editingId}` : `/api/resources/${path}`, { method: editingId ? 'PUT' : 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string; title?: string } | null
         throw new Error(result?.error ?? result?.title ?? `Unable to create ${isMedical ? 'the medical supply' : 'the food or water stock'}.`)
@@ -172,7 +182,7 @@ function ResourceDashboard() {
     setError('')
     try {
       const path = type === 'shelter' ? 'shelters' : type === 'medical' ? 'medical-supplies' : 'food-water-stock'
-      const response = await fetch(`/api/resources/${path}/${id}`, { method: 'DELETE' })
+      const response = await fetch(`/api/resources/${path}/${id}`, { method: 'DELETE', headers: authHeaders() })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string } | null
         throw new Error(result?.error ?? `Unable to remove ${label}.`)

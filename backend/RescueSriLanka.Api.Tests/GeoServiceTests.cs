@@ -70,13 +70,13 @@ public class GeoServiceTests
     [Fact]
     public void BoundingBox_GrowsWithTheRadius()
     {
-        var small = GeoService.BoundingBox(ColomboLat, ColomboLon, 10);
+        var (MinLat, MaxLat, MinLon, MaxLon) = GeoService.BoundingBox(ColomboLat, ColomboLon, 10);
         var large = GeoService.BoundingBox(ColomboLat, ColomboLon, 100);
 
-        Assert.True(large.MaxLat > small.MaxLat);
-        Assert.True(large.MinLat < small.MinLat);
-        Assert.True(large.MaxLon > small.MaxLon);
-        Assert.True(large.MinLon < small.MinLon);
+        Assert.True(large.MaxLat > MaxLat);
+        Assert.True(large.MinLat < MinLat);
+        Assert.True(large.MaxLon > MaxLon);
+        Assert.True(large.MinLon < MinLon);
     }
 
     [Fact]

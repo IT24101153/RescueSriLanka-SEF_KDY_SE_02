@@ -28,27 +28,20 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
     // call to that agent's endpoint once the team's tool contracts are confirmed (see the
     // Agentic AI Contract Questions document). The Safety Validation step is NOT a placeholder —
     // it's real, working deterministic validation against this project's own data.
-    public class PlannerAgentService : IPlannerAgentService
+    public class PlannerAgentService(AppDbContext db, IHelpRequestServiceForAgent helpRequestLookup, IAiAnalysisService aiAnalysis) : IPlannerAgentService
     {
-        private readonly AppDbContext _db;
-        private readonly IHelpRequestServiceForAgent _helpRequestLookup;
-        private readonly IAiAnalysisService _aiAnalysis;
+        private readonly AppDbContext _db = db;
+        private readonly IHelpRequestServiceForAgent _helpRequestLookup = helpRequestLookup;
+        private readonly IAiAnalysisService _aiAnalysis = aiAnalysis;
 
         // PLACEHOLDER reference dataset for the Resource & Logistics step, standing in for
         // Student C's real Shelter/MedicalSupply table until it exists.
         private static readonly (string Name, double Lat, double Lng)[] KnownFacilities =
-        {
+        [
             ("Colombo National Hospital", 6.9214, 79.8621),
             ("Kalutara District Hospital", 6.5854, 79.9607),
             ("Ratnapura General Hospital", 6.6828, 80.4012),
-        };
-
-        public PlannerAgentService(AppDbContext db, IHelpRequestServiceForAgent helpRequestLookup, IAiAnalysisService aiAnalysis)
-        {
-            _db = db;
-            _helpRequestLookup = helpRequestLookup;
-            _aiAnalysis = aiAnalysis;
-        }
+        ];
 
         public async Task<AgentWorkflowResponseDto> TriggerAsync(TriggerWorkflowDto dto)
         {
@@ -64,24 +57,21 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 
             var steps = new List<AgentStep>
             {
-                new AgentStep
-                {
+                new() {
                     StepNumber = 1,
                     TargetAgent = AgentType.IncidentAnalysisAgent,
                     Action = "ClassifySeverityAndZone",
                     InputParamsJson = objectiveSnapshotJson,
                     Status = StepStatus.Pending
                 },
-                new AgentStep
-                {
+                new() {
                     StepNumber = 2,
                     TargetAgent = AgentType.ResourceLogisticsPlanningAgent,
                     Action = "FindResourcesAndRoute",
                     InputParamsJson = objectiveSnapshotJson,
                     Status = StepStatus.Pending
                 },
-                new AgentStep
-                {
+                new() {
                     StepNumber = 3,
                     TargetAgent = AgentType.SafetyValidationAgent,
                     Action = "ValidatePlan",
@@ -294,7 +284,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             ApprovalNotes = w.ApprovalNotes,
             FinalOutcomeJson = w.FinalOutcomeJson,
             CreatedAt = w.CreatedAt,
-            Steps = w.Steps
+            Steps = [.. w.Steps
                 .OrderBy(s => s.StepNumber)
                 .Select(s => new AgentStepDto
                 {
@@ -306,7 +296,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                     ToolResultJson = s.ToolResultJson,
                     ValidationResultJson = s.ValidationResultJson,
                     Status = s.Status
-                }).ToList()
+                })]
         };
     }
 
@@ -315,14 +305,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
         Task<string> GetSnapshotJsonAsync(WorkflowObjectiveType type, Guid objectiveId);
     }
 
-    public class HelpRequestServiceForAgent : IHelpRequestServiceForAgent
+    public class HelpRequestServiceForAgent(AppDbContext db) : IHelpRequestServiceForAgent
     {
-        private readonly AppDbContext _db;
-
-        public HelpRequestServiceForAgent(AppDbContext db)
-        {
-            _db = db;
-        }
+        private readonly AppDbContext _db = db;
 
         public async Task<string> GetSnapshotJsonAsync(WorkflowObjectiveType type, Guid objectiveId)
         {

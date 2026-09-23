@@ -45,7 +45,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
     // Request: either one point (area check) or several (route check)
     public class SafetyCheckRequestDto
     {
-        public List<GeoPointDto> Points { get; set; } = new();
+        public List<GeoPointDto> Points { get; set; } = [];
     }
 
     // Response: the worst safety level found across all points/advisories, plus why
@@ -54,6 +54,6 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
         [JsonConverter(typeof(JsonNumberEnumConverter<SafetyLevel>))]
         public SafetyLevel OverallSafetyLevel { get; set; }
         public string Reason { get; set; } = string.Empty;
-        public List<TravelAdvisoryResponseDto> MatchedAdvisories { get; set; } = new();
+        public List<TravelAdvisoryResponseDto> MatchedAdvisories { get; set; } = [];
     }
 }

@@ -20,14 +20,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
         Task<HelpRequestResponseDto?> VerifyAsync(Guid id, Guid verifiedByUserId, VerifyHelpRequestDto dto);
     }
 
-    public class HelpRequestService : IHelpRequestService
+    public class HelpRequestService(AppDbContext db) : IHelpRequestService
     {
-        private readonly AppDbContext _db;
-
-        public HelpRequestService(AppDbContext db)
-        {
-            _db = db;
-        }
+        private readonly AppDbContext _db = db;
 
         public async Task<HelpRequestResponseDto> CreateAsync(Guid citizenId, CreateHelpRequestDto dto)
         {
@@ -65,7 +60,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 .ThenByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
-            return entities.Select(ToDto).ToList();
+            return [.. entities.Select(ToDto)];
         }
 
         public async Task<List<HelpRequestResponseDto>> GetByCitizenAsync(Guid citizenId)
@@ -75,7 +70,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
-            return entities.Select(ToDto).ToList();
+            return [.. entities.Select(ToDto)];
         }
 
         public async Task<HelpRequestResponseDto?> UpdateStatusAsync(Guid id, Guid changedByUserId, UpdateHelpRequestStatusDto dto)
@@ -133,18 +128,18 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 .OrderBy(h => h.ChangedAt)
                 .ToListAsync();
 
-            return history.Select(h => new StatusHistoryDto
+            return [.. history.Select(h => new StatusHistoryDto
             {
                 OldStatus = h.OldStatus,
                 NewStatus = h.NewStatus,
                 Notes = h.Notes,
                 ChangedAt = h.ChangedAt
-            }).ToList();
+            })];
         }
 
         // Business-specific operation: urgency scoring.
         // Simple, transparent, explainable rule-based formula — easy to justify in the viva.
-        private async Task<int> CalculateUrgencyScoreAsync(HelpRequest request)
+        private static async Task<int> CalculateUrgencyScoreAsync(HelpRequest request)
         {
             int score = request.Type switch
             {

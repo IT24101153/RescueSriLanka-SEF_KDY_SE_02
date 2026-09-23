@@ -54,7 +54,7 @@ public class IncidentService(
             .ThenByDescending(incident => incident.ReportedAt)
             .ToListAsync(ct);
 
-        return incidents.Select(incident => IncidentDto.FromIncident(incident)).ToList();
+        return [.. incidents.Select(incident => IncidentDto.FromIncident(incident))];
     }
 
     public async Task<IncidentDto?> GetAsync(Guid id, CancellationToken ct = default)
@@ -82,7 +82,7 @@ public class IncidentService(
                 incident.Longitude >= minLon && incident.Longitude <= maxLon)
             .ToListAsync(ct);
 
-        return candidates
+        return [.. candidates
             .Select(incident => new
             {
                 Incident = incident,
@@ -91,8 +91,7 @@ public class IncidentService(
             })
             .Where(row => row.Distance <= radiusKm)
             .OrderBy(row => row.Distance)
-            .Select(row => IncidentDto.FromIncident(row.Incident, Math.Round(row.Distance, 2)))
-            .ToList();
+            .Select(row => IncidentDto.FromIncident(row.Incident, Math.Round(row.Distance, 2)))];
     }
 
     public async Task<IncidentDto> CreateAsync(

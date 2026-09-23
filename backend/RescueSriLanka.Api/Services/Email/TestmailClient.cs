@@ -85,7 +85,7 @@ public class TestmailClient(
                 return [];
             }
 
-            return (payload.Emails ?? [])
+            return [.. (payload.Emails ?? [])
                 .Select(email => new TestmailMessage
                 {
                     Id = email.Id ?? string.Empty,
@@ -95,8 +95,7 @@ public class TestmailClient(
                     // testmail timestamps are milliseconds since the epoch.
                     ReceivedAt = DateTimeOffset.FromUnixTimeMilliseconds(email.Timestamp).UtcDateTime,
                     Text = email.Text
-                })
-                .ToList();
+                })];
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

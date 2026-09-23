@@ -39,7 +39,7 @@ public class AgentRunService(
             .Take(Math.Clamp(take, 1, 200))
             .ToListAsync(ct);
 
-        return runs.Select(AgentRunDto.FromRun).ToList();
+        return [.. runs.Select(AgentRunDto.FromRun)];
     }
 
     public async Task<AgentRunDto?> ApproveAsync(

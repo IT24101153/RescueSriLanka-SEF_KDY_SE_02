@@ -16,29 +16,21 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class HelpRequestsController : ControllerBase
+    public class HelpRequestsController(
+        IHelpRequestService service,
+        IAiAnalysisService aiAnalysis,
+        AppDbContext db,
+        IPlannerAgentService plannerAgent) : ControllerBase
     {
         // Either coordinator may triage help requests; the web console sends
         // HelpRequestManager accounts to the Help request dashboard.
         private const string Coordinators =
             nameof(UserRole.EmergencyCoordinator) + "," + nameof(UserRole.HelpRequestManager);
 
-        private readonly IHelpRequestService _service;
-        private readonly IAiAnalysisService _aiAnalysis;
-        private readonly AppDbContext _db;
-        private readonly IPlannerAgentService _plannerAgent;
-
-        public HelpRequestsController(
-            IHelpRequestService service,
-            IAiAnalysisService aiAnalysis,
-            AppDbContext db,
-            IPlannerAgentService plannerAgent)
-        {
-            _service = service;
-            _aiAnalysis = aiAnalysis;
-            _db = db;
-            _plannerAgent = plannerAgent;
-        }
+        private readonly IHelpRequestService _service = service;
+        private readonly IAiAnalysisService _aiAnalysis = aiAnalysis;
+        private readonly AppDbContext _db = db;
+        private readonly IPlannerAgentService _plannerAgent = plannerAgent;
 
         // POST /api/helprequests
         // Citizen/tourist submits a new help request (Flutter app). Requires login.

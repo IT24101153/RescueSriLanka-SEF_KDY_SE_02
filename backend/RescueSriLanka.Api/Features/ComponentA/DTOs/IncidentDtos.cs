@@ -61,10 +61,9 @@ public record IncidentDto
         ReportedAt = incident.ReportedAt,
         ResolvedAt = incident.ResolvedAt,
         ImageCount = incident.Images.Count,
-        Images = incident.Images
+        Images = [.. incident.Images
             .OrderBy(image => image.UploadedAt)
-            .Select(IncidentImageDto.FromImage)
-            .ToList(),
+            .Select(IncidentImageDto.FromImage)],
         DistanceKm = distanceKm
     };
 }

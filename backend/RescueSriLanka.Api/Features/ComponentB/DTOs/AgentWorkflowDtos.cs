@@ -41,7 +41,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
         public string? ApprovalNotes { get; set; }
         public string? FinalOutcomeJson { get; set; }
         public DateTime CreatedAt { get; set; }
-        public List<AgentStepDto> Steps { get; set; } = new();
+        public List<AgentStepDto> Steps { get; set; } = [];
     }
 
     // Source: Proposal Section 6 — Coordinator can approve, reject, or revise.

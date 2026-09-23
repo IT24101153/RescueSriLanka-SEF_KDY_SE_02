@@ -16,14 +16,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
         Task<SafetyCheckResponseDto> CheckSafetyAsync(SafetyCheckRequestDto dto);
     }
 
-    public class TravelAdvisoryService : ITravelAdvisoryService
+    public class TravelAdvisoryService(AppDbContext db) : ITravelAdvisoryService
     {
-        private readonly AppDbContext _db;
-
-        public TravelAdvisoryService(AppDbContext db)
-        {
-            _db = db;
-        }
+        private readonly AppDbContext _db = db;
 
         public async Task<TravelAdvisoryResponseDto> CreateAsync(CreateTravelAdvisoryDto dto)
         {
@@ -51,7 +46,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 .Where(a => a.ExpiresAt == null || a.ExpiresAt > now)
                 .ToListAsync();
 
-            return entities.Select(ToDto).ToList();
+            return [.. entities.Select(ToDto)];
         }
 
         // Business-specific operation: route/area safety check.
@@ -77,13 +72,13 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 }
             }
 
-            if (!matched.Any())
+            if (matched.Count == 0)
             {
                 return new SafetyCheckResponseDto
                 {
                     OverallSafetyLevel = SafetyLevel.Safe,
                     Reason = "No active safety advisories found along this route/area.",
-                    MatchedAdvisories = new List<TravelAdvisoryResponseDto>()
+                    MatchedAdvisories = []
                 };
             }
 
@@ -94,7 +89,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             {
                 OverallSafetyLevel = worst.SafetyLevel,
                 Reason = worst.Reason,
-                MatchedAdvisories = matched.Select(ToDto).ToList()
+                MatchedAdvisories = [.. matched.Select(ToDto)]
             };
         }
 
