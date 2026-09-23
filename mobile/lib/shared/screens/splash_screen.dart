@@ -77,7 +77,7 @@ class _SplashScreenState extends State<SplashScreen>
     final fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1116),
+      backgroundColor: AppColors.surface,
       body: Center(
         child: FadeTransition(
           opacity: fade,
@@ -100,17 +100,17 @@ class _SplashScreenState extends State<SplashScreen>
               const Text(
                 'RescueSriLanka',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.ink,
                   fontSize: 23,
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.3,
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
+              const Text(
                 'Live disaster map & safety zones',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.62),
+                  color: AppColors.body,
                   fontSize: 13.5,
                 ),
               ),
@@ -120,9 +120,7 @@ class _SplashScreenState extends State<SplashScreen>
                 height: 26,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.2,
-                  valueColor: AlwaysStoppedAnimation(
-                    AppColors.brand.withValues(alpha: 0.9),
-                  ),
+                  valueColor: const AlwaysStoppedAnimation(AppColors.brand),
                 ),
               ),
             ],
