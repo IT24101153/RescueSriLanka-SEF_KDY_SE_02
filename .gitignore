@@ -449,3 +449,10 @@ mobile/.flutter-plugins-dependencies
 
 # Uploaded incident photos (runtime data, not source)
 **/wwwroot/uploads/
+
+# macOS finder metadata
+.DS_Store
+**/.DS_Store
+
+# .NET build output (the VS template only covers bin/x64 and bin/x86)
+[Bb]in/

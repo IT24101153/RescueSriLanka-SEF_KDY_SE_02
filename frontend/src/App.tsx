@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import LoginPage from './pages/Login/LoginPage'
-import ConsoleShell from './pages/Console/ConsoleShell'
-import { clearSession, getSession } from './auth/session'
-import type { Session } from './auth/session'
+import { BrowserRouter } from 'react-router-dom'
+import LoginPage from './shared/pages/Login/LoginPage'
+import ConsoleShell from './shared/layout/ConsoleShell'
+import { clearSession, getSession } from './shared/auth/session'
+import type { Session } from './shared/auth/session'
 
 function App() {
   const [session, setSession] = useState<Session | null>(() => getSession())
@@ -16,7 +17,12 @@ function App() {
     return <LoginPage onSignedIn={setSession} />
   }
 
-  return <ConsoleShell session={session} onSignOut={handleSignOut} />
+  // The console's pages (incident map, help requests, …) are URL routes.
+  return (
+    <BrowserRouter>
+      <ConsoleShell session={session} onSignOut={handleSignOut} />
+    </BrowserRouter>
+  )
 }
 
 export default App

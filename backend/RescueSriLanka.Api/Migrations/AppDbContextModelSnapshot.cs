@@ -22,6 +22,691 @@ namespace RescueSriLanka.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentA.Models.Incident", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AddressText")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("AffectedRadiusMeters")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("AiAnalysedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("AiConfidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("AiRationale")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("AiSeverity")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int?>("AiSeverityScore")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("District")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("DistrictWarningSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("EstimatedAffectedPeople")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("ReportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReportedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("SeverityOverriddenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SeverityOverriddenBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("VerifiedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("District");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("Severity");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("Latitude", "Longitude");
+
+                    b.ToTable("incidents", (string)null);
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentA.Models.IncidentImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("IncidentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoragePath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UploadedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IncidentId");
+
+                    b.ToTable("incident_images", (string)null);
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentA.Models.SafetyZone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("CenterLatitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("CenterLongitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("ComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("District")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("RadiusMeters")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Rationale")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid?>("SourceIncidentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("SourceIncidentId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("safety_zones", (string)null);
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.AgentStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("AgentWorkflowId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InputParamsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("InputParams");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StepNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TargetAgent")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ToolResultJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ToolResult");
+
+                    b.Property<string>("ValidationResultJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ValidationResult");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentWorkflowId");
+
+                    b.ToTable("AgentSteps");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.AgentWorkflow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ApprovalDecisionAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ApprovalNotes")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FinalOutcomeJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("FinalOutcome");
+
+                    b.Property<Guid>("ObjectiveId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ObjectiveSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ObjectiveSnapshot");
+
+                    b.Property<int>("ObjectiveType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlanJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("Plan");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AgentWorkflows");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.HelpRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CitizenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("text");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid?>("RelatedIncidentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("character varying");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UrgencyScore")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VerificationNotes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("VerificationStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("VerifiedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("HelpRequests");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.RequestStatusHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("HelpRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("NewStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("OldStatus")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HelpRequestId");
+
+                    b.ToTable("RequestStatusHistories");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.TravelAdvisory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AreaName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("RadiusMeters")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SafetyLevel")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TravelAdvisories");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentC.Models.Donation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContactNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DonationType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("DonorName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "CreatedAtUtc");
+
+                    b.ToTable("Donations");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentC.Models.FoodWaterStock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ItemName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("LowStockThreshold")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal>("QuantityOnHand")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FoodWaterStocks");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentC.Models.HelpRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContactNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("NeedType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("RequesterName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "CreatedAtUtc");
+
+                    b.ToTable("resource_help_requests", (string)null);
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentC.Models.MedicalSupply", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LowStockThreshold")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("QuantityOnHand")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("MedicalSupplies");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentC.Models.ResourceAllocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AllocatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("HelpRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("IncidentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResourceType", "ResourceId", "Status");
+
+                    b.ToTable("ResourceAllocations");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentC.Models.Shelter", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Capacity")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("Latitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<decimal>("Longitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("OccupiedCapacity")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Shelters");
+                });
+
             modelBuilder.Entity("RescueSriLanka.Api.Models.AgentRun", b =>
                 {
                     b.Property<Guid>("Id")
@@ -95,222 +780,6 @@ namespace RescueSriLanka.Api.Migrations
                     b.ToTable("agent_runs", (string)null);
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Incident", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AddressText")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<int>("AffectedRadiusMeters")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("AiAnalysedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<double?>("AiConfidence")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("AiRationale")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("AiSeverity")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<int?>("AiSeverityScore")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("District")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int?>("EstimatedAffectedPeople")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<double>("Latitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<double>("Longitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<DateTime>("ReportedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ReportedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("ResolvedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Severity")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<DateTime?>("SeverityOverriddenAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("SeverityOverriddenBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("VerifiedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("District");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("Severity");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("Latitude", "Longitude");
-
-                    b.ToTable("incidents", (string)null);
-                });
-
-            modelBuilder.Entity("RescueSriLanka.Api.Models.IncidentImage", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Caption")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<string>("ContentType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("FileName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid>("IncidentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<long>("SizeBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("StoragePath")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime>("UploadedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("UploadedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IncidentId");
-
-                    b.ToTable("incident_images", (string)null);
-                });
-
-            modelBuilder.Entity("RescueSriLanka.Api.Models.SafetyZone", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<double>("CenterLatitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<double>("CenterLongitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<DateTime>("ComputedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("District")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<int>("RadiusMeters")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Rationale")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<Guid?>("SourceIncidentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("SourceIncidentId");
-
-                    b.HasIndex("Status");
-
-                    b.ToTable("safety_zones", (string)null);
-                });
-
             modelBuilder.Entity("RescueSriLanka.Api.Models.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -320,10 +789,17 @@ namespace RescueSriLanka.Api.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("District")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<bool>("EmailNotificationsEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -354,15 +830,17 @@ namespace RescueSriLanka.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("District");
+
                     b.HasIndex("Email")
                         .IsUnique();
 
                     b.ToTable("users", (string)null);
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.IncidentImage", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentA.Models.IncidentImage", b =>
                 {
-                    b.HasOne("RescueSriLanka.Api.Models.Incident", "Incident")
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentA.Models.Incident", "Incident")
                         .WithMany("Images")
                         .HasForeignKey("IncidentId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -371,9 +849,9 @@ namespace RescueSriLanka.Api.Migrations
                     b.Navigation("Incident");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.SafetyZone", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentA.Models.SafetyZone", b =>
                 {
-                    b.HasOne("RescueSriLanka.Api.Models.Incident", "SourceIncident")
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentA.Models.Incident", "SourceIncident")
                         .WithMany()
                         .HasForeignKey("SourceIncidentId")
                         .OnDelete(DeleteBehavior.Cascade);
@@ -381,9 +859,41 @@ namespace RescueSriLanka.Api.Migrations
                     b.Navigation("SourceIncident");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Incident", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.AgentStep", b =>
+                {
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentB.Models.AgentWorkflow", "AgentWorkflow")
+                        .WithMany("Steps")
+                        .HasForeignKey("AgentWorkflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AgentWorkflow");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.RequestStatusHistory", b =>
+                {
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentB.Models.HelpRequest", "HelpRequest")
+                        .WithMany("StatusHistory")
+                        .HasForeignKey("HelpRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("HelpRequest");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentA.Models.Incident", b =>
                 {
                     b.Navigation("Images");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.AgentWorkflow", b =>
+                {
+                    b.Navigation("Steps");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.HelpRequest", b =>
+                {
+                    b.Navigation("StatusHistory");
                 });
 #pragma warning restore 612, 618
         }

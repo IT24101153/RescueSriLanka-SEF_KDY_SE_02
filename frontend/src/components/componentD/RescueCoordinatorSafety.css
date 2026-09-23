@@ -1,0 +1,17 @@
+.safety-result ul li {
+  display: block;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.safety-result ul li strong {
+  display: inline-block;
+  min-width: 42px;
+  margin-right: 8px;
+}
+
+.decision-actions .btn:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}

@@ -1,0 +1,176 @@
+/* TEMPORARY — preview-only design tokens.
+   Delete this file once a teammate defines the real tokens in index.css.
+   This is imported ONLY by the temporary App.tsx preview harness below,
+   NOT by RescueCoordinationSection.tsx itself — so it has zero effect
+   once the real Dashboard/index.css exists and this file is removed. */
+
+:root {
+  --surface: #161b22;
+  --surface-alt: #1c2330;
+  --border: #2a3240;
+  --border-strong: #3a4456;
+  --text: #9aa4b2;
+  --text-strong: #eef1f5;
+  --radius-sm: 6px;
+  --safe-ink: #7ee6a8;
+  --safe-soft: rgba(126, 230, 168, 0.12);
+}
+
+body {
+  background: #0d1117;
+  color: var(--text-strong);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 24px;
+}
+
+/* Minimal fallbacks for the shared classes the guide documents
+   (.panel, .stat-row, .badge, .table, .btn-approve/.btn-reject, .alert,
+   .empty, .chip) so the preview looks reasonable before the real
+   design system exists. Replace with the real versions once available. */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.panel__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-strong);
+}
+
+.panel__meta {
+  color: var(--text);
+  font-size: 0.85em;
+  margin-left: auto;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+}
+
+.stat--caution {
+  border-color: #b08900;
+}
+
+.stat__value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.stat__label {
+  font-size: 0.8em;
+  color: var(--text);
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75em;
+  font-weight: 600;
+}
+
+.badge--ok { background: rgba(126, 230, 168, 0.15); color: #7ee6a8; }
+.badge--warn { background: rgba(240, 200, 100, 0.15); color: #f0c864; }
+.badge--bad { background: rgba(240, 100, 100, 0.15); color: #f06464; }
+
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75em;
+  background: var(--surface-alt);
+  color: var(--text-strong);
+  border: 1px solid var(--border);
+}
+
+.chip--safe { border-color: #2f6f4f; color: #7ee6a8; }
+
+.table-wrap { overflow-x: auto; }
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th, .table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9em;
+}
+
+.btn-small {
+  font: inherit;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-alt);
+  color: var(--text-strong);
+  cursor: pointer;
+}
+
+.btn-small:hover { background: var(--border); }
+.btn-small:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-ghost {
+  background: transparent;
+}
+
+.btn-approve {
+  font: inherit;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid #2f6f4f;
+  background: rgba(126, 230, 168, 0.12);
+  color: #7ee6a8;
+  cursor: pointer;
+}
+
+.btn-reject {
+  font: inherit;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid #6f2f2f;
+  background: rgba(240, 100, 100, 0.12);
+  color: #f06464;
+  cursor: pointer;
+}
+
+.alert {
+  background: rgba(240, 100, 100, 0.1);
+  border: 1px solid #6f2f2f;
+  color: #f06464;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9em;
+  margin: 6px 0;
+}
+
+.empty {
+  color: var(--text);
+  font-size: 0.9em;
+  font-style: italic;
+}

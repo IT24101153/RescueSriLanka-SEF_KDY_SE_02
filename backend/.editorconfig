@@ -1,0 +1,13 @@
+root = true
+
+# EF Core writes the migrations and regenerates them; they are never edited by
+# hand, so analyzers and code-style suggestions skip them.
+[**/Migrations/*.cs]
+generated_code = true
+
+[*.cs]
+# CA1873 (new in .NET 10) flags every log call whose arguments would be
+# evaluated even when that log level is off. Our logging sits on start-up,
+# sign-in and per-request paths, not hot loops, so the cost is negligible and
+# wrapping each call in an IsEnabled check would only add noise.
+dotnet_diagnostic.CA1873.severity = none

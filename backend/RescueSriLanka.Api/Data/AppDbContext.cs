@@ -1,5 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Features.ComponentA.Models;
+using RescueSriLanka.Api.Features.ComponentB.Models;
+using RescueSriLanka.Api.Features.ComponentC.Models;
+// Components B and C each define a HelpRequest. B's is the citizen help
+// request; C's is a request for resources, kept in its own table.
+using HelpRequest = RescueSriLanka.Api.Features.ComponentB.Models.HelpRequest;
+using ResourceHelpRequest = RescueSriLanka.Api.Features.ComponentC.Models.HelpRequest;
 
 namespace RescueSriLanka.Api.Data;
 
@@ -16,8 +23,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<IncidentImage> IncidentImages => Set<IncidentImage>();
     public DbSet<SafetyZone> SafetyZones => Set<SafetyZone>();
 
+    // ---- Component B — Help Requests & Travel Advisories ----
+    public DbSet<HelpRequest> HelpRequests => Set<HelpRequest>();
+    public DbSet<RequestStatusHistory> RequestStatusHistories => Set<RequestStatusHistory>();
+    public DbSet<TravelAdvisory> TravelAdvisories => Set<TravelAdvisory>();
+
     // ---- Agentic AI workflow state (shared by all four agents) ----
     public DbSet<AgentRun> AgentRuns => Set<AgentRun>();
+
+    // Planner Agent workflows (Component B) — dedicated tables, jsonb columns.
+    public DbSet<AgentWorkflow> AgentWorkflows => Set<AgentWorkflow>();
+    public DbSet<AgentStep> AgentSteps => Set<AgentStep>();
+
+    // ---- Component C — Resource Management ----
+    public DbSet<Shelter> Shelters => Set<Shelter>();
+    public DbSet<MedicalSupply> MedicalSupplies => Set<MedicalSupply>();
+    public DbSet<FoodWaterStock> FoodWaterStocks => Set<FoodWaterStock>();
+    public DbSet<ResourceAllocation> ResourceAllocations => Set<ResourceAllocation>();
+    public DbSet<Donation> Donations => Set<Donation>();
+
+    /// <summary>Requests for resources (Component C), separate from Component
+    /// B's citizen help requests.</summary>
+    public DbSet<ResourceHelpRequest> ResourceHelpRequests => Set<ResourceHelpRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,6 +55,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.ToTable("users");
 
             entity.HasIndex(user => user.Email).IsUnique();
+
+            // Every district warning asks "who lives here?" — this is the index
+            // that question runs on.
+            entity.HasIndex(user => user.District);
 
             // Persist the role as readable text rather than an opaque integer.
             entity.Property(user => user.Role)
@@ -86,6 +117,127 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(zone => zone.SourceIncidentId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ---- Component B ----
+
+        // Explicit relationship: one HelpRequest has many RequestStatusHistory entries
+        modelBuilder.Entity<RequestStatusHistory>()
+            .HasOne(h => h.HelpRequest)
+            .WithMany(r => r.StatusHistory)
+            .HasForeignKey(h => h.HelpRequestId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The shared PostgreSQL schema stores request statuses as their readable
+        // enum names (for example, "Pending"), rather than integer values.
+        // Keeping that representation avoids a read failure in Npgsql and makes
+        // the value easier to inspect directly in the database.
+        modelBuilder.Entity<HelpRequest>()
+            .Property(r => r.Status)
+            .HasConversion<string>()
+            .HasColumnType("character varying");
+
+        // AgentWorkflow <-> AgentStep relationship
+        modelBuilder.Entity<AgentStep>()
+            .HasOne(s => s.AgentWorkflow)
+            .WithMany(w => w.Steps)
+            .HasForeignKey(s => s.AgentWorkflowId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Map the JSON string properties to real Postgres jsonb columns,
+        // per the ADR Seed List's "jsonb columns" requirement.
+        modelBuilder.Entity<AgentWorkflow>()
+            .Property(w => w.ObjectiveSnapshotJson)
+            .HasColumnType("jsonb")
+            .HasColumnName("ObjectiveSnapshot");
+
+        modelBuilder.Entity<AgentWorkflow>()
+            .Property(w => w.PlanJson)
+            .HasColumnType("jsonb")
+            .HasColumnName("Plan");
+
+        modelBuilder.Entity<AgentWorkflow>()
+            .Property(w => w.FinalOutcomeJson)
+            .HasColumnType("jsonb")
+            .HasColumnName("FinalOutcome");
+
+        modelBuilder.Entity<AgentStep>()
+            .Property(s => s.InputParamsJson)
+            .HasColumnType("jsonb")
+            .HasColumnName("InputParams");
+
+        modelBuilder.Entity<AgentStep>()
+            .Property(s => s.ToolResultJson)
+            .HasColumnType("jsonb")
+            .HasColumnName("ToolResult");
+
+        modelBuilder.Entity<AgentStep>()
+            .Property(s => s.ValidationResultJson)
+            .HasColumnType("jsonb")
+            .HasColumnName("ValidationResult");
+
+        // ---- Component C ----
+
+        modelBuilder.Entity<Shelter>(entity =>
+        {
+            entity.Property(shelter => shelter.Name).HasMaxLength(200).IsRequired();
+            entity.Property(shelter => shelter.Address).HasMaxLength(500).IsRequired();
+            entity.Property(shelter => shelter.Latitude).HasPrecision(9, 6);
+            entity.Property(shelter => shelter.Longitude).HasPrecision(9, 6);
+            entity.Ignore(shelter => shelter.AvailableCapacity);
+        });
+
+        modelBuilder.Entity<MedicalSupply>(entity =>
+        {
+            entity.Property(supply => supply.Name).HasMaxLength(200).IsRequired();
+            entity.Property(supply => supply.Unit).HasMaxLength(50).IsRequired();
+            entity.Ignore(supply => supply.IsLowStock);
+        });
+
+        modelBuilder.Entity<FoodWaterStock>(entity =>
+        {
+            entity.Property(stock => stock.ItemName).HasMaxLength(200).IsRequired();
+            entity.Property(stock => stock.Unit).HasMaxLength(50).IsRequired();
+            entity.Property(stock => stock.QuantityOnHand).HasPrecision(12, 2);
+            entity.Property(stock => stock.LowStockThreshold).HasPrecision(12, 2);
+            entity.Ignore(stock => stock.IsLowStock);
+        });
+
+        modelBuilder.Entity<ResourceAllocation>(entity =>
+        {
+            entity.Property(allocation => allocation.ResourceType).HasMaxLength(50).IsRequired();
+            entity.Property(allocation => allocation.Status).HasMaxLength(30).IsRequired();
+            entity.HasIndex(allocation => new
+            {
+                allocation.ResourceType,
+                allocation.ResourceId,
+                allocation.Status
+            });
+        });
+
+        modelBuilder.Entity<ResourceHelpRequest>(entity =>
+        {
+            // Its own table: Component B owns "HelpRequests".
+            entity.ToTable("resource_help_requests");
+
+            entity.Property(request => request.RequesterName).HasMaxLength(160).IsRequired();
+            entity.Property(request => request.ContactNumber).HasMaxLength(40).IsRequired();
+            entity.Property(request => request.NeedType).HasMaxLength(50).IsRequired();
+            entity.Property(request => request.Description).HasMaxLength(2000).IsRequired();
+            entity.Property(request => request.Status).HasMaxLength(30).IsRequired();
+            entity.HasIndex(request => new { request.Status, request.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<Donation>(entity =>
+        {
+            entity.Property(donation => donation.DonorName).HasMaxLength(160).IsRequired();
+            entity.Property(donation => donation.ContactNumber).HasMaxLength(40).IsRequired();
+            entity.Property(donation => donation.DonationType).HasMaxLength(80).IsRequired();
+            entity.Property(donation => donation.Quantity).HasPrecision(12, 2);
+            entity.Property(donation => donation.Unit).HasMaxLength(40).IsRequired();
+            entity.Property(donation => donation.Notes).HasMaxLength(1000);
+            entity.Property(donation => donation.Status).HasMaxLength(30).IsRequired();
+            entity.HasIndex(donation => new { donation.Status, donation.CreatedAtUtc });
         });
     }
 }

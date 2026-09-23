@@ -1,0 +1,176 @@
+/* Rescue Coordination tab styles.
+   Only styles new structural patterns not already covered by the shared
+   .panel / .stat-row / .badge / .table / .btn-approve / .btn-reject /
+   .alert / .empty classes documented in the UI guide. Uses the existing
+   design tokens from index.css — no new hex values introduced here. */
+
+.rescue-coord {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.rescue-coord__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+/* Inline mini-forms used for "+ New team", "+ Add member", etc. */
+.rescue-coord__inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0;
+  padding: 10px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.rescue-coord__inline-form input,
+.rescue-coord__inline-form select {
+  font: inherit;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-strong);
+}
+
+.rescue-coord__create-dispatch {
+  margin-top: 12px;
+}
+
+.rescue-coord__validation-ok {
+  color: var(--safe-ink);
+  background: var(--safe-soft);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+}
+
+/* Team roster */
+.rescue-coord__team-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rescue-coord__team-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.rescue-coord__team-card-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.rescue-coord__team-card-head:hover {
+  background: var(--surface-alt);
+}
+
+.rescue-coord__team-name {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.rescue-coord__team-meta {
+  margin-left: auto;
+  color: var(--text);
+  font-size: 0.85em;
+}
+
+.rescue-coord__team-detail {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-alt);
+}
+
+.rescue-coord__team-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.rescue-coord__team-section-head h4 {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--text-strong);
+}
+
+.rescue-coord__member-list,
+.rescue-coord__vehicle-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rescue-coord__member-list li,
+.rescue-coord__vehicle-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+}
+
+.rescue-coord__member-name {
+  font-weight: 500;
+  min-width: 120px;
+}
+
+.rescue-coord__vehicle-type,
+.rescue-coord__vehicle-capacity {
+  color: var(--text);
+  font-size: 0.85em;
+}
+
+/* Match finder results */
+.rescue-coord__match-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rescue-coord__match-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+}
+
+.rescue-coord__match-team {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+/* Dispatch row actions */
+.rescue-coord__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}

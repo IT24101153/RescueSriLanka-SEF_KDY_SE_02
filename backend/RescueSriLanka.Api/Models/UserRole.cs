@@ -13,5 +13,8 @@ public enum UserRole
     ResourceManager,
 
     /// <summary>Receives assignments and reports status from the field.</summary>
-    RescueTeam
+    RescueTeam,
+
+    /// <summary>Verifies and triages citizen help requests (Help request dashboard).</summary>
+    HelpRequestManager
 }

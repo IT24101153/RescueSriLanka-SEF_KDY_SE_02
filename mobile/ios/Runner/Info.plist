@@ -68,6 +68,10 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location is used to show nearby disasters and tell you whether you are inside a safety zone.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>The camera lets you attach a photo to a disaster report, which the analysis agent reads alongside your description.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose an existing photo to attach to a disaster report.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

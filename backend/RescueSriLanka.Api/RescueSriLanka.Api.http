@@ -1,6 +1,97 @@
-@RescueSriLanka.Api_HostAddress = http://localhost:5093
+@host = http://localhost:5093
 
-GET {{RescueSriLanka.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Sign in. Copy "token" from the response into @token below.
+POST {{host}}/api/auth/login
+Content-Type: application/json
 
-###
+{
+  "email": "coordinator@rescue.lk",
+  "password": "Rescue@123"
+}
+
+@token = paste-the-token-here
+
+### Who am I — now carries district and emailNotificationsEnabled.
+GET {{host}}/api/auth/me
+Authorization: Bearer {{token}}
+
+###############################################################################
+# Email notifications
+#
+# Two emails exist: a receipt to whoever files a report, and a district warning
+# to everyone subscribed to that district once a coordinator confirms a High or
+# Critical risk. Walk the flow below to see both.
+###############################################################################
+
+### The 25 districts the app's picker offers. No token needed.
+GET {{host}}/api/districts
+
+### Subscribe to a district's warnings (this is what the app's settings save).
+PATCH {{host}}/api/auth/me/preferences
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "district": "Colombo",
+  "emailNotificationsEnabled": true
+}
+
+### Unsubscribe from area warnings, keeping the account's other email.
+# An explicit null clears the district; omitting the field leaves it alone.
+PATCH {{host}}/api/auth/me/preferences
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "district": null
+}
+
+### Send a sample warning to yourself — checks transport, template and redirect.
+POST {{host}}/api/notifications/test
+Authorization: Bearer {{token}}
+
+### Read back what testmail.app received for an address.
+# Needs Email:Testmail:Namespace and ApiKey in appsettings.Development.json.
+GET {{host}}/api/notifications/inbox?email=coordinator@rescue.lk&limit=5
+Authorization: Bearer {{token}}
+
+###############################################################################
+# The real trigger path
+###############################################################################
+
+### 1. File a report. The reporter gets a receipt; the district is NOT warned yet.
+POST {{host}}/api/incidents
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Flash flooding on Galle Road",
+  "description": "Water over both carriageways near Wellawatte.",
+  "type": "Flood",
+  "latitude": 6.8742,
+  "longitude": 79.8607,
+  "affectedRadiusMeters": 2500,
+  "district": "Colombo",
+  "estimatedAffectedPeople": 1800
+}
+
+@incidentId = paste-the-incident-id-here
+
+### 2. Verify it. THIS is what warns the district — if the severity is High or
+###    Critical, everyone subscribed to Colombo is emailed. Once, not twice.
+PATCH {{host}}/api/incidents/{{incidentId}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "Verified"
+}
+
+### Severity below the threshold? Raise it, then verify again to see the warning.
+PATCH {{host}}/api/incidents/{{incidentId}}/severity
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "severity": "Critical"
+}
