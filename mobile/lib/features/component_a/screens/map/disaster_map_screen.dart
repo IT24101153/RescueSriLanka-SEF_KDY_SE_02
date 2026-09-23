@@ -8,6 +8,7 @@ import '../../../../shared/core/config.dart';
 import '../../../../shared/core/theme.dart';
 import '../../models/incident.dart';
 import '../../models/safety_zone.dart';
+import '../../../../shared/services/place_search_service.dart';
 import '../../services/api_client.dart';
 import '../../widgets/map_legend.dart';
 import '../../widgets/severity_chip.dart';
@@ -46,6 +47,8 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
 
   final ApiClient _api = ApiClient();
   final MapController _map = MapController();
+  final PlaceSearchService _places = PlaceSearchService();
+  final TextEditingController _searchField = TextEditingController();
 
   List<Incident> _incidents = [];
   List<SafetyZone> _zones = [];
@@ -58,6 +61,11 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
   String? _error;
   String _severityFilter = 'All';
 
+  /// Place search (Nominatim). Results show until one is picked or dismissed.
+  bool _searching = false;
+  List<Place> _results = [];
+  String? _searchError;
+
   @override
   void initState() {
     super.initState();
@@ -67,6 +75,8 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
   @override
   void dispose() {
     _api.dispose();
+    _places.dispose();
+    _searchField.dispose();
     super.dispose();
   }
 
@@ -140,6 +150,57 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
 
   /// Steps the zoom, holding the current centre.
   ///
+  Future<void> _searchPlaces(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _results = [];
+        _searchError = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _searching = true;
+      _searchError = null;
+    });
+
+    try {
+      final results = await _places.search(query);
+      if (!mounted) return;
+      setState(() {
+        _results = results;
+        _searchError = results.isEmpty ? 'No place matched "$query".' : null;
+      });
+    } on PlaceSearchException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _results = [];
+        _searchError = error.message;
+      });
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  void _goToPlace(Place place) {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _results = [];
+      _searchError = null;
+      _searchField.text = place.shortName;
+    });
+    _map.move(LatLng(place.latitude, place.longitude), 12);
+  }
+
+  void _clearSearch() {
+    FocusScope.of(context).unfocus();
+    _searchField.clear();
+    setState(() {
+      _results = [];
+      _searchError = null;
+    });
+  }
+
   /// Clamped to the same limits MapOptions declares — moving outside them is
   /// silently ignored by flutter_map, which reads as a dead button.
   void _zoomBy(double delta) {
@@ -225,6 +286,8 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
     return Column(
       children: [
         if (_error != null) _errorBanner(),
+        _searchBar(),
+        if (_results.isNotEmpty || _searchError != null) _searchResults(),
         _summaryBar(),
         _filterBar(),
         Expanded(
@@ -304,6 +367,109 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
       ],
     );
   }
+
+  /// Place search over Nominatim. It runs on submit rather than per
+  /// keystroke, which their usage policy asks for.
+  Widget _searchBar() => Padding(
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+    child: TextField(
+      controller: _searchField,
+      textInputAction: TextInputAction.search,
+      onSubmitted: _searchPlaces,
+      // Rebuild so the clear button appears as soon as there is text. The
+      // search itself still waits for submit.
+      onChanged: (_) => setState(() {}),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'Search a place in Sri Lanka',
+        prefixIcon: const Icon(Icons.search, size: 20),
+        suffixIcon: _searching
+            ? const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : (_searchField.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: _clearSearch,
+                    tooltip: 'Clear search',
+                  )),
+        filled: true,
+        fillColor: AppColors.surfaceAlt,
+        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+      ),
+    ),
+  );
+
+  Widget _searchResults() => Container(
+    margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      border: Border.all(color: AppColors.border),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: _searchError != null
+        ? Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              _searchError!,
+              style: const TextStyle(fontSize: 13, color: AppColors.body),
+            ),
+          )
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final place in _results)
+                ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: const Icon(
+                    Icons.place_outlined,
+                    size: 20,
+                    color: AppColors.body,
+                  ),
+                  title: Text(
+                    place.shortName,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    place.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11.5),
+                  ),
+                  onTap: () => _goToPlace(place),
+                ),
+              // Nominatim's policy asks for this credit alongside results.
+              const Padding(
+                padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'Search by OpenStreetMap Nominatim',
+                    style: TextStyle(fontSize: 10.5, color: AppColors.body),
+                  ),
+                ),
+              ),
+            ],
+          ),
+  );
 
   Widget _summaryBar() {
     final active = _incidents.length;
