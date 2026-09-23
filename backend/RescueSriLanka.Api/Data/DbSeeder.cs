@@ -17,7 +17,8 @@ public static class DbSeeder
     [
         new("Lelum Jayasooriya", "coordinator@rescue.lk", "Rescue@123", UserRole.EmergencyCoordinator, "+94711000001"),
         new("Help Request Manager", "helprequests@rescue.lk", "Rescue@123", UserRole.HelpRequestManager, null),
-        new("Resource Manager", "resources@rescue.lk", "Rescue@123", UserRole.ResourceManager, null)
+        new("Resource Manager", "resources@rescue.lk", "Rescue@123", UserRole.ResourceManager, null),
+        new("Rescue Team Lead", "rescue@rescue.lk", "Rescue@123", UserRole.RescueTeam, null)
     ];
 
     public static async Task SeedAsync(
