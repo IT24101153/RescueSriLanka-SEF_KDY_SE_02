@@ -62,11 +62,21 @@ class AppCard extends StatelessWidget {
           onTap: onTap,
           child: accent == null
               ? content
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              // The stripe is positioned rather than a Row child: a stretched
+              // Row would take its height from the parent, which is unbounded
+              // inside a list.
+              : Stack(
                   children: [
-                    Container(width: 4, color: accent),
-                    Expanded(child: content),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: content,
+                    ),
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      child: Container(width: 4, color: accent),
+                    ),
                   ],
                 ),
         ),
