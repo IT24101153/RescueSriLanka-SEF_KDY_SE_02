@@ -7,6 +7,7 @@ import DisasterDashboard from '../../components/componentA/DisasterDashboard'
 import HelpRequestDashboard from '../../components/componentB/HelpRequestDashboard'
 import HelpRequestsReview from '../../components/componentB/HelpRequestsReview'
 import ResourceDashboard from '../../components/componentC/ResourceDashboard'
+import RescueDashboardPage from '../../components/componentD/RescueDashboardPage'
 import './ConsoleShell.css'
 
 type ConsoleShellProps = {
@@ -37,15 +38,22 @@ const RESOURCE_PAGES: Page[] = [
   { path: '/resources', label: 'Resource dashboard', Component: ResourceDashboard, end: true },
 ]
 
+// Component D — rescue teams, assignments and dispatch
+const RESCUE_PAGES: Page[] = [
+  { path: '/rescue', label: 'Rescue coordination', Component: RescueDashboardPage, end: true },
+]
+
 /**
  * Each account sees only its own component's dashboard: Help Request
  * Managers get the help-request pages, Resource Managers the resource
- * dashboard, everyone else the disaster dashboard. The first page listed
+ * dashboard, Rescue Teams the rescue coordination dashboard, everyone
+ * else the disaster dashboard. The first page listed
  * is where sign-in lands.
  */
 function pagesFor(role: Role): Page[] {
   if (role === 'HelpRequestManager') return HELP_REQUEST_PAGES
   if (role === 'ResourceManager') return RESOURCE_PAGES
+  if (role === 'RescueTeam') return RESCUE_PAGES
   return DISASTER_PAGES
 }
 

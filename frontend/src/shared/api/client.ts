@@ -40,7 +40,14 @@ export async function apiFetch<T>(
   }
 
   if (!response.ok) {
-    throw new ApiError(response.status, `Request failed (HTTP ${response.status}).`)
+    // Surface what the API said — ProblemDetails, a plain { error }, or
+    // validation errors — and fall back to the status when the body is not JSON.
+    let message = `Request failed (HTTP ${response.status}).`
+    try {
+      const body = await response.json() as { title?: string; detail?: string; errors?: Record<string, string[]>; error?: string }
+      message = body.detail ?? body.error ?? body.title ?? (Object.values(body.errors ?? {}).flat().join(' ') || message)
+    } catch { /* Non-JSON errors keep the safe status fallback. */ }
+    throw new ApiError(response.status, message)
   }
 
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T)

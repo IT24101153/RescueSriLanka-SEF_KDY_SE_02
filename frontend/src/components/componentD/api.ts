@@ -1,5 +1,5 @@
-import { apiFetch } from './client'
-import type { AssignmentDto, CreateAssignmentRequest, CreateRescueTeamRequest, CreateTeamMemberRequest, CreateVehicleRequest, ReviseAssignmentRequest, SafetyValidationWorkflowResultDto, CoordinatorDecisionRequest, CoordinatorDecisionResultDto, DispatchDto, DispatchStatus, MatchRequest, RescueTeamDto, TeamMatchResultDto, TeamMemberDto, UpdateTeamMemberRequest, UpdateVehicleRequest, VehicleDto } from '../types/rescueCoordination'
+import { apiFetch } from '../../shared/api/client'
+import type { AssignmentDto, CreateAssignmentRequest, CreateRescueTeamRequest, CreateTeamMemberRequest, CreateVehicleRequest, ReviseAssignmentRequest, SafetyValidationWorkflowResultDto, CoordinatorDecisionRequest, CoordinatorDecisionResultDto, DispatchDto, DispatchStatus, MatchRequest, RescueTeamDto, TeamMatchResultDto, TeamMemberDto, UpdateTeamMemberRequest, UpdateVehicleRequest, VehicleDto } from './types'
 
 export const getRescueTeams = (signal?: AbortSignal) => apiFetch<RescueTeamDto[]>('/api/rescueteams', { signal })
 export const getAssignments = (signal?: AbortSignal) => apiFetch<AssignmentDto[]>('/api/assignments', { signal })

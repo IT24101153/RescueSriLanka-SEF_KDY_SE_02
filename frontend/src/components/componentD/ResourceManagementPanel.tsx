@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { addTeamMember, addVehicle, createRescueTeam, deleteRescueTeam, removeTeamMember, removeVehicle, updateRescueTeam, updateTeamMember, updateVehicle } from '../../api/rescueCoordination'
-import type { CreateTeamMemberRequest, CreateVehicleRequest, RescueTeamDto, SkillType, VehicleType } from '../../types/rescueCoordination'
+import { addTeamMember, addVehicle, createRescueTeam, deleteRescueTeam, removeTeamMember, removeVehicle, updateRescueTeam, updateTeamMember, updateVehicle } from './api'
+import type { CreateTeamMemberRequest, CreateVehicleRequest, RescueTeamDto, SkillType, VehicleType } from './types'
 
 const skills: SkillType[] = ['WaterRescue', 'FirstAid', 'Paramedic', 'StructuralCollapse', 'FireResponse', 'Logistics', 'Driving']
 const vehicleTypes: VehicleType[] = ['Ambulance', 'Boat', 'FireTruck', 'FourByFour', 'Truck']

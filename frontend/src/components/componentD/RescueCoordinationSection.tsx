@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ApiError } from '../../../api/client'
-import { createAssignment, decideAssignment, getAssignments, getDispatches, getRescueTeams, transitionDispatch, validateAssignment } from '../../../api/rescueCoordination'
-import type { AssignmentDto, DispatchDto, SafetyValidationWorkflowResultDto, SkillType, RescueTeamDto } from '../../../types/rescueCoordination'
+import { ApiError } from '../../shared/api/client'
+import { createAssignment, decideAssignment, getAssignments, getDispatches, getRescueTeams, transitionDispatch, validateAssignment } from './api'
+import type { AssignmentDto, DispatchDto, SafetyValidationWorkflowResultDto, SkillType, RescueTeamDto } from './types'
 import './RescueCoordinationSection.css'
 
 const skills: SkillType[] = ['WaterRescue', 'FirstAid', 'Paramedic', 'StructuralCollapse', 'FireResponse', 'Logistics', 'Driving']

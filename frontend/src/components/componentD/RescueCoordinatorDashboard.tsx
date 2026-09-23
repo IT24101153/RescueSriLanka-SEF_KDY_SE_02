@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ApiError } from '../../api/client'
+import { ApiError } from '../../shared/api/client'
 import {
   createAssignment,
   decideAssignment,
@@ -10,15 +10,15 @@ import {
   reviseAssignment,
   transitionDispatch,
   validateAssignment,
-} from '../../api/rescueCoordination'
+} from './api'
 import type {
   AssignmentDto,
   DispatchDto,
   RescueTeamDto,
   SafetyValidationWorkflowResultDto,
   SkillType,
-} from '../../types/rescueCoordination'
-import type { User } from '../../auth/session'
+} from './types'
+import type { User } from '../../shared/auth/session'
 import './RescueCoordinatorDashboard.css'
 import './RescueCoordinatorSafety.css'
 import ResourceManagementPanel from './ResourceManagementPanel'
