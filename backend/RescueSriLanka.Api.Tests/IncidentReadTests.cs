@@ -3,7 +3,7 @@ using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentA.DTOs;
 using RescueSriLanka.Api.Features.ComponentA.Models;
 using RescueSriLanka.Api.Models;
-using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Features.ComponentD.Services;
 using Xunit;
 
 namespace RescueSriLanka.Api.Tests;

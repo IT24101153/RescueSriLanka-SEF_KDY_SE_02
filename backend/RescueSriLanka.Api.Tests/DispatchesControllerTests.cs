@@ -1,10 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using RescueSriLanka.Api.Controllers;
-using RescueSriLanka.Api.DTOs;
-using RescueSriLanka.Api.Models;
-using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Features.ComponentD.Controllers;
+using RescueSriLanka.Api.Features.ComponentD.DTOs;
+using RescueSriLanka.Api.Features.ComponentD.Models;
+using RescueSriLanka.Api.Features.ComponentD.Services;
 using Xunit;
 
 namespace RescueSriLanka.Api.Tests

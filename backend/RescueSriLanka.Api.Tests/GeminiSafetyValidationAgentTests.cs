@@ -1,9 +1,9 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using RescueSriLanka.Api.Agents.SafetyValidation;
-using RescueSriLanka.Api.DTOs;
-using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Features.ComponentD.Agents.SafetyValidation;
+using RescueSriLanka.Api.Features.ComponentD.DTOs;
+using RescueSriLanka.Api.Features.ComponentD.Models;
 using Xunit;
 
 namespace RescueSriLanka.Api.Tests;
@@ -163,7 +163,7 @@ public class GeminiSafetyValidationAgentTests
 
         Assert.Equal(SafetyValidationDecision.REVISE, result.Decision);
         Assert.Contains("GEMINI_PROVIDER", result.FailedChecks);
-        Assert.DoesNotContain(db.AgentSteps, step => step.Action == "check_team_availability" && step.Status == Models.Agents.StepStatus.Completed);
+        Assert.DoesNotContain(db.AgentSteps, step => step.Action == "check_team_availability" && step.Status == StepStatus.Completed);
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public class GeminiSafetyValidationAgentTests
 
         Assert.Equal(SafetyValidationDecision.REVISE, result.Decision);
         Assert.Contains("GEMINI_PROVIDER", result.FailedChecks);
-        Assert.Contains(db.AgentSteps, s => s.Status == Models.Agents.StepStatus.Failed);
+        Assert.Contains(db.AgentSteps, s => s.Status == StepStatus.Failed);
     }
 
     [Fact]
@@ -388,7 +388,7 @@ public class GeminiSafetyValidationAgentTests
     }
 
     private static GeminiSafetyValidationAgent CreateAgent(
-        Data.ComponentDDbContext db,
+        RescueSriLanka.Api.Features.ComponentD.Data.ComponentDDbContext db,
         Func<AssignmentValidationContextDto, GeminiSafetyAgentResponse> response) =>
         new(db, new SafetyValidationTools(db), new FakeGeminiClient(response), NullLogger<GeminiSafetyValidationAgent>.Instance);
 
@@ -400,7 +400,7 @@ public class GeminiSafetyValidationAgentTests
         return new([new GeminiSafetyToolCall(name, arguments, callId)], null, null, null, interactionId);
     }
 
-    private static async Task<Assignment> SeedValidAssignmentAsync(Data.ComponentDDbContext db)
+    private static async Task<Assignment> SeedValidAssignmentAsync(RescueSriLanka.Api.Features.ComponentD.Data.ComponentDDbContext db)
     {
         var team = new RescueTeam { Name = "Safety", Status = TeamStatus.Available };
         team.Members.Add(new TeamMember { FullName = "Medic", Phone = "1", Skill = SkillType.Paramedic, IsAvailable = true });

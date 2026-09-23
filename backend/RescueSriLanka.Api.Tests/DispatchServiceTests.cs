@@ -1,14 +1,14 @@
-using RescueSriLanka.Api.Agents.SafetyValidation;
-using RescueSriLanka.Api.DTOs;
-using RescueSriLanka.Api.Models;
-using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Features.ComponentD.Agents.SafetyValidation;
+using RescueSriLanka.Api.Features.ComponentD.DTOs;
+using RescueSriLanka.Api.Features.ComponentD.Models;
+using RescueSriLanka.Api.Features.ComponentD.Services;
 using Xunit;
 
 namespace RescueSriLanka.Api.Tests
 {
     public class DispatchServiceTests
     {
-        private static async Task<(Data.ComponentDDbContext Db, Assignment Assignment)> SeedAssignmentAsync()
+        private static async Task<(RescueSriLanka.Api.Features.ComponentD.Data.ComponentDDbContext Db, Assignment Assignment)> SeedAssignmentAsync()
         {
             var db = TestDbFactory.Create();
 

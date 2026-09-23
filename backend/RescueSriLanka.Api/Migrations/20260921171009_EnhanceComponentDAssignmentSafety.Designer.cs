@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using RescueSriLanka.Api.Data;
+using RescueSriLanka.Api.Features.ComponentD.Data;
 
 #nullable disable
 
@@ -25,7 +25,7 @@ namespace RescueSriLanka.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Agents.AgentStep", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.AgentStep", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -76,7 +76,7 @@ namespace RescueSriLanka.Api.Migrations
                         });
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Agents.AgentWorkflow", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.AgentWorkflow", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -128,7 +128,7 @@ namespace RescueSriLanka.Api.Migrations
                         });
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Assignment", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.Assignment", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -178,7 +178,7 @@ namespace RescueSriLanka.Api.Migrations
                     b.ToTable("Assignments");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Dispatch", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.Dispatch", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -226,7 +226,7 @@ namespace RescueSriLanka.Api.Migrations
                     b.ToTable("Dispatches");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.RescueTeam", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.RescueTeam", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -254,7 +254,7 @@ namespace RescueSriLanka.Api.Migrations
                     b.ToTable("RescueTeams");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.TeamMember", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.TeamMember", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -286,7 +286,7 @@ namespace RescueSriLanka.Api.Migrations
                     b.ToTable("TeamMembers");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Vehicle", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.Vehicle", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -316,9 +316,9 @@ namespace RescueSriLanka.Api.Migrations
                     b.ToTable("Vehicles");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Agents.AgentStep", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.AgentStep", b =>
                 {
-                    b.HasOne("RescueSriLanka.Api.Models.Agents.AgentWorkflow", "Workflow")
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentD.Models.AgentWorkflow", "Workflow")
                         .WithMany("Steps")
                         .HasForeignKey("AgentWorkflowId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -327,15 +327,15 @@ namespace RescueSriLanka.Api.Migrations
                     b.Navigation("Workflow");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Assignment", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.Assignment", b =>
                 {
-                    b.HasOne("RescueSriLanka.Api.Models.RescueTeam", "RescueTeam")
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentD.Models.RescueTeam", "RescueTeam")
                         .WithMany("Assignments")
                         .HasForeignKey("RescueTeamId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("RescueSriLanka.Api.Models.Vehicle", "Vehicle")
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentD.Models.Vehicle", "Vehicle")
                         .WithMany("Assignments")
                         .HasForeignKey("VehicleId")
                         .OnDelete(DeleteBehavior.Restrict);
@@ -345,20 +345,20 @@ namespace RescueSriLanka.Api.Migrations
                     b.Navigation("Vehicle");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Dispatch", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.Dispatch", b =>
                 {
-                    b.HasOne("RescueSriLanka.Api.Models.Assignment", "Assignment")
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentD.Models.Assignment", "Assignment")
                         .WithOne("Dispatch")
-                        .HasForeignKey("RescueSriLanka.Api.Models.Dispatch", "AssignmentId")
+                        .HasForeignKey("RescueSriLanka.Api.Features.ComponentD.Models.Dispatch", "AssignmentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Assignment");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.TeamMember", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.TeamMember", b =>
                 {
-                    b.HasOne("RescueSriLanka.Api.Models.RescueTeam", "RescueTeam")
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentD.Models.RescueTeam", "RescueTeam")
                         .WithMany("Members")
                         .HasForeignKey("RescueTeamId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -367,9 +367,9 @@ namespace RescueSriLanka.Api.Migrations
                     b.Navigation("RescueTeam");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Vehicle", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.Vehicle", b =>
                 {
-                    b.HasOne("RescueSriLanka.Api.Models.RescueTeam", "RescueTeam")
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentD.Models.RescueTeam", "RescueTeam")
                         .WithMany("Vehicles")
                         .HasForeignKey("RescueTeamId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -378,17 +378,17 @@ namespace RescueSriLanka.Api.Migrations
                     b.Navigation("RescueTeam");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Agents.AgentWorkflow", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.AgentWorkflow", b =>
                 {
                     b.Navigation("Steps");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Assignment", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.Assignment", b =>
                 {
                     b.Navigation("Dispatch");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.RescueTeam", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.RescueTeam", b =>
                 {
                     b.Navigation("Assignments");
 
@@ -397,7 +397,7 @@ namespace RescueSriLanka.Api.Migrations
                     b.Navigation("Vehicles");
                 });
 
-            modelBuilder.Entity("RescueSriLanka.Api.Models.Vehicle", b =>
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentD.Models.Vehicle", b =>
                 {
                     b.Navigation("Assignments");
                 });

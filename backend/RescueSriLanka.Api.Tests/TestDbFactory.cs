@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
+using RescueSriLanka.Api.Features.ComponentD.Data;
 
 namespace RescueSriLanka.Api.Tests
 {

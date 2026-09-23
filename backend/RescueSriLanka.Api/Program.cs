@@ -21,11 +21,13 @@ using RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent;
 using RescueSriLanka.Api.Features.ComponentB.Services;
 using RescueSriLanka.Api.Features.ComponentC.Services;
 using RescueSriLanka.Api.Features.ComponentC.Data;
-using RescueSriLanka.Api.Agents.Orchestration;
-using RescueSriLanka.Api.Agents.SafetyValidation;
+using RescueSriLanka.Api.Features.ComponentD.Agents.Orchestration;
+using RescueSriLanka.Api.Features.ComponentD.Agents.SafetyValidation;
+using RescueSriLanka.Api.Features.ComponentD.Services;
+using RescueSriLanka.Api.Features.ComponentD.Data;
 // Component A and Component D each declare an IIncidentAnalysisAgent.
 using AIncidentAnalysisAgent = RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent.IIncidentAnalysisAgent;
-using DIncidentAnalysisAgent = RescueSriLanka.Api.Agents.Orchestration.IIncidentAnalysisAgent;
+using DIncidentAnalysisAgent = RescueSriLanka.Api.Features.ComponentD.Agents.Orchestration.IIncidentAnalysisAgent;
 
 var builder = WebApplication.CreateBuilder(args);
 

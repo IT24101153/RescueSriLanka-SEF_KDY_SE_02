@@ -1,5 +1,5 @@
-using RescueSriLanka.Api.Agents.SafetyValidation;
-using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Features.ComponentD.Agents.SafetyValidation;
+using RescueSriLanka.Api.Features.ComponentD.Models;
 using Xunit;
 
 namespace RescueSriLanka.Api.Tests

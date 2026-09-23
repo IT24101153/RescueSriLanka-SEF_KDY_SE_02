@@ -1,7 +1,8 @@
-using RescueSriLanka.Api.DTOs;
+using RescueSriLanka.Api.Features.ComponentD.DTOs;
 using RescueSriLanka.Api.Data;
-using RescueSriLanka.Api.Models;
-using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Features.ComponentD.Data;
+using RescueSriLanka.Api.Features.ComponentD.Models;
+using RescueSriLanka.Api.Features.ComponentD.Services;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using Xunit;

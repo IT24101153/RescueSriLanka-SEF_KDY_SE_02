@@ -1,9 +1,8 @@
 using System.Text.Json;
-using RescueSriLanka.Api.Agents.SafetyValidation;
-using RescueSriLanka.Api.DTOs;
-using RescueSriLanka.Api.Models;
-using RescueSriLanka.Api.Models.Agents;
-using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Features.ComponentD.Agents.SafetyValidation;
+using RescueSriLanka.Api.Features.ComponentD.DTOs;
+using RescueSriLanka.Api.Features.ComponentD.Models;
+using RescueSriLanka.Api.Features.ComponentD.Services;
 using Xunit;
 
 namespace RescueSriLanka.Api.Tests;
@@ -59,7 +58,7 @@ public class SafeDispatchDecisionTests
         Assert.Equal(WorkflowStatus.Completed, (await db.AgentWorkflows.FindAsync(w.Id))!.Status);
     }
 
-    private static async Task<(Assignment Assignment, AgentWorkflow Workflow)> SeedAsync(Data.ComponentDDbContext db)
+    private static async Task<(Assignment Assignment, AgentWorkflow Workflow)> SeedAsync(RescueSriLanka.Api.Features.ComponentD.Data.ComponentDDbContext db)
     {
         var team = new RescueTeam { Name = "T", Status = TeamStatus.Available };
         team.Members.Add(new TeamMember { FullName = "M", Phone = "1", Skill = SkillType.Paramedic, IsAvailable = true });
