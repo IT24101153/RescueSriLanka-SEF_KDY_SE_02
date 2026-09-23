@@ -179,7 +179,7 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
       appBar: AppBar(
         titleSpacing: 16,
         title: const Text(
-          'Disaster map',
+          'Rescue SriLanka',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
         actions: [
