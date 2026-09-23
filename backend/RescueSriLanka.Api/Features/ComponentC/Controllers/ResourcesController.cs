@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
-using RescueSriLanka.Api.Contracts;
-using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Features.ComponentC.DTOs;
+using RescueSriLanka.Api.Features.ComponentC.Services;
 
-namespace RescueSriLanka.Api.Controllers;
+namespace RescueSriLanka.Api.Features.ComponentC.Controllers;
 
 [ApiController]
 [Route("api/resources")]

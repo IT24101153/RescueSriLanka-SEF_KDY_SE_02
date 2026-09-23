@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'resource_api.dart';
+import '../services/resource_api.dart';
 
 void main() {
   runApp(const RescueSriLankaApp());
@@ -64,19 +64,28 @@ class _ResourceHomePageState extends State<ResourceHomePage> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: const Text('Rescue Sri Lanka', style: TextStyle(fontWeight: FontWeight.w800)),
+          title: const Text('Resources', style: TextStyle(fontWeight: FontWeight.w800)),
           actions: [IconButton(onPressed: _loadRequests, icon: const Icon(Icons.refresh), tooltip: 'Refresh requests')],
         ),
         body: SafeArea(
-          child: IndexedStack(index: _selectedIndex, children: [RequestHelpPage(api: _api, requests: _requests, loadingRequests: _loadingRequests, onSubmitted: _loadRequests), DonatePage(api: _api)]),
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _selectedIndex,
-          onDestinationSelected: (index) => setState(() => _selectedIndex = index),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.volunteer_activism_outlined), selectedIcon: Icon(Icons.volunteer_activism), label: 'Request help'),
-            NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Donate'),
-          ],
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(value: 0, icon: Icon(Icons.volunteer_activism_outlined), label: Text('Resource request')),
+                    ButtonSegment(value: 1, icon: Icon(Icons.inventory_2_outlined), label: Text('Donate')),
+                  ],
+                  selected: {_selectedIndex},
+                  onSelectionChanged: (selection) => setState(() => _selectedIndex = selection.first),
+                ),
+              ),
+              Expanded(
+                child: IndexedStack(index: _selectedIndex, children: [RequestHelpPage(api: _api, requests: _requests, loadingRequests: _loadingRequests, onSubmitted: _loadRequests), DonatePage(api: _api)]),
+              ),
+            ],
+          ),
         ),
         floatingActionButton: _selectedIndex == 0 && _requests.isNotEmpty
             ? FloatingActionButton.small(onPressed: _loadRequests, child: const Icon(Icons.sync))

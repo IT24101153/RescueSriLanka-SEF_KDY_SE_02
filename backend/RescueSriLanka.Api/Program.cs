@@ -19,6 +19,8 @@ using RescueSriLanka.Api.Features.ComponentA.Services;
 using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 using RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent;
 using RescueSriLanka.Api.Features.ComponentB.Services;
+using RescueSriLanka.Api.Features.ComponentC.Services;
+using RescueSriLanka.Api.Features.ComponentC.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 

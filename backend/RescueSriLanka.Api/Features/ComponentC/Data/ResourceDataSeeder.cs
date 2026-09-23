@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Data;
+using RescueSriLanka.Api.Features.ComponentC.Models;
 
-namespace RescueSriLanka.Api.Data;
+namespace RescueSriLanka.Api.Features.ComponentC.Data;
 
 public static class ResourceDataSeeder
 {

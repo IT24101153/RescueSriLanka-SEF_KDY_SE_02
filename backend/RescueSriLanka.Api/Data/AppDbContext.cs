@@ -2,10 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Features.ComponentA.Models;
 using RescueSriLanka.Api.Features.ComponentB.Models;
-// Component C still declares its own HelpRequest in RescueSriLanka.Api.Models;
-// this alias keeps the DbSet below pointing at Component B's entity until
-// C's models move into their own namespace.
-using HelpRequest = RescueSriLanka.Api.Features.ComponentB.Models.HelpRequest;
 
 namespace RescueSriLanka.Api.Data;
 

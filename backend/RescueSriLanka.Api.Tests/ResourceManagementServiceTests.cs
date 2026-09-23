@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using RescueSriLanka.Api.Contracts;
+using RescueSriLanka.Api.Features.ComponentC.DTOs;
 using RescueSriLanka.Api.Data;
-using RescueSriLanka.Api.Models;
-using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Features.ComponentC.Models;
+using RescueSriLanka.Api.Features.ComponentC.Services;
 using Xunit;
 
 namespace RescueSriLanka.Api.Tests;

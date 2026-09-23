@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using RescueSriLanka.Api.Contracts;
+using RescueSriLanka.Api.Features.ComponentC.DTOs;
 using RescueSriLanka.Api.Data;
-using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Features.ComponentC.Models;
 
-namespace RescueSriLanka.Api.Services;
+namespace RescueSriLanka.Api.Features.ComponentC.Services;
 
 public interface IResourceManagementService
 {

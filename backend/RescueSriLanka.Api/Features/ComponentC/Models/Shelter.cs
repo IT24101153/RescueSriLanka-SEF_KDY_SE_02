@@ -1,4 +1,4 @@
-namespace RescueSriLanka.Api.Models;
+namespace RescueSriLanka.Api.Features.ComponentC.Models;
 
 public class Shelter
 {

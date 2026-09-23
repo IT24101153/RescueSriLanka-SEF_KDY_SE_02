@@ -1,16 +1,16 @@
-namespace RescueSriLanka.Api.Models;
+namespace RescueSriLanka.Api.Features.ComponentC.Models;
 
-public class MedicalSupply
+public class FoodWaterStock
 {
     public Guid Id { get; set; }
 
-    public required string Name { get; set; }
+    public required string ItemName { get; set; }
 
     public required string Unit { get; set; }
 
-    public int QuantityOnHand { get; set; }
+    public decimal QuantityOnHand { get; set; }
 
-    public int LowStockThreshold { get; set; }
+    public decimal LowStockThreshold { get; set; }
 
     public bool IsActive { get; set; } = true;
 

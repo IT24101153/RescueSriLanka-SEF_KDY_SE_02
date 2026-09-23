@@ -7,7 +7,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:mobile/resource_app.dart';
+import 'package:mobile/features/component_c/screens/resource_home_screen.dart';
 
 void main() {
   testWidgets('resource request and donation tabs are available', (WidgetTester tester) async {
@@ -15,7 +15,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('What do you need?'), findsOneWidget);
-    expect(find.text('Request help'), findsOneWidget);
+    expect(find.text('Resource request'), findsOneWidget);
     expect(find.text('Donate'), findsOneWidget);
 
     await tester.tap(find.text('Donate'));

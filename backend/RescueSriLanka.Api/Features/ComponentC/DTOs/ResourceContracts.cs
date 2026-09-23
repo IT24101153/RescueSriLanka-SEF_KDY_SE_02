@@ -1,4 +1,4 @@
-namespace RescueSriLanka.Api.Contracts;
+namespace RescueSriLanka.Api.Features.ComponentC.DTOs;
 
 public record CreateShelterRequest(
     string Name,

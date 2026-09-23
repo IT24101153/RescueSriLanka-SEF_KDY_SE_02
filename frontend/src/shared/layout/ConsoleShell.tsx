@@ -6,6 +6,7 @@ import type { Role, Session } from '../auth/session'
 import DisasterDashboard from '../../components/componentA/DisasterDashboard'
 import HelpRequestDashboard from '../../components/componentB/HelpRequestDashboard'
 import HelpRequestsReview from '../../components/componentB/HelpRequestsReview'
+import ResourceDashboard from '../../components/componentC/ResourceDashboard'
 import './ConsoleShell.css'
 
 type ConsoleShellProps = {
@@ -31,13 +32,21 @@ const HELP_REQUEST_PAGES: Page[] = [
   { path: '/dashboard/help-requests', label: 'Request review', Component: HelpRequestsReview },
 ]
 
+// Component C — shelters, supplies, stock and allocations
+const RESOURCE_PAGES: Page[] = [
+  { path: '/resources', label: 'Resource dashboard', Component: ResourceDashboard, end: true },
+]
+
 /**
  * Each account sees only its own component's dashboard: Help Request
- * Managers get the help-request pages, everyone else the disaster
- * dashboard. The first page listed is where sign-in lands.
+ * Managers get the help-request pages, Resource Managers the resource
+ * dashboard, everyone else the disaster dashboard. The first page listed
+ * is where sign-in lands.
  */
 function pagesFor(role: Role): Page[] {
-  return role === 'HelpRequestManager' ? HELP_REQUEST_PAGES : DISASTER_PAGES
+  if (role === 'HelpRequestManager') return HELP_REQUEST_PAGES
+  if (role === 'ResourceManager') return RESOURCE_PAGES
+  return DISASTER_PAGES
 }
 
 /** Signed-in frame. Component screens render inside <main>. */

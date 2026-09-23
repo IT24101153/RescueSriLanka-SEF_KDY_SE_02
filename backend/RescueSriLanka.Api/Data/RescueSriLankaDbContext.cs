@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Features.ComponentC.Models;
 
 namespace RescueSriLanka.Api.Data;
 

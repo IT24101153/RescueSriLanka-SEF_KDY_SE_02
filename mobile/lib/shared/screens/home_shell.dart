@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
 import '../../features/component_b/screens/home_screen.dart';
+import '../../features/component_c/screens/resource_home_screen.dart';
 import '../../features/component_a/screens/map/disaster_map_screen.dart';
 import 'profile/profile_screen.dart';
 import '../../features/component_a/screens/report/report_screen.dart';
 
-/// Four-tab shell: the disaster map, filing a report, asking for help, and the
-/// profile area.
+/// Five-tab shell: the disaster map, filing a report, asking for help, the
+/// resource area, and the profile area.
 ///
 /// Only the Report and Help tabs need an account — they show a sign-in prompt
 /// instead of the form when there is no session, so a tourist can open the app
@@ -36,6 +37,7 @@ class _HomeShellState extends State<HomeShell> {
           const DisasterMapScreen(),
           ReportScreen(auth: widget.auth),
           HelpRequestsTab(auth: widget.auth),
+          const ResourceHomePage(),
           ProfileScreen(auth: widget.auth),
         ],
       ),
@@ -59,6 +61,11 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.health_and_safety_outlined),
             selectedIcon: Icon(Icons.health_and_safety),
             label: 'Help',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2),
+            label: 'Resources',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
