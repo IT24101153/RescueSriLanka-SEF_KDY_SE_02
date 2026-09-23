@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../features/component_a/services/api_client.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
 
@@ -29,11 +30,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _busy = false;
   String? _error;
 
+  /// Where the person lives, so district warnings can reach them. The list is
+  /// the server's, and the whole field is optional — an account still works
+  /// without one, and it can be set later from the profile.
+  final ApiClient _api = ApiClient.anonymous();
+  List<String> _districts = [];
+  String? _district;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDistricts();
+  }
+
+  Future<void> _loadDistricts() async {
+    try {
+      final districts = await _api.fetchDistricts();
+      if (mounted) setState(() => _districts = districts);
+    } catch (_) {
+      // Registration matters more than the picker; leave it hidden.
+    }
+  }
+
   @override
   void dispose() {
     for (final controller in [_name, _email, _phone, _password, _confirm]) {
       controller.dispose();
     }
+    _api.dispose();
     super.dispose();
   }
 
@@ -62,6 +86,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!mounted) return;
 
     if (result.ok) {
+      // Registration only takes name, email, password and phone, so the
+      // district is saved straight after with the token it just returned.
+      if (_district != null) {
+        await widget.auth.updatePreferences(district: _district);
+      }
+      if (!mounted) return;
       // Registration returns a token, so there is no second sign-in step.
       Navigator.of(context).pop(true);
       return;
@@ -174,6 +204,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       prefixIcon: Icon(Icons.phone_outlined),
                     ),
                   ),
+                  if (_districts.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    _DistrictField(
+                      districts: _districts,
+                      value: _district,
+                      enabled: !_busy,
+                      onChanged: (value) => setState(() => _district = value),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   TextFormField(
                     controller: _password,
@@ -250,6 +289,86 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// District picker for sign-up: a labelled dropdown whose only values come
+/// from the server, with an explicit "prefer not to say" entry so the field
+/// stays optional.
+class _DistrictField extends StatelessWidget {
+  const _DistrictField({
+    required this.districts,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final List<String> districts;
+  final String? value;
+  final bool enabled;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.place_outlined, color: AppColors.body, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String?>(
+                    value: value,
+                    isExpanded: true,
+                    onChanged: enabled ? onChanged : null,
+                    borderRadius: BorderRadius.circular(10),
+                    style: const TextStyle(fontSize: 16, color: AppColors.ink),
+                    hint: const Text(
+                      'Where do you live?',
+                      style: TextStyle(fontSize: 16, color: AppColors.body),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text(
+                          'Prefer not to say',
+                          style: TextStyle(fontSize: 15, color: AppColors.body),
+                        ),
+                      ),
+                      ...districts.map(
+                        (district) => DropdownMenuItem<String?>(
+                          value: district,
+                          child: Text(
+                            district,
+                            style: const TextStyle(fontSize: 15),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(12, 6, 12, 0),
+          child: Text(
+            'Your district. We use it to warn you when a disaster is reported '
+            'near you.',
+            style: TextStyle(fontSize: 12, color: AppColors.body, height: 1.35),
+          ),
+        ),
+      ],
     );
   }
 }
