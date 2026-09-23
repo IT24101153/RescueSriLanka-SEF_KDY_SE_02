@@ -22,7 +22,8 @@ class ResourceApi {
     required String needType,
     required String description,
   }) async {
-    final response = await _post('/api/resources/help-requests', {
+    const path = '/api/resources/help-requests';
+    final response = await _post(path, {
       'requesterName': name,
       'contactNumber': phone,
       'needType': needType,
@@ -30,7 +31,7 @@ class ResourceApi {
       'latitude': null,
       'longitude': null,
     });
-    return _decode<HelpRequest>(response, HelpRequest.fromJson);
+    return _decode<HelpRequest>(response, path, HelpRequest.fromJson);
   }
 
   Future<Donation> createDonation({
@@ -41,7 +42,8 @@ class ResourceApi {
     required String unit,
     String? notes,
   }) async {
-    final response = await _post('/api/resources/donations', {
+    const path = '/api/resources/donations';
+    final response = await _post(path, {
       'donorName': name,
       'contactNumber': phone,
       'donationType': donationType,
@@ -49,12 +51,13 @@ class ResourceApi {
       'unit': unit,
       'notes': notes,
     });
-    return _decode<Donation>(response, Donation.fromJson);
+    return _decode<Donation>(response, path, Donation.fromJson);
   }
 
   Future<List<HelpRequest>> getHelpRequests() async {
-    final response = await _get('/api/resources/help-requests');
-    return _decodeList(response, HelpRequest.fromJson);
+    const path = '/api/resources/help-requests';
+    final response = await _get(path);
+    return _decodeList(response, path, HelpRequest.fromJson);
   }
 
   void dispose() => _client.close();
@@ -98,7 +101,7 @@ class ResourceApi {
   /// server fault from a rejected form. The API sends `{ "error": ... }` for
   /// the faults it expects; an unhandled one sends a plain-text stack trace
   /// instead, so the body is parsed defensively and its first line is used.
-  Exception _failure(http.Response response) {
+  Exception _failure(http.Response response, String path) {
     final status = response.statusCode;
     final body = response.body.trim();
 
@@ -120,7 +123,7 @@ class ResourceApi {
 
     if (status >= 500) {
       return Exception(
-        'The resource service failed (HTTP $status).'
+        'The resource service failed (HTTP $status) on $_baseUrl$path.'
         '${reason == null ? '' : ' $reason'}',
       );
     }
@@ -131,17 +134,19 @@ class ResourceApi {
 
   T _decode<T>(
     http.Response response,
+    String path,
     T Function(Map<String, dynamic>) factory,
   ) {
-    if (!_ok(response)) throw _failure(response);
+    if (!_ok(response)) throw _failure(response, path);
     return factory(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   List<T> _decodeList<T>(
     http.Response response,
+    String path,
     T Function(Map<String, dynamic>) factory,
   ) {
-    if (!_ok(response)) throw _failure(response);
+    if (!_ok(response)) throw _failure(response, path);
     return (jsonDecode(response.body) as List<dynamic>)
         .map((item) => factory(item as Map<String, dynamic>))
         .toList();

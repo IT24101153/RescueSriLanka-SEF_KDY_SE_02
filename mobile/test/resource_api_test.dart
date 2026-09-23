@@ -31,6 +31,9 @@ void main() {
           'message',
           allOf(
             contains('HTTP 500'),
+            // The failing call names itself, so a screenshot of the banner
+            // is enough to act on.
+            contains('http://localhost:5093/api/resources/help-requests'),
             contains('Gemini:ApiKey is not configured.'),
           ),
         ),
