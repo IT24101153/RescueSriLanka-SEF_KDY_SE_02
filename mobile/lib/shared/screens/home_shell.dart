@@ -4,12 +4,13 @@ import '../core/theme.dart';
 import '../services/auth_service.dart';
 import '../../features/component_b/screens/home_screen.dart';
 import '../../features/component_c/screens/resource_home_screen.dart';
+import '../../features/component_d/screens/rescue_coordinator_tab.dart';
 import '../../features/component_a/screens/map/disaster_map_screen.dart';
 import 'profile/profile_screen.dart';
 import '../../features/component_a/screens/report/report_screen.dart';
 
-/// Five-tab shell: the disaster map, filing a report, asking for help, the
-/// resource area, and the profile area.
+/// Six-tab shell: the disaster map, filing a report, asking for help, the
+/// resource area, rescue coordination, and the profile area.
 ///
 /// Only the Report and Help tabs need an account — they show a sign-in prompt
 /// instead of the form when there is no session, so a tourist can open the app
@@ -38,6 +39,7 @@ class _HomeShellState extends State<HomeShell> {
           ReportScreen(auth: widget.auth),
           HelpRequestsTab(auth: widget.auth),
           const ResourceHomePage(),
+          RescueCoordinatorTab(auth: widget.auth),
           ProfileScreen(auth: widget.auth),
         ],
       ),
@@ -66,6 +68,11 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.inventory_2_outlined),
             selectedIcon: Icon(Icons.inventory_2),
             label: 'Resources',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.groups_outlined),
+            selectedIcon: Icon(Icons.groups),
+            label: 'Rescue',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

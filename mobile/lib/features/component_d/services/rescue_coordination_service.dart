@@ -1,9 +1,10 @@
 import 'dart:convert';
 
+import '../../../shared/core/config.dart';
+
 import 'package:http/http.dart' as http;
 
-import '../config/api_config.dart';
-import '../models/auth_models.dart';
+import '../../../shared/models/auth.dart';
 import '../models/coordination_requests.dart';
 import '../models/incident_reference.dart';
 
@@ -199,7 +200,7 @@ class RescueCoordinationService {
     try {
       final request = http.Request(
         method,
-        Uri.parse('${ApiConfig.baseUrl}$path'),
+        Uri.parse('${AppConfig.apiBaseUrl}$path'),
       );
       request.headers.addAll({
         'Authorization': 'Bearer ${session.token}',

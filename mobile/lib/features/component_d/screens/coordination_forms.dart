@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../models/auth_models.dart';
+import '../../../shared/models/auth.dart';
 import '../models/coordination_requests.dart';
 import '../models/incident_reference.dart';
 import '../services/rescue_coordination_service.dart';

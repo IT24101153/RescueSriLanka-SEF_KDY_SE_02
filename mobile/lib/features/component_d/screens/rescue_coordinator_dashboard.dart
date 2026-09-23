@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
 
-import '../models/auth_models.dart';
+import '../../../shared/models/auth.dart';
 import '../services/rescue_coordination_service.dart';
 import 'rescue_teams_screen.dart';
 import 'assignments_screen.dart';
 import 'ai_safety_review_screen.dart';
 import 'active_dispatches_screen.dart';
-import 'login_screen.dart';
 
 class RescueCoordinatorDashboard extends StatefulWidget {
-  const RescueCoordinatorDashboard({super.key, required this.session});
+  const RescueCoordinatorDashboard({
+    super.key,
+    required this.session,
+    required this.onLogout,
+  });
 
   final AuthSession session;
+
+  /// Signing out is the app shell's business; the tab shows the sign-in
+  /// prompt again once the session is gone.
+  final VoidCallback onLogout;
 
   @override
   State<RescueCoordinatorDashboard> createState() =>
@@ -225,13 +232,7 @@ class _RescueCoordinatorDashboardState
                         disabledColor: const Color(0xFFD0DBE7),
                       ),
                       IconButton(
-                        onPressed: () => Navigator.of(context)
-                            .pushAndRemoveUntil(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const LoginScreen(),
-                              ),
-                              (_) => false,
-                            ),
+                        onPressed: widget.onLogout,
                         tooltip: 'Logout',
                         icon: const Icon(Icons.logout),
                         color: const Color(0xFFFFAD83),
