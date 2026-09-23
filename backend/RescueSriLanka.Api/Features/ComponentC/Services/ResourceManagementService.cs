@@ -50,7 +50,7 @@ public interface IResourceManagementService
     Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken);
 }
 
-public class ResourceManagementService(RescueSriLankaDbContext dbContext) : IResourceManagementService
+public class ResourceManagementService(AppDbContext dbContext) : IResourceManagementService
 {
     public async Task<IReadOnlyList<Shelter>> GetSheltersAsync(CancellationToken cancellationToken) =>
         await dbContext.Shelters
@@ -285,13 +285,13 @@ public class ResourceManagementService(RescueSriLankaDbContext dbContext) : IRes
             Longitude = request.Longitude is null ? null : (double?)request.Longitude
         };
 
-        dbContext.HelpRequests.Add(helpRequest);
+        dbContext.ResourceHelpRequests.Add(helpRequest);
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToResponse(helpRequest);
     }
 
     public async Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken) =>
-        (await dbContext.HelpRequests
+        (await dbContext.ResourceHelpRequests
             .AsNoTracking()
             .OrderByDescending(request => request.CreatedAtUtc)
             .ToListAsync(cancellationToken))

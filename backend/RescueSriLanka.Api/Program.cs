@@ -28,11 +28,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Component C still has its own context; it is folded into AppDbContext with
-// the resource-management migration.
-builder.Services.AddDbContext<RescueSriLankaDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-
 // ---------------------------------------------------------------- auth
 var jwtSection = builder.Configuration.GetSection("Jwt");
 var jwtKey = jwtSection["Key"]
@@ -288,8 +283,7 @@ if (app.Environment.IsDevelopment())
             logger);
 
         // Component C's shelters, supplies and stock for the resource screens.
-        await ResourceDataSeeder.SeedAsync(
-            services.GetRequiredService<RescueSriLankaDbContext>());
+        await ResourceDataSeeder.SeedAsync(db);
 
         // Sample incidents for the map/dashboard — off via configuration.
         if (app.Configuration.GetValue("SeedSampleIncidents", false))

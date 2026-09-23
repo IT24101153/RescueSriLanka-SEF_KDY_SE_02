@@ -3,14 +3,33 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace RescueSriLanka.Api.Data.Migrations
+namespace RescueSriLanka.Api.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialResourceManagement : Migration
+    public partial class AddComponentC : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateTable(
+                name: "Donations",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    DonorName = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    ContactNumber = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
+                    DonationType = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
+                    Quantity = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
+                    Unit = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
+                    Notes = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    Status = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Donations", x => x.Id);
+                });
+
             migrationBuilder.CreateTable(
                 name: "FoodWaterStocks",
                 columns: table => new
@@ -43,6 +62,25 @@ namespace RescueSriLanka.Api.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_MedicalSupplies", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "resource_help_requests",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    RequesterName = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    ContactNumber = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
+                    NeedType = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    Description = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
+                    Latitude = table.Column<double>(type: "double precision", nullable: true),
+                    Longitude = table.Column<double>(type: "double precision", nullable: true),
+                    Status = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_resource_help_requests", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -83,6 +121,16 @@ namespace RescueSriLanka.Api.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_Donations_Status_CreatedAtUtc",
+                table: "Donations",
+                columns: new[] { "Status", "CreatedAtUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_resource_help_requests_Status_CreatedAtUtc",
+                table: "resource_help_requests",
+                columns: new[] { "Status", "CreatedAtUtc" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ResourceAllocations_ResourceType_ResourceId_Status",
                 table: "ResourceAllocations",
                 columns: new[] { "ResourceType", "ResourceId", "Status" });
@@ -92,10 +140,16 @@ namespace RescueSriLanka.Api.Data.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "Donations");
+
+            migrationBuilder.DropTable(
                 name: "FoodWaterStocks");
 
             migrationBuilder.DropTable(
                 name: "MedicalSupplies");
+
+            migrationBuilder.DropTable(
+                name: "resource_help_requests");
 
             migrationBuilder.DropTable(
                 name: "ResourceAllocations");

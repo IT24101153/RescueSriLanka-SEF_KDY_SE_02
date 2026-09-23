@@ -6,44 +6,8 @@ namespace RescueSriLanka.Api.Features.ComponentC.Data;
 
 public static class ResourceDataSeeder
 {
-    public static async Task SeedAsync(RescueSriLankaDbContext dbContext, CancellationToken cancellationToken = default)
+    public static async Task SeedAsync(AppDbContext dbContext, CancellationToken cancellationToken = default)
     {
-        await dbContext.Database.ExecuteSqlRawAsync("""
-            CREATE TABLE IF NOT EXISTS "Donations" (
-                "Id" uuid NOT NULL PRIMARY KEY,
-                "DonorName" varchar(160) NOT NULL,
-                "ContactNumber" varchar(40) NOT NULL,
-                "DonationType" varchar(80) NOT NULL,
-                "Quantity" numeric(12,2) NOT NULL,
-                "Unit" varchar(40) NOT NULL,
-                "Notes" varchar(1000),
-                "Status" varchar(30) NOT NULL DEFAULT 'PendingReview',
-                "CreatedAtUtc" timestamptz NOT NULL DEFAULT now()
-            );
-            ALTER TABLE "HelpRequests"
-                ADD COLUMN IF NOT EXISTS "RequesterName" varchar(160) NOT NULL DEFAULT '',
-                ADD COLUMN IF NOT EXISTS "ContactNumber" varchar(40) NOT NULL DEFAULT '',
-                ADD COLUMN IF NOT EXISTS "NeedType" varchar(50) NOT NULL DEFAULT 'Other',
-                ADD COLUMN IF NOT EXISTS "Description" varchar(2000) NOT NULL DEFAULT '',
-                ADD COLUMN IF NOT EXISTS "Latitude" numeric,
-                ADD COLUMN IF NOT EXISTS "Longitude" numeric,
-                ADD COLUMN IF NOT EXISTS "Status" varchar(30) NOT NULL DEFAULT 'Pending',
-                ADD COLUMN IF NOT EXISTS "CreatedAtUtc" timestamptz NOT NULL DEFAULT now();
-            DO $$
-            BEGIN
-                IF (SELECT data_type FROM information_schema.columns
-                    WHERE table_name = 'HelpRequests' AND column_name = 'Status') = 'integer' THEN
-                    ALTER TABLE "HelpRequests" ALTER COLUMN "Status" TYPE varchar(30) USING "Status"::text;
-                END IF;
-            END $$;
-            ALTER TABLE "HelpRequests" ALTER COLUMN "CitizenId" DROP NOT NULL;
-            ALTER TABLE "HelpRequests" ALTER COLUMN "Type" SET DEFAULT 0;
-            ALTER TABLE "HelpRequests" ALTER COLUMN "UrgencyScore" SET DEFAULT 0;
-            ALTER TABLE "HelpRequests" ALTER COLUMN "CreatedAt" SET DEFAULT now();
-            ALTER TABLE "HelpRequests" ALTER COLUMN "UpdatedAt" SET DEFAULT now();
-            ALTER TABLE "HelpRequests" ALTER COLUMN "Latitude" TYPE numeric USING "Latitude"::numeric;
-            ALTER TABLE "HelpRequests" ALTER COLUMN "Longitude" TYPE numeric USING "Longitude"::numeric;
-            """, cancellationToken);
 
         var shelterIds = new[]
         {
@@ -88,9 +52,9 @@ public static class ResourceDataSeeder
         }
 
         var helpRequestId = Guid.Parse("40000000-0000-0000-0000-000000000001");
-        if (!await dbContext.HelpRequests.AnyAsync(request => request.Id == helpRequestId, cancellationToken))
+        if (!await dbContext.ResourceHelpRequests.AnyAsync(request => request.Id == helpRequestId, cancellationToken))
         {
-            dbContext.HelpRequests.Add(new HelpRequest
+            dbContext.ResourceHelpRequests.Add(new HelpRequest
             {
                 Id = helpRequestId,
                 RequesterName = "Nimal Perera",

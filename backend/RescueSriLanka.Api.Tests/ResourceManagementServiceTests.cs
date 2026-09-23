@@ -55,8 +55,8 @@ public class ResourceManagementServiceTests
         Assert.Equal(4, alert.QuantityOnHand);
     }
 
-    private static RescueSriLankaDbContext CreateContext() =>
-        new(new DbContextOptionsBuilder<RescueSriLankaDbContext>()
+    private static AppDbContext CreateContext() =>
+        new(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 }
