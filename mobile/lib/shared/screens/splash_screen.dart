@@ -1,12 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../services/auth_service.dart';
 import 'home_shell.dart';
 
-/// Brand splash. Holds briefly, then goes straight to the map — no login gate.
+/// Brand splash. Goes straight to the map — no login gate.
 ///
-/// The pause also covers restoring any stored session, so a returning user
-/// lands on the map already signed in.
+/// It waits for the stored session to be read back rather than for a fixed
+/// delay, so a returning user lands on a tab bar that already knows they are
+/// signed in, and a first-time user is not kept waiting.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, required this.auth});
 
@@ -30,7 +33,12 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _goToApp() async {
-    await Future<void>.delayed(const Duration(milliseconds: 1900));
+    await Future.wait([
+      // Long enough for the logo to finish fading in, short enough not to
+      // stall the app when there is no session to restore.
+      Future<void>.delayed(const Duration(milliseconds: 900)),
+      _sessionRestored(),
+    ]);
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
@@ -41,6 +49,21 @@ class _SplashScreenState extends State<SplashScreen>
             FadeTransition(opacity: animation, child: child),
       ),
     );
+  }
+
+  /// Completes once AuthService has finished reading any stored session.
+  Future<void> _sessionRestored() {
+    if (!widget.auth.isRestoring) return Future<void>.value();
+
+    final completer = Completer<void>();
+    void listener() {
+      if (widget.auth.isRestoring) return;
+      widget.auth.removeListener(listener);
+      if (!completer.isCompleted) completer.complete();
+    }
+
+    widget.auth.addListener(listener);
+    return completer.future;
   }
 
   @override

@@ -195,41 +195,27 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
           ),
         ],
       ),
-      body: _error != null ? _errorState() : _content(),
+      body: _content(),
     );
   }
 
-  Widget _errorState() => Center(
+  /// The map itself needs no API, so a failed load is a banner over it rather
+  /// than a screen that hides the map.
+  Widget _errorBanner() => Material(
+    color: AppColors.surfaceAlt,
     child: Padding(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+      child: Row(
         children: [
-          const Icon(Icons.cloud_off, size: 42, color: AppColors.body),
-          const SizedBox(height: 14),
-          const Text(
-            'Cannot load the disaster map',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.ink,
+          const Icon(Icons.cloud_off, size: 18, color: AppColors.body),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Incidents and zones are unavailable. $_error',
+              style: const TextStyle(fontSize: 12, height: 1.35),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 13, height: 1.45),
-          ),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _load,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.brand,
-              foregroundColor: AppColors.brandInk,
-            ),
-            child: const Text('Try again'),
-          ),
+          TextButton(onPressed: _load, child: const Text('Retry')),
         ],
       ),
     ),
@@ -238,6 +224,7 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
   Widget _content() {
     return Column(
       children: [
+        if (_error != null) _errorBanner(),
         _summaryBar(),
         _filterBar(),
         Expanded(
@@ -313,7 +300,7 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
             ],
           ),
         ),
-        _incidentList(),
+        if (_visible.isNotEmpty || _loading) _incidentList(),
       ],
     );
   }
@@ -324,7 +311,7 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
     final danger = _zones.where((z) => z.status == 'Danger').length;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
       decoration: const BoxDecoration(
         color: AppColors.surfaceAlt,
         border: Border(bottom: BorderSide(color: AppColors.border)),
@@ -360,10 +347,10 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
     const options = ['All', 'Critical', 'High', 'Moderate', 'Low'];
 
     return SizedBox(
-      height: 52,
+      height: 46,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         itemCount: options.length,
         separatorBuilder: (context, index) => const SizedBox(width: 7),
         itemBuilder: (context, index) {
@@ -400,14 +387,12 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
         maxZoom: _maxZoom,
       ),
       children: [
-        // CARTO Voyager — OpenStreetMap data, better cartography, and still
-        // keyless, so nothing sensitive ships in the APK. The React console
-        // uses Mapbox instead; see docs/adr/0003-map-tile-provider.md.
-        //
-        // @2x serves retina tiles, which phones need and flutter_map scales
-        // into its default 256px slots without further configuration.
+        // OpenStreetMap's own tiles — keyless, so nothing sensitive ships in
+        // the APK and the map draws whether or not our API is reachable.
+        // Their usage policy requires a real User-Agent, which
+        // userAgentPackageName supplies.
         TileLayer(
-          urlTemplate: 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'lk.rescuesrilanka.mobile',
           // A tile that fails to load is otherwise just a grey square, which
           // hides the reason.
@@ -455,12 +440,10 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
               ),
           ],
         ),
-        // CARTO's terms require their credit; the OpenStreetMap credit stays
-        // because the underlying data is theirs.
+        // OpenStreetMap's tile policy requires crediting contributors.
         const RichAttributionWidget(
           attributions: [
             TextSourceAttribution('OpenStreetMap contributors'),
-            TextSourceAttribution('CARTO'),
           ],
         ),
       ],
@@ -501,7 +484,7 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
     final visible = _visible;
 
     return Container(
-      height: 172,
+      height: 148,
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border)),
