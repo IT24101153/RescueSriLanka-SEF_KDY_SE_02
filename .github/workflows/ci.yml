@@ -1,0 +1,98 @@
+name: CI
+
+# Every push and every pull request builds all three parts of the stack and
+# runs the backend test suite. The module requires GitHub Actions; this is the
+# minimum that actually proves the repository still compiles.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+# A new push supersedes an in-flight run for the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (ASP.NET Core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore RescueSriLanka.slnx
+
+      - name: Build
+        run: dotnet build RescueSriLanka.slnx --configuration Release --no-restore
+
+      # The tests use the EF Core in-memory provider, so no PostgreSQL service
+      # container is needed here.
+      - name: Test
+        run: >-
+          dotnet test RescueSriLanka.slnx
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: '**/TestResults/*.trx'
+          if-no-files-found: ignore
+
+  frontend:
+    name: Web app (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Runs tsc before vite, so a type error fails the build rather than
+      # shipping.
+      - name: Build
+        run: npm run build
+
+  mobile:
+    name: Mobile app (Flutter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
