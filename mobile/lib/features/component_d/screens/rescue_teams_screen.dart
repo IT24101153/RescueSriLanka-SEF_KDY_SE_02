@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/core/theme.dart';
 import '../../../shared/models/auth.dart';
+import '../../../shared/widgets/app_ui.dart';
+import '../rescue_style.dart';
 import '../services/rescue_coordination_service.dart';
+import 'assignments_screen.dart' show CoordinationStatus;
 import 'coordination_forms.dart';
 
 class RescueTeamsScreen extends StatefulWidget {
@@ -14,8 +18,6 @@ class RescueTeamsScreen extends StatefulWidget {
 }
 
 class _RescueTeamsScreenState extends State<RescueTeamsScreen> {
-  static const _navy = Color(0xFF14283F);
-  static const _accent = Color(0xFFC4481C);
   final _service = RescueCoordinationService();
   List<Map<String, dynamic>> _teams = [];
   bool _isLoading = false;
@@ -129,60 +131,36 @@ class _RescueTeamsScreenState extends State<RescueTeamsScreen> {
         onPressed: _busy || _isLoading
             ? null
             : () => _delete(kind, item['id'], teamId: teamId),
+        style: TextButton.styleFrom(foregroundColor: AppColors.critical),
         icon: const Icon(Icons.delete_outline),
         label: Text('Delete ${kind.name}'),
       ),
     ],
   );
 
-  String _label(dynamic value) {
-    if (value is! String || value.isEmpty) return 'Not provided';
-    return value.replaceAllMapped(
-      RegExp(r'([a-z])([A-Z])'),
-      (match) => '${match[1]} ${match[2]}',
-    );
-  }
+  String _label(dynamic value) => coordinationLabel(value);
 
-  Widget _statusBadge(String status) {
-    final positive = status == 'Available';
-    final active = status == 'OnMission' || status == 'InUse';
-    final foreground = positive
-        ? const Color(0xFF1B6B3A)
-        : active
-        ? _accent
-        : const Color(0xFF46576B);
-    final background = positive
-        ? const Color(0xFFE8F5EB)
-        : active
-        ? const Color(0xFFFFEDE3)
-        : const Color(0xFFEDF0F4);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        _label(status),
-        style: TextStyle(color: foreground, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
+  /// One member or vehicle inside a team: what it is, and what state it is in.
   Widget _detail(String title, String subtitle, String status) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.only(top: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(color: _navy, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: AppColors.ink,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(subtitle, style: const TextStyle(color: Color(0xFF46576B))),
-          const SizedBox(height: 8),
-          _statusBadge(status),
+          const SizedBox(height: 3),
+          Text(
+            subtitle,
+            style: const TextStyle(color: AppColors.body, fontSize: 12.5),
+          ),
+          CoordinationStatus(status),
         ],
       ),
     );
@@ -193,118 +171,114 @@ class _RescueTeamsScreenState extends State<RescueTeamsScreen> {
     final vehicles = (team['vehicles'] as List).cast<Map<String, dynamic>>();
     final latitude = team['baseLatitude'];
     final longitude = team['baseLongitude'];
-    return Card(
-      color: Colors.white,
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: ExpansionTile(
-        key: PageStorageKey(team['id']),
-        tilePadding: const EdgeInsets.all(16),
-        childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-        iconColor: _accent,
-        collapsedIconColor: _accent,
-        title: Text(
-          team['name'] is String ? team['name'] as String : 'Unnamed team',
-          style: const TextStyle(
-            color: _navy,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
+    final status = team['status'] is String
+        ? team['status'] as String
+        : 'Unknown';
+
+    return AppCard(
+      accent: coordinationTone(status),
+      padding: EdgeInsets.zero,
+      // The card draws the border, so the tile's own dividers go.
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: PageStorageKey(team['id']),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+          iconColor: AppColors.body,
+          collapsedIconColor: AppColors.body,
+          title: Text(
+            team['name'] is String ? team['name'] as String : 'Unnamed team',
+            style: const TextStyle(
+              color: AppColors.ink,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: Column(
+          subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _statusBadge(
-                team['status'] is String ? team['status'] as String : 'Unknown',
+              CoordinationStatus(status),
+              Text(
+                '${members.length} members · ${vehicles.length} vehicles',
+                style: const TextStyle(color: AppColors.body, fontSize: 12.5),
               ),
-              const SizedBox(height: 10),
-              Text('${members.length} members · ${vehicles.length} vehicles'),
-              if (latitude is num && longitude is num) ...[
-                const SizedBox(height: 6),
-                Text('Base coordinates: $latitude, $longitude'),
+              if (latitude is num && longitude is num)
+                Text(
+                  'Base: $latitude, $longitude',
+                  style: const TextStyle(color: AppColors.body, fontSize: 12.5),
+                ),
+            ],
+          ),
+          children: [
+            const Divider(color: AppColors.border, height: 20),
+            _resourceActions(ResourceKind.team, team),
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () => _edit(ResourceKind.member, teamId: team['id']),
+                  icon: const Icon(Icons.person_add_alt, size: 18),
+                  label: const Text('Add member'),
+                ),
+                TextButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () => _edit(ResourceKind.vehicle, teamId: team['id']),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add vehicle'),
+                ),
               ],
+            ),
+            const SizedBox(height: 8),
+            const AppSectionTitle('Team members'),
+            if (members.isEmpty)
+              const Text(
+                'No team members listed.',
+                style: TextStyle(color: AppColors.body, fontSize: 13),
+              ),
+            for (final member in members) ...[
+              _detail(
+                member['fullName'] is String
+                    ? member['fullName'] as String
+                    : 'Unnamed member',
+                'Skill: ${_label(member['skill'])}',
+                member['isAvailable'] == true
+                    ? 'Available'
+                    : member['isAvailable'] == false
+                    ? 'Unavailable'
+                    : 'Unknown',
+              ),
+              _resourceActions(ResourceKind.member, member, teamId: team['id']),
             ],
-          ),
+            const Divider(color: AppColors.border, height: 24),
+            const AppSectionTitle('Vehicles'),
+            if (vehicles.isEmpty)
+              const Text(
+                'No vehicles listed.',
+                style: TextStyle(color: AppColors.body, fontSize: 13),
+              ),
+            for (final vehicle in vehicles) ...[
+              _detail(
+                vehicle['plateNumber'] is String
+                    ? vehicle['plateNumber'] as String
+                    : 'Registration not provided',
+                '${_label(vehicle['type'])} · Capacity: ${vehicle['capacity'] is num ? vehicle['capacity'] : 'Not provided'}',
+                vehicle['status'] is String
+                    ? vehicle['status'] as String
+                    : 'Unknown',
+              ),
+              _resourceActions(
+                ResourceKind.vehicle,
+                vehicle,
+                teamId: team['id'],
+              ),
+            ],
+          ],
         ),
-        children: [
-          const Divider(),
-          _resourceActions(ResourceKind.team, team),
-          Wrap(
-            spacing: 8,
-            children: [
-              TextButton.icon(
-                onPressed: _busy
-                    ? null
-                    : () => _edit(ResourceKind.member, teamId: team['id']),
-                icon: const Icon(Icons.person_add_alt),
-                label: const Text('Add Member'),
-              ),
-              TextButton.icon(
-                onPressed: _busy
-                    ? null
-                    : () => _edit(ResourceKind.vehicle, teamId: team['id']),
-                icon: const Icon(Icons.add),
-                label: const Text('Add Vehicle'),
-              ),
-            ],
-          ),
-          const Text(
-            'Team Members',
-            style: TextStyle(
-              color: _navy,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (members.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Text('No team members listed.'),
-            ),
-          for (final member in members) ...[
-            _detail(
-              member['fullName'] is String
-                  ? member['fullName'] as String
-                  : 'Unnamed member',
-              'Skill: ${_label(member['skill'])}',
-              member['isAvailable'] == true
-                  ? 'Available'
-                  : member['isAvailable'] == false
-                  ? 'Unavailable'
-                  : 'Unknown',
-            ),
-            _resourceActions(ResourceKind.member, member, teamId: team['id']),
-          ],
-          const Divider(),
-          const Text(
-            'Vehicles',
-            style: TextStyle(
-              color: _navy,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (vehicles.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Text('No vehicles listed.'),
-            ),
-          for (final vehicle in vehicles) ...[
-            _detail(
-              vehicle['plateNumber'] is String
-                  ? vehicle['plateNumber'] as String
-                  : 'Registration not provided',
-              '${_label(vehicle['type'])} · Capacity: ${vehicle['capacity'] is num ? vehicle['capacity'] : 'Not provided'}',
-              vehicle['status'] is String
-                  ? vehicle['status'] as String
-                  : 'Unknown',
-            ),
-            _resourceActions(ResourceKind.vehicle, vehicle, teamId: team['id']),
-          ],
-        ],
       ),
     );
   }
@@ -314,86 +288,68 @@ class _RescueTeamsScreenState extends State<RescueTeamsScreen> {
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
-        backgroundColor: _navy,
         appBar: AppBar(
-          title: const Text('Rescue Teams'),
-          backgroundColor: _navy,
-          foregroundColor: Colors.white,
+          titleSpacing: 16,
+          title: const Text(
+            'Rescue teams',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
           actions: [
             IconButton(
               onPressed: _busy || _isLoading
                   ? null
                   : () => _edit(ResourceKind.team),
-              tooltip: 'Add Team',
+              tooltip: 'Add team',
               icon: const Icon(Icons.add),
             ),
             IconButton(
               onPressed: _isLoading || _busy ? null : _loadTeams,
               tooltip: 'Refresh teams',
               icon: const Icon(Icons.refresh),
-              color: const Color(0xFFFFAD83),
-              disabledColor: const Color(0xFFD0DBE7),
             ),
           ],
         ),
         bottomNavigationBar: _busy ? const LinearProgressIndicator() : null,
         body: SafeArea(
-          child: _isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFFFFAD83),
-                    semanticsLabel: 'Loading rescue teams',
-                  ),
-                )
-              : _errorMessage != null
-              ? SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Card(
-                    color: const Color(0xFFFFEDEA),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Semantics(
-                            liveRegion: true,
-                            child: Text(
-                              _errorMessage!,
-                              style: const TextStyle(color: Color(0xFFB3261E)),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextButton.icon(
-                            onPressed: _loadTeams,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                )
-              : _teams.isEmpty
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'No rescue teams available.',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                )
-              : Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 760),
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(20),
-                      itemCount: _teams.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 16),
-                      itemBuilder: (_, index) => _teamCard(_teams[index]),
-                    ),
+          child: Column(
+            children: [
+              if (_errorMessage != null)
+                Semantics(
+                  liveRegion: true,
+                  child: AppErrorBanner(
+                    message: _errorMessage!,
+                    onRetry: _busy ? null : _loadTeams,
                   ),
                 ),
+              Expanded(
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          semanticsLabel: 'Loading rescue teams',
+                        ),
+                      )
+                    : _teams.isEmpty
+                    ? const AppEmptyState(
+                        icon: Icons.groups_outlined,
+                        title: 'No rescue teams yet',
+                        message:
+                            'Add a team to give assignments somewhere to go.',
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.gutter,
+                          16,
+                          AppSpacing.gutter,
+                          28,
+                        ),
+                        itemCount: _teams.length,
+                        separatorBuilder: (_, _) =>
+                            const SizedBox(height: AppSpacing.gap),
+                        itemBuilder: (_, index) => _teamCard(_teams[index]),
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

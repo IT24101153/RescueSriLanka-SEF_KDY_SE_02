@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/core/theme.dart';
 import '../../../shared/models/auth.dart';
+import '../../../shared/widgets/app_ui.dart';
 import '../models/coordination_requests.dart';
+import '../rescue_style.dart';
 import '../services/rescue_coordination_service.dart';
 import 'assignments_screen.dart';
 import 'coordination_forms.dart';
@@ -179,28 +182,36 @@ class _AiSafetyReviewScreenState extends State<AiSafetyReviewScreen> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       const SizedBox(height: 16),
-      FilledButton(
+      AppPrimaryButton(
+        label: 'Approve & dispatch',
+        icon: Icons.check,
         onPressed: _canDecide(assignment)
             ? () => _decide(assignment, HumanDecision.approve)
             : null,
-        child: const Text('Approve & Dispatch'),
       ),
+      const SizedBox(height: 8),
       OutlinedButton(
         onPressed: _canDecide(assignment)
             ? () => _decide(assignment, HumanDecision.revise)
             : null,
-        child: const Text('Revise Plan'),
+        child: const Text('Revise plan'),
       ),
+      const SizedBox(height: 8),
       OutlinedButton(
         onPressed: _canDecide(assignment)
             ? () => _decide(assignment, HumanDecision.reject)
             : null,
-        child: const Text('Reject Plan'),
+        style: OutlinedButton.styleFrom(foregroundColor: AppColors.critical),
+        child: const Text('Reject plan'),
       ),
-      if (!_canDecide(assignment) && !_deciding)
+      if (!_canDecide(assignment) && !_deciding) ...[
+        const SizedBox(height: 10),
         const Text(
-          'Human decisions require a current approved validation workflow. Edit a proposed plan from Assignments, then validate again.',
+          'Human decisions require a current approved validation workflow. '
+          'Edit a proposed plan from Assignments, then validate again.',
+          style: TextStyle(fontSize: 12, height: 1.4, color: AppColors.body),
         ),
+      ],
     ],
   );
 
@@ -209,18 +220,18 @@ class _AiSafetyReviewScreenState extends State<AiSafetyReviewScreen> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Divider(),
-        const Text(
-          'AI recommendation',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-        ),
+        const Divider(color: AppColors.border, height: 24),
+        const AppSectionTitle('AI recommendation'),
         CoordinationStatus(result['decision'] as String),
         if (result['isStale'] == true)
           const Text(
-            'Stale result — the plan has changed. Refresh before requesting a new review.',
+            'Stale result — the plan has changed. Refresh before requesting a '
+            'new review.',
             style: TextStyle(
-              color: Color(0xFFB3261E),
+              color: AppColors.critical,
               fontWeight: FontWeight.w700,
+              fontSize: 12.5,
+              height: 1.4,
             ),
           ),
         CoordinationField('Workflow ID', result['workflowId']),
@@ -230,30 +241,30 @@ class _AiSafetyReviewScreenState extends State<AiSafetyReviewScreen> {
         CoordinationField('Workflow status', result['workflowStatus']),
         CoordinationField('Summary', result['summary']),
         const SizedBox(height: 12),
-        const Text(
-          'Failed checks',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
+        const AppSectionTitle('Failed checks'),
         if ((result['failedChecks'] as List).isEmpty)
-          const Text('None reported.'),
+          const Text(
+            'None reported.',
+            style: TextStyle(color: AppColors.body, fontSize: 13),
+          ),
         for (final item in result['failedChecks'] as List)
           CoordinationField('•', item),
         const SizedBox(height: 12),
-        const Text(
-          'Suggested actions',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
+        const AppSectionTitle('Suggested actions'),
         if ((result['suggestedActions'] as List).isEmpty)
-          const Text('None reported.'),
+          const Text(
+            'None reported.',
+            style: TextStyle(color: AppColors.body, fontSize: 13),
+          ),
         for (final item in result['suggestedActions'] as List)
           CoordinationField('•', item),
         const SizedBox(height: 12),
-        const Text(
-          'Validation checks',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
+        const AppSectionTitle('Validation checks'),
         if ((result['checks'] as List).isEmpty)
-          const Text('No checks returned.'),
+          const Text(
+            'No checks returned.',
+            style: TextStyle(color: AppColors.body, fontSize: 13),
+          ),
         for (final check in result['checks'] as List) ...[
           CoordinationField('Check', check['name']),
           CoordinationStatus(check['passed'] == true ? 'PASS' : 'FAIL'),
@@ -267,33 +278,44 @@ class _AiSafetyReviewScreenState extends State<AiSafetyReviewScreen> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_deciding,
     child: CoordinationPage(
-      title: 'AI Safety Review',
+      title: 'AI safety review',
       loading: _loading,
       busy: _validatingId != null || _deciding,
       error: _error,
       onRefresh: _load,
       empty: _assignments.isEmpty,
-      emptyMessage: 'No proposed assignments available for safety review.',
-      notice: const Card(
-        color: Color(0xFFFFEDE3),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text(
-            'AI recommendation only — human approval required.',
-            style: TextStyle(
-              color: Color(0xFF9C3E16),
-              fontWeight: FontWeight.w700,
-            ),
+      emptyMessage:
+          'Proposed assignments waiting on a safety review appear here.',
+      notice: const Padding(
+        padding: EdgeInsets.only(bottom: AppSpacing.gap),
+        child: AppCard(
+          accent: AppColors.caution,
+          child: Row(
+            children: [
+              Icon(Icons.gavel_outlined, size: 18, color: AppColors.caution),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'AI recommendation only — human approval required.',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
       children: [
         for (final assignment in _assignments)
-          Card(
-            color: Colors.white,
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.gap),
+            child: AppCard(
+              accent: coordinationTone(
+                assignment['status'] as String? ?? 'Unknown',
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -316,7 +338,10 @@ class _AiSafetyReviewScreenState extends State<AiSafetyReviewScreen> {
                   ),
                   CoordinationField('Plan version', assignment['planVersion']),
                   const SizedBox(height: 12),
-                  FilledButton(
+                  AppPrimaryButton(
+                    label: 'Run AI safety validation',
+                    icon: Icons.verified_user_outlined,
+                    busy: _validatingId == assignment['id'],
                     onPressed:
                         _loading ||
                             _deciding ||
@@ -324,23 +349,7 @@ class _AiSafetyReviewScreenState extends State<AiSafetyReviewScreen> {
                             assignment['id'] is! String
                         ? null
                         : () => _validate(assignment['id'] as String),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFC4481C),
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(52),
-                    ),
-                    child: const Text('Run AI Safety Validation'),
                   ),
-                  if (_validatingId == assignment['id'])
-                    const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          semanticsLabel: 'Running AI safety validation',
-                          color: Color(0xFFC4481C),
-                        ),
-                      ),
-                    ),
                   if (_validationErrors[assignment['id']] != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
@@ -348,7 +357,11 @@ class _AiSafetyReviewScreenState extends State<AiSafetyReviewScreen> {
                         liveRegion: true,
                         child: Text(
                           _validationErrors[assignment['id']]!,
-                          style: const TextStyle(color: Color(0xFFB3261E)),
+                          style: const TextStyle(
+                            color: AppColors.critical,
+                            fontSize: 12.5,
+                            height: 1.4,
+                          ),
                         ),
                       ),
                     ),

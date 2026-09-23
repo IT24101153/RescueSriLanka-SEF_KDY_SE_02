@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/core/theme.dart';
 import '../../../shared/models/auth.dart';
+import '../../../shared/widgets/app_ui.dart';
 import '../models/coordination_requests.dart';
+import '../rescue_style.dart';
 import '../services/rescue_coordination_service.dart';
 import 'assignments_screen.dart';
 import 'coordination_forms.dart';
@@ -99,9 +102,9 @@ class _ActiveDispatchesScreenState extends State<ActiveDispatchesScreen> {
   }
 
   String _actionLabel(DispatchTransition status) => switch (status) {
-    DispatchTransition.dispatched => 'Mark Dispatched',
-    DispatchTransition.enRoute => 'Mark En Route',
-    DispatchTransition.onScene => 'Mark On Scene',
+    DispatchTransition.dispatched => 'Mark dispatched',
+    DispatchTransition.enRoute => 'Mark en route',
+    DispatchTransition.onScene => 'Mark on scene',
     DispatchTransition.resolved => 'Resolve',
     DispatchTransition.cancelled => 'Cancel mission',
   };
@@ -110,21 +113,23 @@ class _ActiveDispatchesScreenState extends State<ActiveDispatchesScreen> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_busy,
     child: CoordinationPage(
-      title: 'Active Dispatches',
+      title: 'Active dispatches',
       loading: _loading,
       busy: _busy,
       notice: _busy ? const LinearProgressIndicator() : null,
       error: _error,
       onRefresh: _load,
       empty: _dispatches.isEmpty,
-      emptyMessage: 'No active dispatches.',
+      emptyMessage:
+          'Approved assignments appear here once they are dispatched.',
       children: [
         for (final dispatch in _dispatches)
-          Card(
-            color: Colors.white,
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.gap),
+            child: AppCard(
+              accent: coordinationTone(
+                dispatch['status'] as String? ?? 'Unknown',
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -147,6 +152,7 @@ class _ActiveDispatchesScreenState extends State<ActiveDispatchesScreen> {
                       CoordinationField(field.value, dispatch[field.key]),
                   if (dispatch['notes'] != null)
                     CoordinationField('Notes', dispatch['notes']),
+                  const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -156,6 +162,11 @@ class _ActiveDispatchesScreenState extends State<ActiveDispatchesScreen> {
                           onPressed: _busy || _loading
                               ? null
                               : () => _transition(dispatch, next),
+                          style: next == DispatchTransition.cancelled
+                              ? OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.critical,
+                                )
+                              : null,
                           child: Text(_actionLabel(next)),
                         ),
                     ],

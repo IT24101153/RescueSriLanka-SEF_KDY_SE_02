@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/core/theme.dart';
 import '../../../shared/models/auth.dart';
+import '../../../shared/widgets/app_ui.dart';
 import '../services/rescue_coordination_service.dart';
 import 'rescue_teams_screen.dart';
 import 'assignments_screen.dart';
@@ -27,9 +29,6 @@ class RescueCoordinatorDashboard extends StatefulWidget {
 
 class _RescueCoordinatorDashboardState
     extends State<RescueCoordinatorDashboard> {
-  static const _navy = Color(0xFF14283F);
-  static const _accent = Color(0xFFC4481C);
-
   Future<void> _openScreen(Widget screen) async {
     await Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => screen));
@@ -134,65 +133,63 @@ class _RescueCoordinatorDashboardState
       ..showSnackBar(const SnackBar(content: Text('Coming next')));
   }
 
-  Widget _summaryCard(String label, IconData icon, int? count) {
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: const Color(0xFFF5F7FA),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: _accent, size: 28),
-            const SizedBox(height: 16),
-            Text(
-              count?.toString() ?? '--',
-              style: const TextStyle(
-                color: _navy,
-                fontSize: 30,
-                fontWeight: FontWeight.w700,
-              ),
+  /// One count from the overview. A dash stands for "not loaded yet".
+  Widget _summaryCard(String label, IconData icon, int? count, Color tone) {
+    return AppCard(
+      accent: count == null || count == 0 ? null : tone,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: AppColors.body, size: 20),
+          const SizedBox(height: 12),
+          Text(
+            count?.toString() ?? '–',
+            style: const TextStyle(
+              color: AppColors.ink,
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: _navy, fontSize: 15)),
-          ],
-        ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(color: AppColors.body, fontSize: 12.5),
+          ),
+        ],
       ),
     );
   }
 
   Widget _actionCard(String label, IconData icon, {VoidCallback? onTap}) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
-      color: Colors.white,
-      clipBehavior: Clip.antiAlias,
-      child: Semantics(
-        button: true,
-        child: InkWell(
-          onTap: onTap ?? _showComingNext,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Icon(icon, color: _accent, size: 30),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      color: _navy,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(Icons.chevron_right, color: _navy),
-              ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.gap),
+      child: AppCard(
+        onTap: onTap ?? _showComingNext,
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.brand.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon, color: AppColors.brandInk, size: 21),
             ),
-          ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.ink,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right, color: AppColors.body),
+          ],
         ),
       ),
     );
@@ -201,222 +198,159 @@ class _RescueCoordinatorDashboardState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _navy,
+      appBar: AppBar(
+        titleSpacing: 16,
+        title: const Text(
+          'Rescue',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _isLoading ? null : _loadDashboard,
+            tooltip: 'Refresh overview',
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            onPressed: widget.onLogout,
+            tooltip: 'Log out',
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'RescueSriLanka',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _isLoading ? null : _loadDashboard,
-                        tooltip: 'Refresh overview',
-                        icon: const Icon(Icons.refresh),
-                        color: const Color(0xFFFFAD83),
-                        disabledColor: const Color(0xFFD0DBE7),
-                      ),
-                      IconButton(
-                        onPressed: widget.onLogout,
-                        tooltip: 'Logout',
-                        icon: const Icon(Icons.logout),
-                        color: const Color(0xFFFFAD83),
-                      ),
-                    ],
+        child: Column(
+          children: [
+            if (_errorMessage != null)
+              Semantics(
+                liveRegion: true,
+                child: AppErrorBanner(
+                  message: _errorMessage!,
+                  onRetry: _isLoading ? null : _loadDashboard,
+                ),
+              ),
+            if (_isLoading)
+              const LinearProgressIndicator(
+                semanticsLabel: 'Loading overview',
+                minHeight: 2,
+              ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadDashboard,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.gutter,
+                    18,
+                    AppSpacing.gutter,
+                    28,
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Rescue Coordination Center',
-                    style: TextStyle(color: Color(0xFFD0DBE7), fontSize: 18),
-                  ),
-                  const SizedBox(height: 24),
-                  Card(
-                    margin: EdgeInsets.zero,
-                    elevation: 0,
-                    color: Colors.white,
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.badge_outlined, color: _accent),
-                          const SizedBox(height: 12),
-                          Text(
-                            widget.session.user.fullName,
-                            style: const TextStyle(
-                              color: _navy,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            widget.session.user.email,
-                            style: const TextStyle(
-                              color: Color(0xFF46576B),
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Emergency Coordinator',
-                            style: TextStyle(
-                              color: _accent,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                  children: [
+                    const Text(
+                      'Rescue coordination centre',
+                      style: TextStyle(
+                        fontSize: 23,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                        letterSpacing: -0.4,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 28),
-                  const Text(
-                    'Overview',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(height: 6),
+                    Text(
+                      '${widget.session.user.fullName} · '
+                      '${widget.session.user.email}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: AppColors.body,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (_isLoading) ...[
-                    const LinearProgressIndicator(
-                      color: Color(0xFFFFAD83),
-                      semanticsLabel: 'Loading overview',
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  if (_errorMessage != null) ...[
-                    Card(
-                      margin: EdgeInsets.zero,
-                      color: const Color(0xFFFFEDEA),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 20),
+                    const AppSectionTitle('Overview'),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final useTwoColumns =
+                            constraints.maxWidth >= 320 &&
+                            MediaQuery.textScalerOf(context).scale(15) <= 22;
+                        final width = useTwoColumns
+                            ? (constraints.maxWidth - AppSpacing.gap) / 2
+                            : constraints.maxWidth;
+                        return Wrap(
+                          spacing: AppSpacing.gap,
+                          runSpacing: AppSpacing.gap,
                           children: [
-                            Semantics(
-                              liveRegion: true,
-                              child: Text(
-                                _errorMessage!,
-                                style: const TextStyle(
-                                  color: Color(0xFFB3261E),
+                            for (final summary in [
+                              (
+                                'Available teams',
+                                Icons.groups_outlined,
+                                _availableTeams,
+                                AppColors.safe,
+                              ),
+                              (
+                                'Available vehicles',
+                                Icons.local_shipping_outlined,
+                                _availableVehicles,
+                                AppColors.safe,
+                              ),
+                              (
+                                'Proposed assignments',
+                                Icons.assignment_outlined,
+                                _proposedAssignments,
+                                AppColors.caution,
+                              ),
+                              (
+                                'Active dispatches',
+                                Icons.emergency_outlined,
+                                _activeDispatches,
+                                AppColors.ink,
+                              ),
+                            ])
+                              SizedBox(
+                                width: width,
+                                child: _summaryCard(
+                                  summary.$1,
+                                  summary.$2,
+                                  summary.$3,
+                                  summary.$4,
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextButton.icon(
-                              onPressed: _isLoading ? null : _loadDashboard,
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Retry'),
-                            ),
                           ],
-                        ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 26),
+                    const AppSectionTitle('Coordination'),
+                    _actionCard(
+                      'Rescue teams',
+                      Icons.groups_outlined,
+                      onTap: () => _openScreen(
+                        RescueTeamsScreen(session: widget.session),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    _actionCard(
+                      'Assignments',
+                      Icons.assignment_outlined,
+                      onTap: () => _openScreen(
+                        AssignmentsScreen(session: widget.session),
+                      ),
+                    ),
+                    _actionCard(
+                      'AI safety review',
+                      Icons.verified_user_outlined,
+                      onTap: () => _openScreen(
+                        AiSafetyReviewScreen(session: widget.session),
+                      ),
+                    ),
+                    _actionCard(
+                      'Active dispatches',
+                      Icons.local_shipping_outlined,
+                      onTap: () => _openScreen(
+                        ActiveDispatchesScreen(session: widget.session),
+                      ),
+                    ),
                   ],
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final useTwoColumns =
-                          constraints.maxWidth >= 320 &&
-                          MediaQuery.textScalerOf(context).scale(15) <= 22;
-                      final width = useTwoColumns
-                          ? (constraints.maxWidth - 12) / 2
-                          : constraints.maxWidth;
-                      return Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          for (final summary in [
-                            (
-                              'Available Teams',
-                              Icons.groups_outlined,
-                              _availableTeams,
-                            ),
-                            (
-                              'Available Vehicles',
-                              Icons.local_shipping_outlined,
-                              _availableVehicles,
-                            ),
-                            (
-                              'Proposed Assignments',
-                              Icons.assignment_outlined,
-                              _proposedAssignments,
-                            ),
-                            (
-                              'Active Dispatches',
-                              Icons.emergency_outlined,
-                              _activeDispatches,
-                            ),
-                          ])
-                            SizedBox(
-                              width: width,
-                              child: _summaryCard(
-                                summary.$1,
-                                summary.$2,
-                                summary.$3,
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 28),
-                  const Text(
-                    'Coordination',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _actionCard(
-                    'Rescue Teams',
-                    Icons.groups_outlined,
-                    onTap: () =>
-                        _openScreen(RescueTeamsScreen(session: widget.session)),
-                  ),
-                  _actionCard(
-                    'Assignments',
-                    Icons.assignment_outlined,
-                    onTap: () =>
-                        _openScreen(AssignmentsScreen(session: widget.session)),
-                  ),
-                  _actionCard(
-                    'AI Safety Review',
-                    Icons.verified_user_outlined,
-                    onTap: () => _openScreen(
-                      AiSafetyReviewScreen(session: widget.session),
-                    ),
-                  ),
-                  _actionCard(
-                    'Active Dispatches',
-                    Icons.local_shipping_outlined,
-                    onTap: () => _openScreen(
-                      ActiveDispatchesScreen(session: widget.session),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

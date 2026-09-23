@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/core/theme.dart';
 import '../../../shared/models/auth.dart';
+import '../../../shared/widgets/app_ui.dart';
 import '../models/coordination_requests.dart';
 import '../models/incident_reference.dart';
 import '../services/rescue_coordination_service.dart';
@@ -302,7 +304,11 @@ class _ResourceEditorState extends State<ResourceEditor> {
                 if (_error != null)
                   Text(
                     _error!,
-                    style: const TextStyle(color: Color(0xFFB3261E)),
+                    style: const TextStyle(
+                      color: AppColors.critical,
+                      fontSize: 12.5,
+                      height: 1.4,
+                    ),
                   ),
                 if (_busy) const LinearProgressIndicator(),
               ],
@@ -428,7 +434,11 @@ class _AssignmentEditorState extends State<AssignmentEditor> {
         ] else if (_incidentsError != null) ...[
           Text(
             _incidentsError!,
-            style: const TextStyle(color: Color(0xFFB3261E)),
+            style: const TextStyle(
+              color: AppColors.critical,
+              fontSize: 12.5,
+              height: 1.4,
+            ),
           ),
           TextButton.icon(
             onPressed: _saving ? null : _loadIncidents,
@@ -588,12 +598,13 @@ class _AssignmentEditorState extends State<AssignmentEditor> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_saving,
     child: Scaffold(
-      backgroundColor: const Color(0xFF14283F),
       appBar: AppBar(
+        titleSpacing: 16,
         title: Text(
           _editing
-              ? 'REVISE PLAN v${widget.existing!['planVersion']}'
-              : 'CREATE NEW PLAN',
+              ? 'Revise plan v${widget.existing!['planVersion']}'
+              : 'Create new plan',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
       ),
       body: SafeArea(
@@ -601,147 +612,148 @@ class _AssignmentEditorState extends State<AssignmentEditor> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 650),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: _loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _loadError != null
-                      ? Column(
+              padding: const EdgeInsets.all(AppSpacing.gutter),
+              child: AppCard(
+                padding: const EdgeInsets.all(AppSpacing.gutter),
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _loadError != null
+                    ? Column(
+                        children: [
+                          Text(_loadError!),
+                          TextButton(
+                            onPressed: _loadTeams,
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      )
+                    : Form(
+                        key: _form,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Text(_loadError!),
-                            TextButton(
-                              onPressed: _loadTeams,
-                              child: const Text('Retry'),
+                            if (_teams.isEmpty)
+                              const Text(
+                                'No rescue teams available. Add resources before creating a plan.',
+                              ),
+                            _select(
+                              'Team',
+                              _teamId,
+                              _teams
+                                  .map(
+                                    (t) => DropdownMenuItem<String>(
+                                      value: t['id'],
+                                      child: Text(
+                                        '${t['name']} (${t['status']})',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                              (v) => setState(() {
+                                _teamId = v;
+                                _vehicleId = null;
+                              }),
                             ),
-                          ],
-                        )
-                      : Form(
-                          key: _form,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (_teams.isEmpty)
-                                const Text(
-                                  'No rescue teams available. Add resources before creating a plan.',
-                                ),
-                              _select(
-                                'Team',
-                                _teamId,
-                                _teams
-                                    .map(
-                                      (t) => DropdownMenuItem<String>(
-                                        value: t['id'],
-                                        child: Text(
-                                          '${t['name']} (${t['status']})',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                            _select(
+                              'Vehicle',
+                              _vehicleId,
+                              _vehicles
+                                  .map(
+                                    (v) => DropdownMenuItem<String>(
+                                      value: v['id'],
+                                      child: Text(
+                                        '${v['plateNumber']} - capacity ${v['capacity']} (${v['status']})',
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    )
-                                    .toList(),
-                                (v) => setState(() {
-                                  _teamId = v;
-                                  _vehicleId = null;
-                                }),
+                                    ),
+                                  )
+                                  .toList(),
+                              (v) => setState(() => _vehicleId = v),
+                              key: ValueKey(_teamId),
+                            ),
+                            _select(
+                              'Required skill',
+                              _skill,
+                              coordinationSkills
+                                  .map(
+                                    (s) => DropdownMenuItem(
+                                      value: s,
+                                      child: Text(s),
+                                    ),
+                                  )
+                                  .toList(),
+                              (v) => setState(() => _skill = v),
+                            ),
+                            TextFormField(
+                              initialValue: _capacity,
+                              enabled: !_saving,
+                              decoration: const InputDecoration(
+                                labelText: 'Required capacity',
                               ),
-                              _select(
-                                'Vehicle',
-                                _vehicleId,
-                                _vehicles
-                                    .map(
-                                      (v) => DropdownMenuItem<String>(
-                                        value: v['id'],
-                                        child: Text(
-                                          '${v['plateNumber']} - capacity ${v['capacity']} (${v['status']})',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                (v) => setState(() => _vehicleId = v),
-                                key: ValueKey(_teamId),
+                              keyboardType: TextInputType.number,
+                              onChanged: (v) => _capacity = v.trim(),
+                              validator: (v) {
+                                final capacity = int.tryParse(v ?? '');
+                                if (capacity == null || capacity < 1) {
+                                  return 'Capacity must be at least 1.';
+                                }
+                                final vehicles = _vehicles.where(
+                                  (v) => v['id'] == _vehicleId,
+                                );
+                                if (vehicles.isEmpty) {
+                                  return 'Select a vehicle.';
+                                }
+                                if (capacity >
+                                    (vehicles.first['capacity'] as num)) {
+                                  return 'Exceeds selected vehicle capacity.';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _referenceSelector(),
+                            TextFormField(
+                              initialValue: _notes,
+                              enabled: !_saving,
+                              maxLength: 500,
+                              maxLines: 3,
+                              decoration: const InputDecoration(
+                                labelText: 'Notes (optional)',
                               ),
-                              _select(
-                                'Required skill',
-                                _skill,
-                                coordinationSkills
-                                    .map(
-                                      (s) => DropdownMenuItem(
-                                        value: s,
-                                        child: Text(s),
-                                      ),
-                                    )
-                                    .toList(),
-                                (v) => setState(() => _skill = v),
-                              ),
-                              TextFormField(
-                                initialValue: _capacity,
-                                enabled: !_saving,
-                                decoration: const InputDecoration(
-                                  labelText: 'Required capacity',
-                                ),
-                                keyboardType: TextInputType.number,
-                                onChanged: (v) => _capacity = v.trim(),
-                                validator: (v) {
-                                  final capacity = int.tryParse(v ?? '');
-                                  if (capacity == null || capacity < 1) {
-                                    return 'Capacity must be at least 1.';
-                                  }
-                                  final vehicles = _vehicles.where(
-                                    (v) => v['id'] == _vehicleId,
-                                  );
-                                  if (vehicles.isEmpty) {
-                                    return 'Select a vehicle.';
-                                  }
-                                  if (capacity >
-                                      (vehicles.first['capacity'] as num)) {
-                                    return 'Exceeds selected vehicle capacity.';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                              _referenceSelector(),
-                              TextFormField(
-                                initialValue: _notes,
-                                enabled: !_saving,
-                                maxLength: 500,
-                                maxLines: 3,
-                                decoration: const InputDecoration(
-                                  labelText: 'Notes (optional)',
-                                ),
-                                onChanged: (v) => _notes = v,
-                              ),
-                              if (_error != null)
-                                Text(
+                              onChanged: (v) => _notes = v,
+                            ),
+                            if (_error != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Text(
                                   _error!,
                                   style: const TextStyle(
-                                    color: Color(0xFFB3261E),
+                                    color: AppColors.critical,
+                                    fontSize: 12.5,
+                                    height: 1.4,
                                   ),
                                 ),
-                              if (_saving) const LinearProgressIndicator(),
-                              FilledButton(
-                                onPressed:
-                                    _saving ||
-                                        _loading ||
-                                        _teams.isEmpty ||
-                                        (!_editing &&
-                                            (_incidentsLoading ||
-                                                _incidentsError != null ||
-                                                _selectedIncident == null))
-                                    ? null
-                                    : _save,
-                                child: Text(
-                                  _editing
-                                      ? 'Save revised plan'
-                                      : 'Create assignment',
-                                ),
                               ),
-                            ],
-                          ),
+                            AppPrimaryButton(
+                              label: _editing
+                                  ? 'Save revised plan'
+                                  : 'Create assignment',
+                              icon: Icons.check,
+                              busy: _saving,
+                              onPressed:
+                                  _loading ||
+                                      _teams.isEmpty ||
+                                      (!_editing &&
+                                          (_incidentsLoading ||
+                                              _incidentsError != null ||
+                                              _selectedIncident == null))
+                                  ? null
+                                  : _save,
+                            ),
+                          ],
                         ),
-                ),
+                      ),
               ),
             ),
           ),
