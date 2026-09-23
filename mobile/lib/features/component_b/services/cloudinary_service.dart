@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -17,7 +18,9 @@ class CloudinaryService {
       final bytes = await imageFile.readAsBytes();
       final request = http.MultipartRequest('POST', _uploadUrl)
         ..fields['upload_preset'] = _uploadPreset
-        ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: imageFile.name));
+        ..files.add(
+          http.MultipartFile.fromBytes('file', bytes, filename: imageFile.name),
+        );
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);

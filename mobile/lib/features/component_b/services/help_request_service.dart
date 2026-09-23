@@ -1,14 +1,32 @@
 import 'dart:convert';
+
 import 'help_request_api.dart';
 
 // Matches HelpRequestType enum: Water=0, Food=1, Medical=2, Rescue=3, Shelter=4, Other=5
-const List<String> helpRequestTypeLabels = ['Water', 'Food', 'Medical', 'Rescue', 'Shelter', 'Other'];
+const List<String> helpRequestTypeLabels = [
+  'Water',
+  'Food',
+  'Medical',
+  'Rescue',
+  'Shelter',
+  'Other',
+];
 
 // Matches HelpRequestStatus enum
-const List<String> helpRequestStatusLabels = ['Pending', 'Assigned', 'In Progress', 'Resolved', 'Cancelled'];
+const List<String> helpRequestStatusLabels = [
+  'Pending',
+  'Assigned',
+  'In Progress',
+  'Resolved',
+  'Cancelled',
+];
 
 // Matches VerificationStatus enum
-const List<String> verificationStatusLabels = ['Pending Verification', 'Verified', 'Rejected (Fake)'];
+const List<String> verificationStatusLabels = [
+  'Pending Verification',
+  'Verified',
+  'Rejected (Fake)',
+];
 
 class HelpRequest {
   final String id;
@@ -38,18 +56,18 @@ class HelpRequest {
   });
 
   factory HelpRequest.fromJson(Map<String, dynamic> json) => HelpRequest(
-        id: json['id'],
-        type: json['type'],
-        description: json['description'],
-        latitude: (json['latitude'] as num).toDouble(),
-        longitude: (json['longitude'] as num).toDouble(),
-        urgencyScore: json['urgencyScore'],
-        status: json['status'],
-        verificationStatus: json['verificationStatus'],
-        verificationNotes: json['verificationNotes'],
-        imageUrl: json['imageUrl'],
-        createdAt: DateTime.parse(json['createdAt']),
-      );
+    id: json['id'],
+    type: json['type'],
+    description: json['description'],
+    latitude: (json['latitude'] as num).toDouble(),
+    longitude: (json['longitude'] as num).toDouble(),
+    urgencyScore: json['urgencyScore'],
+    status: json['status'],
+    verificationStatus: json['verificationStatus'],
+    verificationNotes: json['verificationNotes'],
+    imageUrl: json['imageUrl'],
+    createdAt: DateTime.parse(json['createdAt']),
+  );
 }
 
 class StatusHistoryEntry {
@@ -65,7 +83,8 @@ class StatusHistoryEntry {
     required this.changedAt,
   });
 
-  factory StatusHistoryEntry.fromJson(Map<String, dynamic> json) => StatusHistoryEntry(
+  factory StatusHistoryEntry.fromJson(Map<String, dynamic> json) =>
+      StatusHistoryEntry(
         oldStatus: json['oldStatus'],
         newStatus: json['newStatus'],
         notes: json['notes'],
@@ -81,7 +100,8 @@ class AiRequestAnalysis {
 
   AiRequestAnalysis({required this.reasoning, required this.suggestedAction});
 
-  factory AiRequestAnalysis.fromJson(Map<String, dynamic> json) => AiRequestAnalysis(
+  factory AiRequestAnalysis.fromJson(Map<String, dynamic> json) =>
+      AiRequestAnalysis(
         reasoning: json['reasoning'] as String? ?? '',
         suggestedAction: json['suggestedAction'] as String? ?? '',
       );
@@ -94,9 +114,9 @@ class AiPriority {
   AiPriority({required this.priority, required this.aiAnalysisAvailable});
 
   factory AiPriority.fromJson(Map<String, dynamic> json) => AiPriority(
-        priority: json['priority'] as String? ?? 'Analysis pending',
-        aiAnalysisAvailable: json['aiAnalysisAvailable'] as bool? ?? false,
-      );
+    priority: json['priority'] as String? ?? 'Analysis pending',
+    aiAnalysisAvailable: json['aiAnalysisAvailable'] as bool? ?? false,
+  );
 }
 
 class HelpRequestLoadResult {
@@ -138,15 +158,26 @@ class HelpRequestService {
     try {
       final res = await HelpRequestApi.get('/api/HelpRequests/mine');
       if (res.statusCode == 401) {
-        return const HelpRequestLoadResult(requests: [], error: 'Your session has expired. Please sign in again.');
+        return const HelpRequestLoadResult(
+          requests: [],
+          error: 'Your session has expired. Please sign in again.',
+        );
       }
       if (res.statusCode != 200) {
-        return const HelpRequestLoadResult(requests: [], error: 'Could not load your requests. Pull down or tap refresh to try again.');
+        return const HelpRequestLoadResult(
+          requests: [],
+          error: 'Could not load your requests. Pull down or tap refresh to try again.',
+        );
       }
       final List<dynamic> data = jsonDecode(res.body);
-      return HelpRequestLoadResult(requests: data.map((json) => HelpRequest.fromJson(json)).toList());
+      return HelpRequestLoadResult(
+        requests: data.map((json) => HelpRequest.fromJson(json)).toList(),
+      );
     } catch (_) {
-      return const HelpRequestLoadResult(requests: [], error: 'Could not reach the request service. Check your connection and API server.');
+      return const HelpRequestLoadResult(
+        requests: [],
+        error: 'Could not reach the request service. Check your connection and API server.',
+      );
     }
   }
 
@@ -159,9 +190,14 @@ class HelpRequestService {
   }
 
   static Future<AiRequestAnalysis?> getAiAnalysis(String id) async {
-    final res = await HelpRequestApi.post('/api/HelpRequests/$id/ai-analysis', {});
+    final res = await HelpRequestApi.post(
+      '/api/HelpRequests/$id/ai-analysis',
+      {},
+    );
     if (res.statusCode != 200) return null;
-    return AiRequestAnalysis.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+    return AiRequestAnalysis.fromJson(
+      jsonDecode(res.body) as Map<String, dynamic>,
+    );
   }
 
   static Future<AiPriority?> getAiPriority(String id) async {
@@ -170,12 +206,17 @@ class HelpRequestService {
     return AiPriority.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
-  static Future<AiRequestAnalysis?> analyzeDraft({required int type, required String description}) async {
-    final res = await HelpRequestApi.post('/api/HelpRequests/ai-draft-analysis', {
-      'type': type,
-      'description': description,
-    });
+  static Future<AiRequestAnalysis?> analyzeDraft({
+    required int type,
+    required String description,
+  }) async {
+    final res = await HelpRequestApi.post(
+      '/api/HelpRequests/ai-draft-analysis',
+      {'type': type, 'description': description},
+    );
     if (res.statusCode != 200) return null;
-    return AiRequestAnalysis.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+    return AiRequestAnalysis.fromJson(
+      jsonDecode(res.body) as Map<String, dynamic>,
+    );
   }
 }

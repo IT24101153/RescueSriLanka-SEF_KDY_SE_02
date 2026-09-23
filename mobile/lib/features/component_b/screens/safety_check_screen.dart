@@ -1,6 +1,11 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+
+import '../../../shared/core/theme.dart';
+import '../../../shared/widgets/app_ui.dart';
+import '../help_style.dart';
 import '../services/help_request_api.dart';
 
 class SafetyCheckScreen extends StatefulWidget {
@@ -38,14 +43,19 @@ class _SafetyCheckScreenState extends State<SafetyCheckScreen> {
       }
 
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
 
-      final res = await HelpRequestApi.post('/api/TravelAdvisories/check-safety', {
-        'points': [
-          {'latitude': position.latitude, 'longitude': position.longitude}
-        ],
-      });
+      final res = await HelpRequestApi.post(
+        '/api/TravelAdvisories/check-safety',
+        {
+          'points': [
+            {'latitude': position.latitude, 'longitude': position.longitude},
+          ],
+        },
+      );
 
       if (res.statusCode == 200) {
         setState(() => _result = jsonDecode(res.body));
@@ -59,98 +69,100 @@ class _SafetyCheckScreenState extends State<SafetyCheckScreen> {
     }
   }
 
-  Color _levelColor(int level) {
-    switch (level) {
-      case 2:
-        return const Color(0xFFD9433F); // Danger
-      case 1:
-        return const Color(0xFFB8720A); // Caution
-      default:
-        return const Color(0xFF0E8F56); // Safe
-    }
-  }
-
-  String _levelLabel(int level) {
-    switch (level) {
-      case 2:
-        return 'Danger';
-      case 1:
-        return 'Caution';
-      default:
-        return 'Safe';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final level = _result?['overallSafetyLevel'] as int?;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Safety Check')),
-      backgroundColor: const Color(0xFFFAFAFB),
+      appBar: AppBar(
+        titleSpacing: 16,
+        title: const Text(
+          'Safety check',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Check if your current location is in an active danger zone before traveling.',
-                style: TextStyle(color: Color(0xFF7A7D89), fontSize: 14),
-              ),
-              const SizedBox(height: 20),
-              if (_error != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFDF0EF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(_error!, style: const TextStyle(color: Color(0xFFD9433F))),
+        child: Column(
+          children: [
+            if (_error != null) AppErrorBanner(message: _error!),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.gutter,
+                  18,
+                  AppSpacing.gutter,
+                  28,
                 ),
-              if (_result != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: _levelColor(_result!['overallSafetyLevel']).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: _levelColor(_result!['overallSafetyLevel'])),
+                children: [
+                  const Text(
+                    'Check whether your current location sits in an active '
+                    'danger zone before you travel.',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      height: 1.45,
+                      color: AppColors.body,
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _levelLabel(_result!['overallSafetyLevel']),
-                        style: TextStyle(
-                          color: _levelColor(_result!['overallSafetyLevel']),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 20,
-                        ),
+                  const SizedBox(height: 18),
+                  if (level != null) ...[
+                    AppCard(
+                      accent: safetyLevelTone(level),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                safetyLevelIcon(level),
+                                color: safetyLevelTone(level),
+                                size: 22,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                safetyLevelLabel(level),
+                                style: TextStyle(
+                                  color: safetyLevelTone(level),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            (_result!['reason'] as String?) ?? '',
+                            style: const TextStyle(fontSize: 14, height: 1.4),
+                          ),
+                          if (level == 0) ...[
+                            const SizedBox(height: 10),
+                            const Text(
+                              'This means no active advisory in our system '
+                              'covers this location. It is not a guarantee '
+                              'that conditions are safe. Follow official '
+                              'warnings and avoid travel if conditions look '
+                              'unsafe.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: AppColors.body,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(_result!['reason'] ?? '', style: const TextStyle(fontSize: 14)),
-                      if (_result!['overallSafetyLevel'] == 0) ...[
-                        const SizedBox(height: 10),
-                        const Text(
-                          'This means no active advisories in our system cover this location. It is not a guarantee that conditions are safe. Follow official warnings and avoid travel if conditions look unsafe.',
-                          style: TextStyle(fontSize: 12, color: Color(0xFF4B6860), height: 1.35),
-                        ),
-                      ],
-                    ],
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  AppPrimaryButton(
+                    label: _loading ? 'Checking…' : 'Check my current location',
+                    icon: Icons.my_location,
+                    busy: _loading,
+                    onPressed: _checkSafety,
                   ),
-                ),
-              ],
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _loading ? null : _checkSafety,
-                child: _loading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('Check my current location'),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

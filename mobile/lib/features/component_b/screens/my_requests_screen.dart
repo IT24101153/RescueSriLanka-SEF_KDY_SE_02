@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+
+import '../../../shared/core/theme.dart';
+import '../../../shared/widgets/app_ui.dart';
+import '../help_style.dart';
 import '../services/help_request_service.dart';
 
 class MyRequestsScreen extends StatefulWidget {
@@ -42,174 +46,185 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
     });
   }
 
-  Color _statusColor(int status) {
-    switch (status) {
-      case 3:
-        return const Color(0xFF0E8F56); // Resolved
-      case 4:
-        return const Color(0xFF9A9CA8); // Cancelled
-      case 1:
-      case 2:
-        return const Color(0xFF2F6FB0); // Assigned / In Progress
-      default:
-        return const Color(0xFFB8720A); // Pending
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My Requests')),
-      backgroundColor: const Color(0xFFFAFAFB),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-                ? ListView(
-                    padding: const EdgeInsets.all(20),
-                    children: [
-                      _RequestLoadError(message: _error!, onRetry: _load),
-                    ],
-                  )
-            : _requests.isEmpty
-                ? ListView(
-                    children: const [
-                      SizedBox(height: 120),
-                      Center(
-                        child: Text(
-                          'You haven\'t submitted any requests yet.',
-                          style: TextStyle(color: Color(0xFF7A7D89)),
-                        ),
+      appBar: AppBar(
+        titleSpacing: 16,
+        title: const Text(
+          'My requests',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : _load,
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: RefreshIndicator(onRefresh: _load, child: _body()),
+      ),
+    );
+  }
+
+  Widget _body() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return ListView(
+        children: [
+          AppEmptyState(
+            icon: Icons.cloud_off_outlined,
+            title: 'Unable to load your requests',
+            message: _error,
+            action: OutlinedButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Try again'),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_requests.isEmpty) {
+      return ListView(
+        children: const [
+          AppEmptyState(
+            icon: Icons.checklist_outlined,
+            title: 'No requests yet',
+            message:
+                'Requests you submit appear here with their latest status.',
+          ),
+        ],
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.gutter,
+        16,
+        AppSpacing.gutter,
+        28,
+      ),
+      itemCount: _requests.length,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.gap),
+      itemBuilder: (context, index) {
+        final request = _requests[index];
+        final aiPriority = _aiPriorities[request.id];
+
+        return AppCard(
+          accent: helpStatusTone(request.status),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => _RequestDetailScreen(request: request),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(helpTypeIcon(request.type), size: 19, color: AppColors.body),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      helpRequestTypeLabels[request.type],
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
+                        color: AppColors.ink,
                       ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      request.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.body,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                    if (aiPriority != null) ...[
+                      const SizedBox(height: 9),
+                      _AiPriorityBadge(priority: aiPriority),
                     ],
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _requests.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final r = _requests[index];
-                      final aiPriority = _aiPriorities[r.id];
-                      return Material(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => _RequestDetailScreen(request: r)),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE9E9EE)),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        helpRequestTypeLabels[r.type],
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        r.description,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: Color(0xFF7A7D89), fontSize: 13),
-                                      ),
-                                      if (aiPriority != null) ...[
-                                        const SizedBox(height: 9),
-                                        _AiPriorityBadge(priority: aiPriority),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: _statusColor(r.status).withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: Text(
-                                    helpRequestStatusLabels[r.status],
-                                    style: TextStyle(
-                                      color: _statusColor(r.status),
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              AppPill(
+                helpRequestStatusLabels[request.status],
+                tone: helpStatusTone(request.status),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The AI's priority, always labelled as the AI's and never as a decision.
+class _AiPriorityBadge extends StatelessWidget {
+  const _AiPriorityBadge({required this.priority});
+
+  final AiPriority priority;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = priority.aiAnalysisAvailable
+        ? helpPriorityTone(priority.priority)
+        : AppColors.body;
+    final label = priority.aiAnalysisAvailable
+        ? 'AI priority: ${priority.priority}'
+        : priority.priority;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            priority.aiAnalysisAvailable
+                ? Icons.auto_awesome_outlined
+                : Icons.hourglass_top_outlined,
+            size: 13,
+            color: tone,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: tone,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _RequestLoadError extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _RequestLoadError({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(top: 80),
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(color: const Color(0xFFFDF0EF), borderRadius: BorderRadius.circular(16)),
-    child: Column(children: [
-      const Icon(Icons.cloud_off_outlined, color: Color(0xFFC8453C), size: 34),
-      const SizedBox(height: 10),
-      const Text('Unable to load your requests', style: TextStyle(fontWeight: FontWeight.w700)),
-      const SizedBox(height: 5),
-      Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF7A7D89), fontSize: 13)),
-      const SizedBox(height: 12),
-      TextButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Try again')),
-    ]),
-  );
-}
-
-class _AiPriorityBadge extends StatelessWidget {
-  final AiPriority priority;
-
-  const _AiPriorityBadge({required this.priority});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (priority.priority.toLowerCase()) {
-      'high' => const Color(0xFFC8453C),
-      'medium' => const Color(0xFFB8720A),
-      'low' => const Color(0xFF0B6E69),
-      _ => const Color(0xFF747783),
-    };
-    final label = priority.aiAnalysisAvailable ? 'AI priority: ${priority.priority}' : priority.priority;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(999)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(priority.aiAnalysisAvailable ? Icons.auto_awesome_outlined : Icons.hourglass_top_outlined, size: 13, color: color),
-        const SizedBox(width: 4),
-        Flexible(child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
-      ]),
-    );
-  }
-}
-
 class _RequestDetailScreen extends StatefulWidget {
-  final HelpRequest request;
   const _RequestDetailScreen({required this.request});
+
+  final HelpRequest request;
 
   @override
   State<_RequestDetailScreen> createState() => _RequestDetailScreenState();
@@ -247,32 +262,93 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
     setState(() {
       _aiAnalysis = result;
       _analyzing = false;
-      _aiError = result == null ? 'AI guidance is unavailable right now. Your request is still being handled.' : null;
+      _aiError = result == null
+          ? 'AI guidance is unavailable right now. Your request is still being handled.'
+          : null;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final r = widget.request;
+    final request = widget.request;
+
     return Scaffold(
-      appBar: AppBar(title: Text(helpRequestTypeLabels[r.type])),
-      backgroundColor: const Color(0xFFFAFAFB),
+      appBar: AppBar(
+        titleSpacing: 16,
+        title: Text(
+          helpRequestTypeLabels[request.type],
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+      ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.gutter,
+            18,
+            AppSpacing.gutter,
+            28,
+          ),
           children: [
-            if (r.imageUrl != null) ...[
+            if (request.imageUrl != null) ...[
               ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Image.network(r.imageUrl!, height: 200, width: double.infinity, fit: BoxFit.cover),
+                borderRadius: AppSpacing.radius,
+                child: Image.network(
+                  request.imageUrl!,
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const SizedBox(
+                    height: 100,
+                    child: Center(
+                      child: Text('Unable to load submitted photo'),
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
             ],
-            Text(r.description, style: const TextStyle(fontSize: 16)),
-            const SizedBox(height: 8),
-            Text(
-              verificationStatusLabels[r.verificationStatus],
-              style: const TextStyle(color: Color(0xFF7A7D89), fontSize: 13),
+            AppCard(
+              accent: helpStatusTone(request.status),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      AppPill(
+                        helpRequestStatusLabels[request.status],
+                        tone: helpStatusTone(request.status),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          verificationStatusLabels[request.verificationStatus],
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.body,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    request.description,
+                    style: const TextStyle(fontSize: 14.5, height: 1.45),
+                  ),
+                  if (request.verificationNotes != null &&
+                      request.verificationNotes!.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Coordinator note: ${request.verificationNotes!}',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        height: 1.4,
+                        color: AppColors.body,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
             const SizedBox(height: 20),
             _AiGuidanceCard(
@@ -282,13 +358,19 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
               onRequestAnalysis: _loadAiGuidance,
             ),
             const SizedBox(height: 24),
-            const Text('Status history', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 12),
-            if (_loading) const Center(child: CircularProgressIndicator()),
+            const AppSectionTitle('Status history'),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(child: CircularProgressIndicator()),
+              ),
             if (!_loading && _history.isEmpty)
-              const Text('No changes recorded yet.', style: TextStyle(color: Color(0xFF7A7D89))),
+              const Text(
+                'No changes recorded yet.',
+                style: TextStyle(color: AppColors.body, fontSize: 13),
+              ),
             ..._history.map(
-              (h) => Padding(
+              (entry) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -297,18 +379,33 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
                       margin: const EdgeInsets.only(top: 5, right: 10),
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(color: Color(0xFFE8960B), shape: BoxShape.circle),
+                      decoration: BoxDecoration(
+                        color: helpStatusTone(entry.newStatus),
+                        shape: BoxShape.circle,
+                      ),
                     ),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '${helpRequestStatusLabels[h.oldStatus]} → ${helpRequestStatusLabels[h.newStatus]}',
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            '${helpRequestStatusLabels[entry.oldStatus]} → '
+                            '${helpRequestStatusLabels[entry.newStatus]}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: AppColors.ink,
+                            ),
                           ),
-                          if (h.notes != null)
-                            Text(h.notes!, style: const TextStyle(color: Color(0xFF7A7D89), fontSize: 12)),
+                          if (entry.notes != null)
+                            Text(
+                              entry.notes!,
+                              style: const TextStyle(
+                                color: AppColors.body,
+                                fontSize: 12,
+                                height: 1.35,
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -324,11 +421,6 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
 }
 
 class _AiGuidanceCard extends StatelessWidget {
-  final AiRequestAnalysis? analysis;
-  final bool loading;
-  final String? error;
-  final VoidCallback onRequestAnalysis;
-
   const _AiGuidanceCard({
     required this.analysis,
     required this.loading,
@@ -336,46 +428,91 @@ class _AiGuidanceCard extends StatelessWidget {
     required this.onRequestAnalysis,
   });
 
+  final AiRequestAnalysis? analysis;
+  final bool loading;
+  final String? error;
+  final VoidCallback onRequestAnalysis;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F7F7),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFB9D9D7)),
-      ),
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(children: [
-            Icon(Icons.auto_awesome_outlined, size: 19, color: Color(0xFF0B6E69)),
-            SizedBox(width: 8),
-            Text('AI guidance', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF17323B))),
-          ]),
+          const Row(
+            children: [
+              Icon(
+                Icons.auto_awesome_outlined,
+                size: 18,
+                color: AppColors.brandInk,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'AI guidance',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ink,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 7),
-          const Text('Supplemental guidance only. Emergency coordinators make the response decisions.', style: TextStyle(fontSize: 12, color: Color(0xFF547071), height: 1.35)),
+          const Text(
+            'Supplemental guidance only. Emergency coordinators make the '
+            'response decisions.',
+            style: TextStyle(fontSize: 12, color: AppColors.body, height: 1.35),
+          ),
           if (analysis != null) ...[
             const SizedBox(height: 14),
-            Text(analysis!.reasoning, style: const TextStyle(fontSize: 13, height: 1.4)),
+            Text(
+              analysis!.reasoning,
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
             if (analysis!.suggestedAction.isNotEmpty) ...[
               const SizedBox(height: 10),
-              const Text('Suggested next step', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF547071))),
-              const SizedBox(height: 2),
-              Text(analysis!.suggestedAction, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, height: 1.35)),
+              const Text(
+                'SUGGESTED NEXT STEP',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: AppColors.body,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                analysis!.suggestedAction,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
             ],
           ] else ...[
             if (error != null) ...[
               const SizedBox(height: 10),
-              Text(error!, style: const TextStyle(fontSize: 12, color: Color(0xFFB33E39))),
+              Text(
+                error!,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.critical,
+                  height: 1.35,
+                ),
+              ),
             ],
             const SizedBox(height: 12),
-            TextButton.icon(
+            OutlinedButton.icon(
               onPressed: loading ? null : onRequestAnalysis,
               icon: loading
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(Icons.auto_awesome_outlined, size: 18),
-              label: Text(loading ? 'Preparing guidance...' : 'Get AI guidance'),
+              label: Text(loading ? 'Preparing guidance…' : 'Get AI guidance'),
             ),
           ],
         ],

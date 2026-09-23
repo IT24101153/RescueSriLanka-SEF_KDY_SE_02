@@ -245,23 +245,23 @@ class AppPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = busy
+    // While busy the spinner takes the icon's place and the label stays, so
+    // the button can say what it is doing ("Uploading photo…").
+    final leading = busy
         ? const SizedBox(
-            width: 18,
-            height: 18,
+            width: 17,
+            height: 17,
             child: CircularProgressIndicator(
               strokeWidth: 2.2,
               valueColor: AlwaysStoppedAnimation(AppColors.brandInk),
             ),
           )
-        : Text(label);
+        : (icon == null ? const SizedBox.shrink() : Icon(icon, size: 18));
 
     return FilledButton.icon(
       onPressed: busy ? null : onPressed,
-      icon: busy || icon == null
-          ? const SizedBox.shrink()
-          : Icon(icon, size: 18),
-      label: child,
+      icon: leading,
+      label: Text(label),
       style: FilledButton.styleFrom(
         backgroundColor: AppColors.brand,
         foregroundColor: AppColors.brandInk,
