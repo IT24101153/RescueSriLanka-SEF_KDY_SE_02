@@ -23,11 +23,13 @@ jobs:
         with:
           dotnet-version: '10.x'
 
+      # Only the API is deployed. Building the whole solution would also
+      # publish the test project into the same folder.
       - name: Build with dotnet
-        run: dotnet build --configuration Release
+        run: dotnet build backend/RescueSriLanka.Api/RescueSriLanka.Api.csproj --configuration Release
 
       - name: dotnet publish
-        run: dotnet publish -c Release -o ${{env.DOTNET_ROOT}}/myapp
+        run: dotnet publish backend/RescueSriLanka.Api/RescueSriLanka.Api.csproj -c Release -o ${{env.DOTNET_ROOT}}/myapp
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
