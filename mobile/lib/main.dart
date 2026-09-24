@@ -37,7 +37,7 @@ class _RescueSriLankaAppState extends State<RescueSriLankaApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'RescueSriLanka',
+      title: 'RescueSL',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       home: SplashScreen(auth: _auth),
