@@ -199,7 +199,13 @@ builder.Services.AddHostedService<NotificationWorker>();
 builder.Services.AddHttpClient<ILlmClient, GoogleAiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(30));
 
-builder.Services.AddScoped<IncidentAnalysisTools>();
+// The rainfall tool calls Open-Meteo. A short timeout keeps a slow weather
+// service from holding up the analysis — the tool returns null instead.
+builder.Services.AddHttpClient<IncidentAnalysisTools>(client =>
+{
+    client.BaseAddress = new Uri("https://api.open-meteo.com/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
 builder.Services.AddScoped<AIncidentAnalysisAgent, IncidentAnalysisAgent>();
 builder.Services.AddScoped<IAgentRunService, AgentRunService>();
 
@@ -243,6 +249,8 @@ builder.Services
     // Enums travel as readable strings ("Critical", not 3) in both directions.
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database");
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -252,6 +260,10 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Disaster response & resource coordination platform."
     });
+
+    // Components B and D each declare types with the same short name (for
+    // example WorkflowObjectiveType), so schemas are keyed by full name.
+    options.CustomSchemaIds(type => type.FullName!.Replace('+', '.'));
 
     // "Authorize" button in Swagger so endpoints can be tried with a token.
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -304,15 +316,19 @@ using (var startupScope = app.Services.CreateScope())
 }
 
 // ---------------------------------------------------------------- start-up
-if (app.Environment.IsDevelopment())
+// Swagger stays on in production: the deployed Swagger URL is a required
+// submission item, and every endpoint behind it still demands a token.
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "RescueSriLanka API v1");
-        options.RoutePrefix = "swagger";
-    });
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "RescueSriLanka API v1");
+    options.RoutePrefix = "swagger";
+});
 
+// The deployed database starts empty, so migrations and the demo accounts run
+// wherever the API starts. Set Database:MigrateOnStartup=false to skip them.
+if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
+{
     // Bring the schema up to date and make sure the demo accounts exist.
     using var scope = app.Services.CreateScope();
     var services = scope.ServiceProvider;
@@ -322,6 +338,10 @@ if (app.Environment.IsDevelopment())
     {
         var db = services.GetRequiredService<AppDbContext>();
         await db.Database.MigrateAsync();
+
+        // Component D's rescue tables have their own migration history.
+        await services.GetRequiredService<ComponentDDbContext>().Database.MigrateAsync();
+
         await DbSeeder.SeedAsync(
             db,
             services.GetRequiredService<IPasswordHasher<User>>(),
@@ -350,5 +370,9 @@ app.UseCors(CorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Public liveness probe for the host and for evaluators: reports whether the
+// API is up and can reach PostgreSQL. It exposes no data.
+app.MapHealthChecks("/health");
 
 app.Run();

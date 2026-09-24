@@ -1,0 +1,5 @@
+bin/
+obj/
+wwwroot/uploads/
+# Local secrets never go into an image; Render supplies them as environment variables.
+appsettings.Development.json
