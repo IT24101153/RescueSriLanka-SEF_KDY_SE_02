@@ -119,11 +119,14 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
 
         return AppCard(
           accent: helpStatusTone(request.status),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => _RequestDetailScreen(request: request),
-            ),
-          ),
+          onTap: () async {
+            final changed = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (_) => _RequestDetailScreen(request: request),
+              ),
+            );
+            if (changed == true) _load();
+          },
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -268,6 +271,102 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
     });
   }
 
+  bool get _canEditOrCancel =>
+      widget.request.status == 0 && widget.request.verificationStatus == 0;
+
+  Future<void> _editRequest() async {
+    var type = widget.request.type;
+    final description = TextEditingController(text: widget.request.description);
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit request'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                value: type,
+                items: List.generate(
+                  helpRequestTypeLabels.length,
+                  (index) => DropdownMenuItem(
+                    value: index,
+                    child: Text(helpRequestTypeLabels[index]),
+                  ),
+                ),
+                onChanged: (value) => setDialogState(() => type = value!),
+                decoration: const InputDecoration(labelText: 'Type'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: description,
+                minLines: 3,
+                maxLines: 6,
+                maxLength: 2000,
+                decoration: const InputDecoration(labelText: 'Description'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (description.text.trim().length < 5) return;
+                final saved = await HelpRequestService.update(
+                  request: widget.request,
+                  type: type,
+                  description: description.text.trim(),
+                );
+                if (context.mounted) Navigator.pop(context, saved);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    description.dispose();
+    if (!mounted || changed != true) return;
+    Navigator.pop(context, true);
+  }
+
+  Future<void> _cancelRequest() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel this request?'),
+        content: const Text(
+          'This cannot be undone. Coordinators will retain the cancellation in the request history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep request'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cancel request'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final cancelled = await HelpRequestService.cancel(widget.request.id);
+    if (!mounted) return;
+    if (cancelled) {
+      Navigator.pop(context, true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not cancel this request. Please try again.'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final request = widget.request;
@@ -350,6 +449,28 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
                 ],
               ),
             ),
+            if (_canEditOrCancel) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _editRequest,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit request'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _cancelRequest,
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Cancel request'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 20),
             _AiGuidanceCard(
               analysis: _aiAnalysis,

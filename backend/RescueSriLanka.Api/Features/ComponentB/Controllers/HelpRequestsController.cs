@@ -41,8 +41,15 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             var citizenId = GetUserId();
             if (citizenId is null) return Unauthorized();
 
-            var result = await _service.CreateAsync(citizenId.Value, dto);
-            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+            try
+            {
+                var result = await _service.CreateAsync(citizenId.Value, dto);
+                return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         // GET /api/helprequests
@@ -91,27 +98,24 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
                 : Ok(result);
         }
 
-        // AI guidance is generated server-side; the API key is never exposed to Flutter.
-        // Only the citizen who created the request may view its analysis.
+        // AI guidance is generated server-side; the API key is never exposed to clients.
+        // The requester and authorised coordinators may run the review.
         [HttpPost("{id}/ai-analysis")]
         [Authorize]
         public async Task<ActionResult<AiAnalysisResult>> Analyze(Guid id)
         {
-            var citizenId = GetUserId();
-            if (citizenId is null) return Unauthorized();
-
             var request = await _service.GetByIdAsync(id);
             if (request is null) return NotFound();
-            if (request.CitizenId != citizenId.Value) return Forbid();
+            if (!CanAccess(request)) return Forbid();
 
             // The workflow persists the Incident Analysis result, allowing the request
             // list to show its priority badge later without calling Gemini again.
             var workflow = await _plannerAgent.TriggerAsync(new TriggerWorkflowDto
             {
-                ObjectiveType = WorkflowObjectiveType.HelpRequest,
+                ObjectiveType = PlannerWorkflowObjectiveType.HelpRequest,
                 ObjectiveId = id
             });
-            var step = workflow.Steps.FirstOrDefault(s => s.TargetAgent == AgentType.IncidentAnalysisAgent);
+            var step = workflow.Steps.FirstOrDefault(s => s.TargetAgent == PlannerAgentType.IncidentAnalysisAgent);
             if (step?.ToolResultJson is null)
                 return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "AI guidance is temporarily unavailable. Your request has still been submitted." });
 
@@ -141,18 +145,15 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         [Authorize]
         public async Task<ActionResult<AiPriorityResponseDto>> GetAiPriority(Guid id)
         {
-            var citizenId = GetUserId();
-            if (citizenId is null) return Unauthorized();
-
             var request = await _service.GetByIdAsync(id);
             if (request is null) return NotFound();
-            if (request.CitizenId != citizenId.Value) return Forbid();
+            if (!CanAccess(request)) return Forbid();
 
             var step = await _db.AgentWorkflows
-                .Where(w => w.ObjectiveType == WorkflowObjectiveType.HelpRequest && w.ObjectiveId == id)
+                .Where(w => w.ObjectiveType == PlannerWorkflowObjectiveType.HelpRequest && w.ObjectiveId == id)
                 .OrderByDescending(w => w.CreatedAt)
                 .SelectMany(w => w.Steps)
-                .Where(s => s.TargetAgent == AgentType.IncidentAnalysisAgent && s.ToolResultJson != null)
+                .Where(s => s.TargetAgent == PlannerAgentType.IncidentAnalysisAgent && s.ToolResultJson != null)
                 .OrderByDescending(s => s.CompletedAt)
                 .FirstOrDefaultAsync();
 
@@ -194,18 +195,80 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             return Ok(result);
         }
 
+        // PUT /api/helprequests/{id}
+        // The requester can correct a pending, unverified request before triage starts.
+        [HttpPut("{id}")]
+        [Authorize]
+        public async Task<ActionResult<HelpRequestResponseDto>> Update(Guid id, [FromBody] UpdateHelpRequestDto dto)
+        {
+            var citizenId = GetUserId();
+            if (citizenId is null) return Unauthorized();
+
+            try
+            {
+                var result = await _service.UpdateAsync(id, citizenId.Value, dto);
+                return result is null ? NotFound() : Ok(result);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
+        // DELETE /api/helprequests/{id}
+        // Requests are never hard-deleted: DELETE safely changes a pending request to Cancelled
+        // and keeps the audit trail required for emergency coordination.
+        [HttpDelete("{id}")]
+        [Authorize]
+        public async Task<IActionResult> Delete(Guid id)
+        {
+            var citizenId = GetUserId();
+            if (citizenId is null) return Unauthorized();
+
+            var request = await _service.GetByIdAsync(id);
+            if (request is null) return NotFound();
+            if (request.CitizenId != citizenId.Value) return Forbid();
+            if (request.Status != HelpRequestStatus.Pending) return Conflict(new
+            {
+                message = "Only a pending request can be cancelled by its requester."
+            });
+
+            var result = await _service.UpdateStatusAsync(id, citizenId.Value,
+                new UpdateHelpRequestStatusDto
+                {
+                    NewStatus = HelpRequestStatus.Cancelled,
+                    Notes = "Cancelled by requester."
+                });
+            return result is null ? NotFound() : NoContent();
+        }
+
         // PATCH /api/helprequests/{id}/status
         // Coordinator changes status (or system/agent does, post-approval)
         [HttpPatch("{id}/status")]
         [Authorize(Roles = Coordinators)]
         public async Task<ActionResult<HelpRequestResponseDto>> UpdateStatus(Guid id, [FromBody] UpdateHelpRequestStatusDto dto)
         {
-            // TODO once JWT auth is wired up: read the real user id making the change
-            var changedByUserId = Guid.NewGuid(); // placeholder until auth is in place
+            var changedByUserId = GetUserId();
+            if (changedByUserId is null) return Unauthorized();
 
-            var result = await _service.UpdateStatusAsync(id, changedByUserId, dto);
-            if (result is null) return NotFound();
-            return Ok(result);
+            try
+            {
+                var result = await _service.UpdateStatusAsync(id, changedByUserId.Value, dto);
+                if (result is null) return NotFound();
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
         }
 
         // GET /api/helprequests/{id}/history
@@ -227,10 +290,10 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         [Authorize(Roles = Coordinators)]
         public async Task<ActionResult<HelpRequestResponseDto>> Verify(Guid id, [FromBody] VerifyHelpRequestDto dto)
         {
-            // TODO once JWT auth is wired in the frontend: read the real admin user id from claims
-            var verifiedByUserId = Guid.NewGuid(); // placeholder until auth claims are read here
+            var verifiedByUserId = GetUserId();
+            if (verifiedByUserId is null) return Unauthorized();
 
-            var result = await _service.VerifyAsync(id, verifiedByUserId, dto);
+            var result = await _service.VerifyAsync(id, verifiedByUserId.Value, dto);
             if (result is null) return NotFound();
             return Ok(result);
         }

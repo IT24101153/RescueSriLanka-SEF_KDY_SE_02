@@ -27,6 +27,14 @@ class HelpRequestApi {
     return http.patch(_uri(path), headers: _headers(), body: jsonEncode(body));
   }
 
+  static Future<http.Response> put(String path, Map<String, dynamic> body) {
+    return http.put(_uri(path), headers: _headers(), body: jsonEncode(body));
+  }
+
+  static Future<http.Response> delete(String path) {
+    return http.delete(_uri(path), headers: _headers());
+  }
+
   static Uri _uri(String path) => Uri.parse('${AppConfig.apiBaseUrl}$path');
 
   static Map<String, String> _headers() {

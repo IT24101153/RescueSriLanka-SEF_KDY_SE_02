@@ -185,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       subtitle: 'See where your requests were submitted',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const MyRequestsMapScreen(),
+                          builder: (_) => MyRequestsMapScreen(auth: widget.auth),
                         ),
                       ),
                     ),

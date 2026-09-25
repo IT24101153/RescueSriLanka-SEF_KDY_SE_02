@@ -38,6 +38,20 @@ function urgencyTier(score: number): UrgencyTier {
   return "safe";
 }
 
+interface AiAnalysisDto {
+  reasoning: string;
+  credibilitySignal: string;
+  suggestedAction: string;
+}
+
+function canTransition(current: number, next: number): boolean {
+  return (
+    (current === 0 && (next === 1 || next === 4)) ||
+    (current === 1 && (next === 2 || next === 4)) ||
+    (current === 2 && (next === 3 || next === 4))
+  );
+}
+
 function CheckIcon() {
   return (
     <svg viewBox="0 0 16 16" width="13" height="13" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -72,6 +86,14 @@ export default function HelpRequestsReview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [aiReview, setAiReview] = useState<AiAnalysisDto | null>(null);
+  const [aiReviewing, setAiReviewing] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sort, setSort] = useState("urgency");
+  const [page, setPage] = useState(0);
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
@@ -110,9 +132,25 @@ export default function HelpRequestsReview() {
 
   useEffect(() => {
     loadHistory(selectedId);
+    setAiReview(null);
+    setAiError(null);
   }, [selectedId, loadHistory]);
 
+  const filteredRequests = requests
+    .filter((request) =>
+      (typeFilter === "all" || request.type === Number(typeFilter)) &&
+      (statusFilter === "all" || request.status === Number(statusFilter)) &&
+      `${TYPE_LABELS[request.type]} ${request.description}`.toLowerCase().includes(query.trim().toLowerCase()),
+    )
+    .sort((a, b) => sort === "newest"
+      ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      : b.urgencyScore - a.urgencyScore);
+  const pageSize = 8;
+  const pageCount = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
+  const visibleRequests = filteredRequests.slice(page * pageSize, (page + 1) * pageSize);
   const selected = requests.find((r) => r.id === selectedId) ?? null;
+
+  useEffect(() => setPage(0), [query, statusFilter, typeFilter, sort]);
 
   async function changeStatus(newStatusIndex: number) {
     if (!selected) return;
@@ -155,6 +193,23 @@ export default function HelpRequestsReview() {
     }
   }
 
+  async function runAiReview() {
+    if (!selected) return;
+    setAiReviewing(true);
+    setAiError(null);
+    try {
+      const res = await authFetch(`/api/HelpRequests/${selected.id}/ai-analysis`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error();
+      setAiReview(await res.json());
+    } catch {
+      setAiError("AI review is unavailable. You can still verify and triage this request manually.");
+    } finally {
+      setAiReviewing(false);
+    }
+  }
+
   return (
     <div className="hr-console">
       <div className="hr-topbar">
@@ -175,13 +230,29 @@ export default function HelpRequestsReview() {
 
       {error && <div className="hr-banner">{error}</div>}
 
+      <div className="hr-filters">
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search requests" aria-label="Search requests" />
+        <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} aria-label="Filter by type">
+          <option value="all">All types</option>
+          {TYPE_LABELS.map((label, index) => <option key={label} value={index}>{label}</option>)}
+        </select>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter by status">
+          <option value="all">All statuses</option>
+          {STATUS_LABELS.map((label, index) => <option key={label} value={index}>{label}</option>)}
+        </select>
+        <select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort requests">
+          <option value="urgency">Highest urgency</option>
+          <option value="newest">Newest first</option>
+        </select>
+      </div>
+
       <div className="hr-body">
         <div className="hr-list">
           {loading && <div className="hr-empty">Loading requests…</div>}
-          {!loading && requests.length === 0 && (
-            <div className="hr-empty">No help requests yet. New submissions will appear here.</div>
+          {!loading && filteredRequests.length === 0 && (
+            <div className="hr-empty">No requests match these filters.</div>
           )}
-          {requests.map((r) => (
+          {visibleRequests.map((r) => (
             <button
               key={r.id}
               className={`hr-row hr-row--${urgencyTier(r.urgencyScore)} ${
@@ -198,6 +269,13 @@ export default function HelpRequestsReview() {
               <span className={`hr-row-status hr-row-status--${r.status}`}>{STATUS_LABELS[r.status]}</span>
             </button>
           ))}
+          {filteredRequests.length > pageSize && (
+            <div className="hr-pagination">
+              <button disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button>
+              <span>Page {page + 1} of {pageCount}</span>
+              <button disabled={page + 1 >= pageCount} onClick={() => setPage(page + 1)}>Next</button>
+            </div>
+          )}
         </div>
 
         <div className="hr-detail">
@@ -218,6 +296,14 @@ export default function HelpRequestsReview() {
               </div>
 
               <p className="hr-detail-desc">{selected.description}</p>
+
+              <div className="hr-actions">
+                <span className="hr-actions-label">AI review</span>
+                <button className="hr-segment" disabled={aiReviewing} onClick={runAiReview}>
+                    {aiReviewing ? "Reviewing…" : "Run AI review"}
+                </button>
+                {aiError && <p className="hr-banner">{aiError}</p>}
+              </div>
 
               {selected.imageUrl && (
                 <a className="hr-request-image-link" href={selected.imageUrl} target="_blank" rel="noreferrer">
@@ -271,7 +357,7 @@ export default function HelpRequestsReview() {
                     <button
                       key={label}
                       className={`hr-segment ${selected.status === idx ? "hr-segment--current" : ""}`}
-                      disabled={updating || selected.status === idx}
+                      disabled={updating || !canTransition(selected.status, idx)}
                       onClick={() => changeStatus(idx)}
                     >
                       {label}
@@ -304,6 +390,22 @@ export default function HelpRequestsReview() {
           )}
         </div>
       </div>
+      {aiReview && (
+        <div className="hr-ai-backdrop" role="presentation" onClick={() => setAiReview(null)}>
+          <section className="hr-ai-dialog" role="dialog" aria-modal="true" aria-label="AI request review" onClick={(event) => event.stopPropagation()}>
+            <div className="hr-ai-dialog-head">
+              <div>
+                <span className="hr-actions-label">AI review</span>
+                <p>Advisory support only — the coordinator makes the final decision.</p>
+              </div>
+              <button className="hr-ai-close" onClick={() => setAiReview(null)} aria-label="Close AI review">×</button>
+            </div>
+            <div className="hr-ai-result"><span>Assessment</span><p>{aiReview.reasoning}</p></div>
+            <div className="hr-ai-result"><span>Credibility signal</span><p>{aiReview.credibilitySignal}</p></div>
+            <div className="hr-ai-result"><span>Suggested action</span><p>{aiReview.suggestedAction}</p></div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

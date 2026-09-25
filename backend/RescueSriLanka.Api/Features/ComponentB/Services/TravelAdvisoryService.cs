@@ -12,7 +12,10 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
     public interface ITravelAdvisoryService
     {
         Task<TravelAdvisoryResponseDto> CreateAsync(CreateTravelAdvisoryDto dto);
+        Task<TravelAdvisoryResponseDto?> GetByIdAsync(Guid id);
         Task<List<TravelAdvisoryResponseDto>> GetActiveAsync();
+        Task<TravelAdvisoryResponseDto?> UpdateAsync(Guid id, UpdateTravelAdvisoryDto dto);
+        Task<bool> DeleteAsync(Guid id);
         Task<SafetyCheckResponseDto> CheckSafetyAsync(SafetyCheckRequestDto dto);
     }
 
@@ -47,6 +50,39 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 .ToListAsync();
 
             return [.. entities.Select(ToDto)];
+        }
+
+        public async Task<TravelAdvisoryResponseDto?> GetByIdAsync(Guid id)
+        {
+            var entity = await _db.TravelAdvisories.FindAsync(id);
+            return entity is null ? null : ToDto(entity);
+        }
+
+        public async Task<TravelAdvisoryResponseDto?> UpdateAsync(Guid id, UpdateTravelAdvisoryDto dto)
+        {
+            var entity = await _db.TravelAdvisories.FindAsync(id);
+            if (entity is null) return null;
+
+            entity.AreaName = dto.AreaName;
+            entity.Latitude = dto.Latitude;
+            entity.Longitude = dto.Longitude;
+            entity.RadiusMeters = dto.RadiusMeters;
+            entity.SafetyLevel = dto.SafetyLevel;
+            entity.Reason = dto.Reason;
+            entity.ExpiresAt = dto.ExpiresAt;
+            await _db.SaveChangesAsync();
+
+            return ToDto(entity);
+        }
+
+        public async Task<bool> DeleteAsync(Guid id)
+        {
+            var entity = await _db.TravelAdvisories.FindAsync(id);
+            if (entity is null) return false;
+
+            _db.TravelAdvisories.Remove(entity);
+            await _db.SaveChangesAsync();
+            return true;
         }
 
         // Business-specific operation: route/area safety check.
