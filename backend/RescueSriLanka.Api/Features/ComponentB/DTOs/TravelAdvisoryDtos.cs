@@ -53,6 +53,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
         public SafetyLevel SafetyLevel { get; set; }
         public string Reason { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
         public DateTime? ExpiresAt { get; set; }
     }
 

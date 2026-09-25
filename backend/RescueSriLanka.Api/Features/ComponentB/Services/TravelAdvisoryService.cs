@@ -13,6 +13,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
     {
         Task<TravelAdvisoryResponseDto> CreateAsync(CreateTravelAdvisoryDto dto);
         Task<TravelAdvisoryResponseDto?> GetByIdAsync(Guid id);
+        Task<List<TravelAdvisoryResponseDto>> GetAllAsync();
         Task<List<TravelAdvisoryResponseDto>> GetActiveAsync();
         Task<TravelAdvisoryResponseDto?> UpdateAsync(Guid id, UpdateTravelAdvisoryDto dto);
         Task<bool> DeleteAsync(Guid id);
@@ -58,6 +59,14 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             return entity is null ? null : ToDto(entity);
         }
 
+        public async Task<List<TravelAdvisoryResponseDto>> GetAllAsync()
+        {
+            var entities = await _db.TravelAdvisories
+                .OrderByDescending(advisory => advisory.CreatedAt)
+                .ToListAsync();
+            return [.. entities.Select(ToDto)];
+        }
+
         public async Task<TravelAdvisoryResponseDto?> UpdateAsync(Guid id, UpdateTravelAdvisoryDto dto)
         {
             var entity = await _db.TravelAdvisories.FindAsync(id);
@@ -70,6 +79,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             entity.SafetyLevel = dto.SafetyLevel;
             entity.Reason = dto.Reason;
             entity.ExpiresAt = dto.ExpiresAt;
+            entity.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
 
             return ToDto(entity);
@@ -164,6 +174,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             SafetyLevel = entity.SafetyLevel,
             Reason = entity.Reason,
             CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt,
             ExpiresAt = entity.ExpiresAt
         };
     }

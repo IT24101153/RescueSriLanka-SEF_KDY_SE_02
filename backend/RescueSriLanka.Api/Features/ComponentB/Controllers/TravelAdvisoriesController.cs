@@ -36,6 +36,13 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             return Ok(result);
         }
 
+        [HttpGet("all")]
+        [Authorize(Roles = Coordinators)]
+        public async Task<ActionResult<List<TravelAdvisoryResponseDto>>> GetAll()
+        {
+            return Ok(await _service.GetAllAsync());
+        }
+
         // GET /api/traveladvisories/{id}
         // A coordinator can still retrieve an expired advisory to correct or remove it.
         [HttpGet("{id:guid}")]

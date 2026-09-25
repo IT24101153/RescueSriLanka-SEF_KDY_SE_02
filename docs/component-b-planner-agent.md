@@ -41,6 +41,10 @@ when validation fails.
 
 - Gemini is optional. A missing key, timeout or malformed response records
   `aiAnalysisAvailable: false`; deterministic severity still completes.
+- If the AI provider throws unexpectedly, the workflow catches that provider error,
+  records the analysis as unavailable, and continues with the rule-based severity.
+- Workflow creation returns `404` for an unknown request, `400` for an invalid
+  objective, and approval decisions return `409` unless the plan is awaiting approval.
 - The API key is server-only and never returned to Flutter or React.
 - A citizen can access AI data only for their own request; coordinators can
   review any request permitted by their role.
@@ -56,5 +60,7 @@ when validation fails.
 | Not actionable | Resolved or Cancelled Help Request | Failed workflow; requestStillActionable false |
 | Gemini unavailable | Missing/failed Gemini call | Workflow remains deterministic, AI fields absent and `aiAnalysisAvailable` false |
 
-The service-level tests should cover each golden case with a fake
-`IAiAnalysisService`, plus controller tests for role and ownership checks.
+The golden cases are exercised in
+`backend/RescueSriLanka.Api.Tests/ComponentBPlannerAgentTests.cs` with a fake
+`IAiAnalysisService`. JWT and coordinator-role checks are exercised in
+`ComponentBAuthorizationIntegrationTests.cs`.

@@ -32,8 +32,22 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
                 return BadRequest(new { message = "Component B workflows support HelpRequest objectives only." });
             }
 
-            var result = await _plannerAgent.TriggerAsync(dto);
-            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+            if (dto.ObjectiveId == Guid.Empty)
+                return BadRequest(new { message = "A help request ID is required." });
+
+            try
+            {
+                var result = await _plannerAgent.TriggerAsync(dto);
+                return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         // GET /api/agentworkflows/{id}
@@ -56,9 +70,16 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             var coordinatorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!Guid.TryParse(coordinatorId, out var coordinatorUserId)) return Unauthorized();
 
-            var result = await _plannerAgent.DecideApprovalAsync(id, coordinatorUserId, dto);
-            if (result is null) return NotFound();
-            return Ok(result);
+            try
+            {
+                var result = await _plannerAgent.DecideApprovalAsync(id, coordinatorUserId, dto);
+                if (result is null) return NotFound();
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
         }
     }
 }

@@ -45,6 +45,13 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 
         public async Task<AgentWorkflowResponseDto> TriggerAsync(TriggerWorkflowDto dto)
         {
+            if (dto.ObjectiveType != PlannerWorkflowObjectiveType.HelpRequest || dto.ObjectiveId == Guid.Empty)
+                throw new ArgumentException("A valid HelpRequest objective is required.", nameof(dto));
+
+            var requestExists = await _db.HelpRequests.AnyAsync(request => request.Id == dto.ObjectiveId);
+            if (!requestExists)
+                throw new KeyNotFoundException("The help request does not exist.");
+
             string objectiveSnapshotJson = await _helpRequestLookup.GetSnapshotJsonAsync(dto.ObjectiveType, dto.ObjectiveId);
 
             var workflow = new AgentWorkflow
@@ -120,8 +127,16 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                 // signal on top of the deterministic score. If the AI call fails or
                 // no key is configured, we still have the rule-based result above,
                 // so the workflow degrades gracefully rather than breaking.
-                var aiResult = await _aiAnalysis.AnalyzeHelpRequestAsync(
-                    request.Type.ToString(), request.Description, request.UrgencyScore);
+                AiAnalysisResult? aiResult;
+                try
+                {
+                    aiResult = await _aiAnalysis.AnalyzeHelpRequestAsync(
+                        request.Type.ToString(), request.Description, request.UrgencyScore);
+                }
+                catch
+                {
+                    aiResult = null;
+                }
 
                 step1.ToolResultJson = JsonSerializer.Serialize(new
                 {
@@ -229,6 +244,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                 .FirstOrDefaultAsync(w => w.Id == workflowId);
 
             if (workflow is null) return null;
+
+            if (workflow.Status != PlannerWorkflowStatus.AwaitingApproval)
+                throw new InvalidOperationException("Only a validated plan awaiting approval can receive a decision.");
 
             workflow.ApprovedByUserId = coordinatorUserId;
             workflow.ApprovalDecisionAt = DateTime.UtcNow;
