@@ -4,6 +4,7 @@ import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { authFetch } from "./api";
+import TravelAdvisoryManager from "./TravelAdvisoryManager";
 import "./HelpRequestDashboard.css";
 
 const TYPE_LABELS = ["Water", "Food", "Medical", "Rescue", "Shelter", "Other"] as const;
@@ -58,6 +59,7 @@ export default function Dashboard() {
   const [requests, setRequests] = useState<HelpRequestDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAdvisories, setShowAdvisories] = useState(false);
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
@@ -65,11 +67,9 @@ export default function Dashboard() {
     try {
       const response = await authFetch("/api/HelpRequests");
       if (!response.ok) {
-        throw new Error(
-          response.status === 401 || response.status === 403
-              ? "Your dashboard session is not authorized. Please sign out and sign in again as the coordinator."
-              : "Unable to load live request data. Make sure the API is running.",
-        );
+        throw new Error(response.status === 401 || response.status === 403
+          ? "Your dashboard session is not authorized. Please sign out and sign in again as the coordinator."
+          : `The API returned HTTP ${response.status}. Check the backend terminal for database or migration errors.`);
       }
       setRequests(await response.json());
     } catch (error) {
@@ -92,6 +92,8 @@ export default function Dashboard() {
     .sort((a, b) => b.urgencyScore - a.urgencyScore || +new Date(b.createdAt) - +new Date(a.createdAt))
     .slice(0, 5), [requests]);
 
+  if (showAdvisories) return <TravelAdvisoryManager onBack={() => setShowAdvisories(false)} />;
+
   return (
     <div className="dashboard-page">
       <header className="dashboard-header">
@@ -100,7 +102,7 @@ export default function Dashboard() {
           <h1>Response dashboard</h1>
           <p className="dashboard-subtitle">Monitor incoming citizen requests and prioritise the people who need help first.</p>
         </div>
-        <button className="dashboard-refresh" onClick={loadRequests} disabled={loading}>{loading ? "Updating…" : "Refresh data"}</button>
+        <div className="dashboard-header-actions"><button className="dashboard-refresh" onClick={() => setShowAdvisories(true)}>Manage travel advisories</button><button className="dashboard-refresh" onClick={loadRequests} disabled={loading}>{loading ? "Updating…" : "Refresh data"}</button></div>
       </header>
 
       <section className="dashboard-metrics" aria-label="Request summary">

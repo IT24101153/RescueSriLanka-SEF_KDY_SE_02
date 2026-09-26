@@ -10,7 +10,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
     {
         public Guid Id { get; set; } = Guid.NewGuid();
 
-        public WorkflowObjectiveType ObjectiveType { get; set; }
+        public PlannerWorkflowObjectiveType ObjectiveType { get; set; }
 
         // The id of the HelpRequest or Incident that triggered this workflow
         public Guid ObjectiveId { get; set; }
@@ -22,7 +22,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
         // jsonb: the structured multi-step plan the Planner Agent built
         public string PlanJson { get; set; } = "{}";
 
-        public WorkflowStatus Status { get; set; } = WorkflowStatus.Planning;
+        public PlannerWorkflowStatus Status { get; set; } = PlannerWorkflowStatus.Planning;
 
         // Who approved/rejected, and when — set once a Coordinator acts
         public Guid? ApprovedByUserId { get; set; }
@@ -48,7 +48,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
         // Order within the plan
         public int StepNumber { get; set; }
 
-        public AgentType TargetAgent { get; set; }
+        public PlannerAgentType TargetAgent { get; set; }
 
         // Short description of what this step asks the target agent to do
         public string Action { get; set; } = string.Empty;
@@ -62,7 +62,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
         // jsonb: result of the Safety Validation Agent's deterministic checks, if applicable to this step
         public string? ValidationResultJson { get; set; }
 
-        public StepStatus Status { get; set; } = StepStatus.Pending;
+        public PlannerStepStatus Status { get; set; } = PlannerStepStatus.Pending;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? CompletedAt { get; set; }

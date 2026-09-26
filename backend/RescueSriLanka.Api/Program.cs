@@ -18,6 +18,7 @@ using RescueSriLanka.Api.Features.ComponentA.Data;
 using RescueSriLanka.Api.Features.ComponentA.Services;
 using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 using RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent;
+using RescueSriLanka.Api.Features.ComponentB.Data;
 using RescueSriLanka.Api.Features.ComponentB.Services;
 using RescueSriLanka.Api.Features.ComponentC.Services;
 using RescueSriLanka.Api.Features.ComponentC.Data;
@@ -346,6 +347,15 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
             db,
             services.GetRequiredService<IPasswordHasher<User>>(),
             logger);
+
+        // Component B sample records are isolated to local development and are
+        // explicitly marked as fixtures; production data stays operator-entered.
+        if (app.Environment.IsDevelopment())
+        {
+            await ComponentBDataSeeder.SeedAsync(
+                db,
+                services.GetRequiredService<IPasswordHasher<User>>());
+        }
 
         // Component C's shelters, supplies and stock for the resource screens.
         await ResourceDataSeeder.SeedAsync(db);

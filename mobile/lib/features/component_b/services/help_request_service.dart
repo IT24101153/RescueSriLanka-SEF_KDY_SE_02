@@ -153,10 +153,17 @@ class HelpRequestService {
     return (await getMineWithStatus()).requests;
   }
 
+  static Future<HelpRequestLoadResult> getAllWithStatus() =>
+      _loadRequests('/api/HelpRequests');
+
   /// Keeps a failed request fetch distinct from a genuine empty request list.
   static Future<HelpRequestLoadResult> getMineWithStatus() async {
+    return _loadRequests('/api/HelpRequests/mine');
+  }
+
+  static Future<HelpRequestLoadResult> _loadRequests(String path) async {
     try {
-      final res = await HelpRequestApi.get('/api/HelpRequests/mine');
+      final res = await HelpRequestApi.get(path);
       if (res.statusCode == 401) {
         return const HelpRequestLoadResult(
           requests: [],
@@ -218,5 +225,26 @@ class HelpRequestService {
     return AiRequestAnalysis.fromJson(
       jsonDecode(res.body) as Map<String, dynamic>,
     );
+  }
+
+  static Future<bool> update({
+    required HelpRequest request,
+    required int type,
+    required String description,
+  }) async {
+    final res = await HelpRequestApi.put('/api/HelpRequests/${request.id}', {
+      'type': type,
+      'description': description,
+      'latitude': request.latitude,
+      'longitude': request.longitude,
+      'relatedIncidentId': null,
+      'imageUrl': request.imageUrl,
+    });
+    return res.statusCode == 200;
+  }
+
+  static Future<bool> cancel(String id) async {
+    final res = await HelpRequestApi.delete('/api/HelpRequests/$id');
+    return res.statusCode == 204;
   }
 }

@@ -13,7 +13,11 @@ import '../../../shared/services/auth_service.dart';
 class HelpRequestApi {
   const HelpRequestApi._();
 
-  static AuthService? auth;
+  static AuthService? _auth;
+
+  static set auth(AuthService? value) {
+    _auth = value;
+  }
 
   static Future<http.Response> get(String path) {
     return http.get(_uri(path), headers: _headers());
@@ -27,11 +31,19 @@ class HelpRequestApi {
     return http.patch(_uri(path), headers: _headers(), body: jsonEncode(body));
   }
 
+  static Future<http.Response> put(String path, Map<String, dynamic> body) {
+    return http.put(_uri(path), headers: _headers(), body: jsonEncode(body));
+  }
+
+  static Future<http.Response> delete(String path) {
+    return http.delete(_uri(path), headers: _headers());
+  }
+
   static Uri _uri(String path) => Uri.parse('${AppConfig.apiBaseUrl}$path');
 
   static Map<String, String> _headers() {
     final headers = {'Content-Type': 'application/json'};
-    final token = auth?.token;
+    final token = _auth?.token;
     if (token != null) {
       headers['Authorization'] = 'Bearer $token';
     }

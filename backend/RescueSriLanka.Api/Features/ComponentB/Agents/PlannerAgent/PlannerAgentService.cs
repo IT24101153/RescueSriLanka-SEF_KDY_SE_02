@@ -45,6 +45,13 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 
         public async Task<AgentWorkflowResponseDto> TriggerAsync(TriggerWorkflowDto dto)
         {
+            if (dto.ObjectiveType != PlannerWorkflowObjectiveType.HelpRequest || dto.ObjectiveId == Guid.Empty)
+                throw new ArgumentException("A valid HelpRequest objective is required.", nameof(dto));
+
+            var requestExists = await _db.HelpRequests.AnyAsync(request => request.Id == dto.ObjectiveId);
+            if (!requestExists)
+                throw new KeyNotFoundException("The help request does not exist.");
+
             string objectiveSnapshotJson = await _helpRequestLookup.GetSnapshotJsonAsync(dto.ObjectiveType, dto.ObjectiveId);
 
             var workflow = new AgentWorkflow
@@ -52,31 +59,31 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                 ObjectiveType = dto.ObjectiveType,
                 ObjectiveId = dto.ObjectiveId,
                 ObjectiveSnapshotJson = objectiveSnapshotJson,
-                Status = WorkflowStatus.Planning
+                Status = PlannerWorkflowStatus.Planning
             };
 
             var steps = new List<AgentStep>
             {
                 new() {
                     StepNumber = 1,
-                    TargetAgent = AgentType.IncidentAnalysisAgent,
+                    TargetAgent = PlannerAgentType.IncidentAnalysisAgent,
                     Action = "ClassifySeverityAndZone",
                     InputParamsJson = objectiveSnapshotJson,
-                    Status = StepStatus.Pending
+                    Status = PlannerStepStatus.Pending
                 },
                 new() {
                     StepNumber = 2,
-                    TargetAgent = AgentType.ResourceLogisticsPlanningAgent,
+                    TargetAgent = PlannerAgentType.ResourceLogisticsPlanningAgent,
                     Action = "FindResourcesAndRoute",
                     InputParamsJson = objectiveSnapshotJson,
-                    Status = StepStatus.Pending
+                    Status = PlannerStepStatus.Pending
                 },
                 new() {
                     StepNumber = 3,
-                    TargetAgent = AgentType.SafetyValidationAgent,
+                    TargetAgent = PlannerAgentType.SafetyValidationAgent,
                     Action = "ValidatePlan",
                     InputParamsJson = "{}",
-                    Status = StepStatus.Pending
+                    Status = PlannerStepStatus.Pending
                 }
             };
 
@@ -102,7 +109,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 
         private async Task ExecuteStepsAsync(AgentWorkflow workflow, TriggerWorkflowDto dto)
         {
-            HelpRequest? request = dto.ObjectiveType == WorkflowObjectiveType.HelpRequest
+            HelpRequest? request = dto.ObjectiveType == PlannerWorkflowObjectiveType.HelpRequest
                 ? await _db.HelpRequests.FindAsync(dto.ObjectiveId)
                 : null;
 
@@ -120,8 +127,16 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                 // signal on top of the deterministic score. If the AI call fails or
                 // no key is configured, we still have the rule-based result above,
                 // so the workflow degrades gracefully rather than breaking.
-                var aiResult = await _aiAnalysis.AnalyzeHelpRequestAsync(
-                    request.Type.ToString(), request.Description, request.UrgencyScore);
+                AiAnalysisResult? aiResult;
+                try
+                {
+                    aiResult = await _aiAnalysis.AnalyzeHelpRequestAsync(
+                        request.Type.ToString(), request.Description, request.UrgencyScore);
+                }
+                catch
+                {
+                    aiResult = null;
+                }
 
                 step1.ToolResultJson = JsonSerializer.Serialize(new
                 {
@@ -133,12 +148,12 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                     aiSuggestedAction = aiResult?.SuggestedAction,
                     aiAnalysisAvailable = aiResult is not null
                 });
-                step1.Status = StepStatus.Completed;
+                step1.Status = PlannerStepStatus.Completed;
                 step1.CompletedAt = DateTime.UtcNow;
             }
             else
             {
-                step1.Status = StepStatus.Failed;
+                step1.Status = PlannerStepStatus.Failed;
             }
 
             // ---- Step 2: Resource & Logistics — PLACEHOLDER dataset until Student C's Shelter table exists ----
@@ -162,12 +177,12 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                     estimatedEtaMinutes = Math.Round(etaMinutes, 0),
                     note = "PLACEHOLDER dataset — replace with Student C's real Shelter/Resource table once available."
                 });
-                step2.Status = StepStatus.Completed;
+                step2.Status = PlannerStepStatus.Completed;
                 step2.CompletedAt = DateTime.UtcNow;
             }
             else
             {
-                step2.Status = StepStatus.Failed;
+                step2.Status = PlannerStepStatus.Failed;
             }
 
             // ---- Step 3: Safety Validation — REAL deterministic check ----
@@ -176,7 +191,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             bool duplicateActiveWorkflow = await _db.AgentWorkflows.AnyAsync(w =>
                 w.Id != workflow.Id &&
                 w.ObjectiveId == workflow.ObjectiveId &&
-                (w.Status == WorkflowStatus.AwaitingApproval || w.Status == WorkflowStatus.Approved));
+                (w.Status == PlannerWorkflowStatus.AwaitingApproval || w.Status == PlannerWorkflowStatus.Approved));
 
             bool requestStillActionable = request is not null &&
                 request.Status != HelpRequestStatus.Resolved &&
@@ -190,13 +205,13 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                 duplicateActiveWorkflow,
                 requestStillActionable
             });
-            step3.Status = passed ? StepStatus.Completed : StepStatus.Failed;
+            step3.Status = passed ? PlannerStepStatus.Completed : PlannerStepStatus.Failed;
             step3.CompletedAt = DateTime.UtcNow;
 
             // Overall workflow outcome, based on real validation result.
             if (!passed)
             {
-                workflow.Status = WorkflowStatus.Failed;
+                workflow.Status = PlannerWorkflowStatus.Failed;
                 workflow.FinalOutcomeJson = JsonSerializer.Serialize(new
                 {
                     outcome = "failed_validation",
@@ -207,7 +222,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             }
             else
             {
-                workflow.Status = WorkflowStatus.AwaitingApproval;
+                workflow.Status = PlannerWorkflowStatus.AwaitingApproval;
             }
 
             workflow.UpdatedAt = DateTime.UtcNow;
@@ -230,10 +245,13 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 
             if (workflow is null) return null;
 
+            if (workflow.Status != PlannerWorkflowStatus.AwaitingApproval)
+                throw new InvalidOperationException("Only a validated plan awaiting approval can receive a decision.");
+
             workflow.ApprovedByUserId = coordinatorUserId;
             workflow.ApprovalDecisionAt = DateTime.UtcNow;
             workflow.ApprovalNotes = dto.Notes;
-            workflow.Status = dto.Approved ? WorkflowStatus.Approved : WorkflowStatus.Rejected;
+            workflow.Status = dto.Approved ? PlannerWorkflowStatus.Approved : PlannerWorkflowStatus.Rejected;
             workflow.UpdatedAt = DateTime.UtcNow;
 
             if (!dto.Approved)
@@ -286,7 +304,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             CreatedAt = w.CreatedAt,
             Steps = [.. w.Steps
                 .OrderBy(s => s.StepNumber)
-                .Select(s => new AgentStepDto
+                .Select(s => new PlannerAgentStepDto
                 {
                     Id = s.Id,
                     StepNumber = s.StepNumber,
@@ -302,16 +320,16 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 
     public interface IHelpRequestServiceForAgent
     {
-        Task<string> GetSnapshotJsonAsync(WorkflowObjectiveType type, Guid objectiveId);
+        Task<string> GetSnapshotJsonAsync(PlannerWorkflowObjectiveType type, Guid objectiveId);
     }
 
     public class HelpRequestServiceForAgent(AppDbContext db) : IHelpRequestServiceForAgent
     {
         private readonly AppDbContext _db = db;
 
-        public async Task<string> GetSnapshotJsonAsync(WorkflowObjectiveType type, Guid objectiveId)
+        public async Task<string> GetSnapshotJsonAsync(PlannerWorkflowObjectiveType type, Guid objectiveId)
         {
-            if (type == WorkflowObjectiveType.HelpRequest)
+            if (type == PlannerWorkflowObjectiveType.HelpRequest)
             {
                 var hr = await _db.HelpRequests.FindAsync(objectiveId);
                 if (hr is null) return "{}";

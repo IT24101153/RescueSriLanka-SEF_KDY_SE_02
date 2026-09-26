@@ -456,3 +456,6 @@ mobile/.flutter-plugins-dependencies
 
 # .NET build output (the VS template only covers bin/x64 and bin/x86)
 [Bb]in/
+
+# codex cache
+.codex-nuget-cache/

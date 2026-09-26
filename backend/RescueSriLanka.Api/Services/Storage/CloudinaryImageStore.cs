@@ -21,16 +21,16 @@ public class CloudinaryImageStore(
     public string Name => "cloudinary";
 
     public async Task<StoredImage> SaveAsync(
-        Guid incidentId, IFormFile file, CancellationToken ct = default)
+        Guid ownerId, string category, IFormFile file, CancellationToken ct = default)
     {
         await using var stream = file.OpenReadStream();
 
         var parameters = new ImageUploadParams
         {
             File = new FileDescription(file.FileName, stream),
-            // One folder per incident keeps the media library navigable and
-            // makes "delete everything for this incident" a single call later.
-            Folder = $"rescuesrilanka/incidents/{incidentId}",
+            // One folder per owner keeps the media library navigable and makes
+            // "delete everything for this incident/user" a single call later.
+            Folder = $"rescuesrilanka/{category}/{ownerId}",
             UniqueFilename = true,
             Overwrite = false
         };
@@ -50,7 +50,7 @@ public class CloudinaryImageStore(
         }
 
         logger.LogInformation(
-            "Uploaded image {PublicId} for incident {IncidentId}", result.PublicId, incidentId);
+            "Uploaded {Category} image {PublicId} for {OwnerId}", category, result.PublicId, ownerId);
 
         return new StoredImage(url, result.PublicId);
     }

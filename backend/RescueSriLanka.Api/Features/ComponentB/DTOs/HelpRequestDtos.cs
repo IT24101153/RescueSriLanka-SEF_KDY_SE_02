@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using RescueSriLanka.Api.Features.ComponentB.Models;
 
@@ -11,11 +12,16 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
     public class CreateHelpRequestDto
     {
         [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestType>))]
+        [EnumDataType(typeof(HelpRequestType))]
         public HelpRequestType Type { get; set; }
+        [Required, StringLength(2000, MinimumLength = 5)]
         public string Description { get; set; } = string.Empty;
+        [Range(-90, 90)]
         public double Latitude { get; set; }
+        [Range(-180, 180)]
         public double Longitude { get; set; }
         public Guid? RelatedIncidentId { get; set; }
+        [Url, StringLength(2048)]
         public string? ImageUrl { get; set; }
     }
 
@@ -23,14 +29,22 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
     public class UpdateHelpRequestStatusDto
     {
         [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestStatus>))]
+        [EnumDataType(typeof(HelpRequestStatus))]
         public HelpRequestStatus NewStatus { get; set; }
+        [StringLength(1000)]
         public string? Notes { get; set; }
+    }
+
+    // A citizen may correct a request only while it is still pending triage.
+    public class UpdateHelpRequestDto : CreateHelpRequestDto
+    {
     }
 
     // What the admin sends when verifying a citizen report as real or fake
     public class VerifyHelpRequestDto
     {
         public bool IsReal { get; set; }
+        [StringLength(1000)]
         public string? Notes { get; set; }
     }
 
@@ -40,6 +54,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
         public Guid Id { get; set; }
         public Guid CitizenId { get; set; }
         [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestType>))]
+        [EnumDataType(typeof(HelpRequestType))]
         public HelpRequestType Type { get; set; }
         public string Description { get; set; } = string.Empty;
         public double Latitude { get; set; }
@@ -77,6 +92,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
     {
         [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestType>))]
         public HelpRequestType Type { get; set; }
+        [Required, StringLength(2000, MinimumLength = 5)]
         public string Description { get; set; } = string.Empty;
     }
 }

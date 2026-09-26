@@ -284,7 +284,8 @@ namespace RescueSriLanka.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AgentWorkflowId");
+                    b.HasIndex("AgentWorkflowId", "StepNumber")
+                        .IsUnique();
 
                     b.ToTable("AgentSteps");
                 });
@@ -335,6 +336,8 @@ namespace RescueSriLanka.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ObjectiveType", "ObjectiveId", "Status");
+
                     b.ToTable("AgentWorkflows");
                 });
 
@@ -352,10 +355,12 @@ namespace RescueSriLanka.Api.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<string>("ImageUrl")
-                        .HasColumnType("text");
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
 
                     b.Property<double>("Latitude")
                         .HasColumnType("double precision");
@@ -370,8 +375,10 @@ namespace RescueSriLanka.Api.Migrations
                         .IsRequired()
                         .HasColumnType("character varying");
 
-                    b.Property<int>("Type")
-                        .HasColumnType("integer");
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -380,10 +387,13 @@ namespace RescueSriLanka.Api.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("VerificationNotes")
-                        .HasColumnType("text");
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
-                    b.Property<int>("VerificationStatus")
-                        .HasColumnType("integer");
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<DateTime?>("VerifiedAt")
                         .HasColumnType("timestamp with time zone");
@@ -393,7 +403,22 @@ namespace RescueSriLanka.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("HelpRequests");
+                    b.HasIndex("RelatedIncidentId");
+
+                    b.HasIndex("VerificationStatus");
+
+                    b.HasIndex("CitizenId", "CreatedAt");
+
+                    b.HasIndex("Status", "UrgencyScore");
+
+                    b.ToTable("HelpRequests", t =>
+                        {
+                            t.HasCheckConstraint("CK_HelpRequests_Latitude", "\"Latitude\" >= -90 AND \"Latitude\" <= 90");
+
+                            t.HasCheckConstraint("CK_HelpRequests_Longitude", "\"Longitude\" >= -180 AND \"Longitude\" <= 180");
+
+                            t.HasCheckConstraint("CK_HelpRequests_UrgencyScore", "\"UrgencyScore\" >= 0 AND \"UrgencyScore\" <= 100");
+                        });
                 });
 
             modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.RequestStatusHistory", b =>
@@ -415,14 +440,15 @@ namespace RescueSriLanka.Api.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("Notes")
-                        .HasColumnType("text");
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<int>("OldStatus")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("HelpRequestId");
+                    b.HasIndex("HelpRequestId", "ChangedAt");
 
                     b.ToTable("RequestStatusHistories");
                 });
@@ -435,7 +461,8 @@ namespace RescueSriLanka.Api.Migrations
 
                     b.Property<string>("AreaName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -454,14 +481,29 @@ namespace RescueSriLanka.Api.Migrations
 
                     b.Property<string>("Reason")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
-                    b.Property<int>("SafetyLevel")
-                        .HasColumnType("integer");
+                    b.Property<string>("SafetyLevel")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.ToTable("TravelAdvisories");
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("TravelAdvisories", t =>
+                        {
+                            t.HasCheckConstraint("CK_TravelAdvisories_Latitude", "\"Latitude\" >= -90 AND \"Latitude\" <= 90");
+
+                            t.HasCheckConstraint("CK_TravelAdvisories_Longitude", "\"Longitude\" >= -180 AND \"Longitude\" <= 180");
+
+                            t.HasCheckConstraint("CK_TravelAdvisories_RadiusMeters", "\"RadiusMeters\" > 0 AND \"RadiusMeters\" <= 100000");
+                        });
                 });
 
             modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentC.Models.Donation", b =>
@@ -820,6 +862,10 @@ namespace RescueSriLanka.Api.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<string>("PhotoUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -868,6 +914,20 @@ namespace RescueSriLanka.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("AgentWorkflow");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.HelpRequest", b =>
+                {
+                    b.HasOne("RescueSriLanka.Api.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("CitizenId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("RescueSriLanka.Api.Features.ComponentA.Models.Incident", null)
+                        .WithMany()
+                        .HasForeignKey("RelatedIncidentId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("RescueSriLanka.Api.Features.ComponentB.Models.RequestStatusHistory", b =>

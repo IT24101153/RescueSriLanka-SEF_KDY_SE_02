@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/config.dart';
@@ -10,12 +13,8 @@ import '../models/auth.dart';
 /// Result of a sign-in or registration attempt. The API deliberately keeps its
 /// failure messages vague, and so does this.
 class AuthResult {
-  const AuthResult.success(this.session)
-      : message = null,
-        ok = true;
-  const AuthResult.failure(this.message)
-      : session = null,
-        ok = false;
+  const AuthResult.success(this.session) : message = null, ok = true;
+  const AuthResult.failure(this.message) : session = null, ok = false;
 
   final bool ok;
   final AuthSession? session;
@@ -29,12 +28,16 @@ class AuthResult {
 /// Reading the map needs no session at all — only reporting does — so the app
 /// starts signed out and stays usable that way.
 class AuthService extends ChangeNotifier {
-  AuthService({http.Client? client}) : _client = client ?? http.Client();
+  AuthService({http.Client? client, FlutterSecureStorage? secureStorage})
+    : _client = client ?? http.Client(),
+      _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const String _storageKey = 'rsl.session';
   static const Duration _timeout = Duration(seconds: 15);
+  static const Duration _uploadTimeout = Duration(seconds: 45);
 
   final http.Client _client;
+  final FlutterSecureStorage _secureStorage;
 
   AuthSession? _session;
   bool _restoring = true;
@@ -53,16 +56,25 @@ class AuthService extends ChangeNotifier {
   /// than left to fail every later call.
   Future<void> restore() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_storageKey);
+      var raw = await _secureStorage.read(key: _storageKey);
+      if (raw == null) {
+        // One-time migration from the previous plain preferences store.
+        final prefs = await SharedPreferences.getInstance();
+        raw = prefs.getString(_storageKey);
+        if (raw != null) {
+          await _secureStorage.write(key: _storageKey, value: raw);
+          await prefs.remove(_storageKey);
+        }
+      }
 
       if (raw != null) {
-        final restored =
-            AuthSession.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+        final restored = AuthSession.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>,
+        );
         if (!restored.isExpired) {
           _session = restored;
         } else {
-          await prefs.remove(_storageKey);
+          await _secureStorage.delete(key: _storageKey);
         }
       }
     } catch (_) {
@@ -78,11 +90,10 @@ class AuthService extends ChangeNotifier {
   Future<AuthResult> signIn({
     required String email,
     required String password,
-  }) =>
-      _authenticate('/api/auth/login', {
-        'email': email.trim(),
-        'password': password,
-      });
+  }) => _authenticate('/api/auth/login', {
+    'email': email.trim(),
+    'password': password,
+  });
 
   Future<AuthResult> register({
     required String fullName,
@@ -90,29 +101,31 @@ class AuthService extends ChangeNotifier {
     required String password,
     String? phoneNumber,
     String? district,
-  }) =>
-      _authenticate('/api/auth/register', {
-        'fullName': fullName.trim(),
-        'email': email.trim(),
-        'password': password,
-        if (phoneNumber != null && phoneNumber.trim().isNotEmpty)
-          'phoneNumber': phoneNumber.trim(),
-        // Sent with the account itself so the welcome email can already name
-        // the district, and list any warnings in force there.
-        'district': ?district,
-      });
+  }) => _authenticate('/api/auth/register', {
+    'fullName': fullName.trim(),
+    'email': email.trim(),
+    'password': password,
+    if (phoneNumber != null && phoneNumber.trim().isNotEmpty)
+      'phoneNumber': phoneNumber.trim(),
+    // Sent with the account itself so the welcome email can already name
+    // the district, and list any warnings in force there.
+    'district': ?district,
+  });
 
-  /// Saves the notification settings, then folds the user the API returns back
-  /// into the stored session — otherwise the profile screen would show the new
-  /// district while the app still remembered the old one.
+  /// Saves the notification settings and/or the profile fields below, then
+  /// folds the user the API returns back into the stored session — otherwise
+  /// the profile screen would show the new values while the app still
+  /// remembered the old ones.
   ///
-  /// [clearDistrict] exists because null already means "leave this alone": the
-  /// API distinguishes an absent field from an explicit null, and only the
-  /// latter unsubscribes someone.
+  /// [clearDistrict] and [clearPhoneNumber] exist because null already means
+  /// "leave this alone": the API distinguishes an absent field from an
+  /// explicit null, and only the latter clears it.
   Future<AuthResult> updatePreferences({
     String? district,
     bool clearDistrict = false,
     bool? emailNotificationsEnabled,
+    String? phoneNumber,
+    bool clearPhoneNumber = false,
   }) async {
     final current = _session;
     if (current == null) {
@@ -122,6 +135,10 @@ class AuthService extends ChangeNotifier {
     final body = <String, dynamic>{
       if (clearDistrict) 'district': null else 'district': ?district,
       'emailNotificationsEnabled': ?emailNotificationsEnabled,
+      if (clearPhoneNumber)
+        'phoneNumber': null
+      else
+        'phoneNumber': ?phoneNumber,
     };
 
     http.Response response;
@@ -156,20 +173,86 @@ class AuthService extends ChangeNotifier {
       );
     }
 
+    return _applySession(current, response.body);
+  }
+
+  /// Uploads a new profile photo. Same multipart shape the report screen uses
+  /// for incident photos — the field name must match the controller's
+  /// `IFormFile` parameter.
+  Future<AuthResult> updatePhoto(File photo) async {
+    final current = _session;
+    if (current == null) {
+      return const AuthResult.failure('Please sign in first.');
+    }
+
+    final extension = photo.path.split('.').last.toLowerCase();
+    final subtype = switch (extension) {
+      'png' => 'png',
+      'webp' => 'webp',
+      'heic' => 'heic',
+      _ => 'jpeg',
+    };
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${AppConfig.apiBaseUrl}/api/auth/me/photo'),
+    )
+      ..headers['Authorization'] = 'Bearer ${current.token}'
+      ..files.add(
+        await http.MultipartFile.fromPath(
+          'photo',
+          photo.path,
+          contentType: MediaType('image', subtype),
+        ),
+      );
+
+    http.Response response;
+    try {
+      final streamed = await _client.send(request).timeout(_uploadTimeout);
+      response = await http.Response.fromStream(streamed);
+    } catch (_) {
+      return AuthResult.failure(
+        'Cannot reach the server at ${AppConfig.apiBaseUrl}.',
+      );
+    }
+
+    if (response.statusCode == 401) {
+      await handleUnauthorized();
+      return const AuthResult.failure(
+        'Your session has expired. Please sign in again.',
+      );
+    }
+
+    if (response.statusCode != 200) {
+      return AuthResult.failure(
+        _readMessage(response.body) ??
+            'Could not upload the photo (HTTP ${response.statusCode}).',
+      );
+    }
+
+    return _applySession(current, response.body);
+  }
+
+  /// Folds a `UserDto` response back into the stored session — shared by
+  /// every call that edits the profile, so the app never shows a value the
+  /// server did not actually save.
+  Future<AuthResult> _applySession(
+    AuthSession current,
+    String responseBody,
+  ) async {
     try {
       final updated = AuthSession(
         token: current.token,
         expiresAt: current.expiresAt,
         user: AuthUser.fromJson(
-          jsonDecode(response.body) as Map<String, dynamic>,
+          jsonDecode(responseBody) as Map<String, dynamic>,
         ),
       );
 
+      await _saveSession(updated);
+
       _session = updated;
       notifyListeners();
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_storageKey, jsonEncode(updated.toJson()));
 
       return AuthResult.success(updated);
     } catch (_) {
@@ -184,8 +267,9 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      await _secureStorage.delete(key: _storageKey);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_storageKey);
+      await prefs.remove(_storageKey); // Remove any leftover legacy copy.
     } catch (_) {
       // The in-memory session is already gone, which is what matters.
     }
@@ -227,12 +311,16 @@ class AuthService extends ChangeNotifier {
     }
 
     if (response.statusCode == 400) {
-      return AuthResult.failure(_readMessage(response.body) ??
-          'Please check the details and try again.');
+      return AuthResult.failure(
+        _readMessage(response.body) ??
+            'Please check the details and try again.',
+      );
     }
 
     if (response.statusCode != 200) {
-      return AuthResult.failure('Sign-in failed (HTTP ${response.statusCode}).');
+      return AuthResult.failure(
+        'Sign-in failed (HTTP ${response.statusCode}).',
+      );
     }
 
     try {
@@ -240,11 +328,10 @@ class AuthService extends ChangeNotifier {
         jsonDecode(response.body) as Map<String, dynamic>,
       );
 
+      await _saveSession(session);
+
       _session = session;
       notifyListeners();
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_storageKey, jsonEncode(session.toJson()));
 
       return AuthResult.success(session);
     } catch (_) {
@@ -252,6 +339,15 @@ class AuthService extends ChangeNotifier {
         'The server sent a response the app could not read.',
       );
     }
+  }
+
+  Future<void> _saveSession(AuthSession session) async {
+    await _secureStorage.write(
+      key: _storageKey,
+      value: jsonEncode(session.toJson()),
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_storageKey);
   }
 
   /// Pulls "message" out of an error body, tolerating ASP.NET's validation shape.
