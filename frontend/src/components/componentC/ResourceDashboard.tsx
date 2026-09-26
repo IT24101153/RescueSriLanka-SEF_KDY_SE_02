@@ -234,7 +234,7 @@ function ResourceDashboard() {
           <div>
             <p className="eyebrow">Friday, 18 September 2026</p>
             <h2 id="welcome-title">Ready to coordinate relief.</h2>
-            <p className="muted">Track essential resources and move support where it is needed most.</p>
+            <p className="resource-muted">Track essential resources and move support where it is needed most.</p>
           </div>
           <button className="primary-button" type="button" onClick={() => openResourceForm('shelter')}>Add resource <span aria-hidden="true">+</span></button>
         </section>
@@ -247,7 +247,7 @@ function ResourceDashboard() {
             <span className="confirm-icon" aria-hidden="true">!</span>
             <p className="eyebrow">Remove resource</p>
             <h2 id="remove-title">Remove {deleteRequest.label}?</h2>
-            <p className="muted">This resource will no longer appear in your active inventory. Existing allocation history will remain safe.</p>
+            <p className="resource-muted">This resource will no longer appear in your active inventory. Existing allocation history will remain safe.</p>
             <div className="form-actions"><button className="secondary-button large-action" type="button" onClick={() => setDeleteRequest(null)}>Keep resource</button><button className="danger-button large-action" type="button" onClick={() => void confirmRemove()}>Remove resource</button></div>
           </section>
         </div>}
@@ -296,7 +296,7 @@ function ResourceDashboard() {
         </section>}
 
         {page === 'overview' && <section className="content-grid">
-          <article className="panel" id="supplies">
+          <article className="resource-panel" id="supplies">
             <div className="panel-heading">
               <div>
                 <p className="eyebrow">Inventory watch</p>
@@ -307,11 +307,11 @@ function ResourceDashboard() {
             <div className="supply-list">
               {isLoading && <p className="empty-state">Loading current inventory...</p>}
               {!isLoading && supplyLevels.length === 0 && <p className="empty-state">No inventory has been added yet.</p>}
-              {supplyLevels.map((supply) => <div className="supply-row" key={supply.name}><span>{supply.name}</span><strong>{supply.percentage}%</strong><span className="bar"><i style={{ width: `${supply.percentage}%` }} /></span></div>)}
+              {supplyLevels.map((supply) => <div className="supply-row" key={supply.name}><span>{supply.name}</span><strong>{supply.percentage}%</strong><span className="resource-bar"><i style={{ width: `${supply.percentage}%` }} /></span></div>)}
             </div>
           </article>
 
-          <article className="panel" id="shelters">
+          <article className="resource-panel" id="shelters">
             <div className="panel-heading">
               <div>
                 <p className="eyebrow">Latest activity</p>
@@ -327,17 +327,17 @@ function ResourceDashboard() {
         </section>}
 
         {page === 'shelters' && <section className="page-section">
-          <div className="page-heading"><div><p className="eyebrow">Safe locations</p><h2>Active shelters</h2><p className="muted">Manage capacity and locations available to people affected by emergencies.</p></div><button className="primary-button" type="button" onClick={() => openResourceForm('shelter')}>Add shelter <span aria-hidden="true">+</span></button></div>
+          <div className="page-heading"><div><p className="eyebrow">Safe locations</p><h2>Active shelters</h2><p className="resource-muted">Manage capacity and locations available to people affected by emergencies.</p></div><button className="primary-button" type="button" onClick={() => openResourceForm('shelter')}>Add shelter <span aria-hidden="true">+</span></button></div>
           <div className="data-table">{isLoading && <p className="empty-state">Loading shelters...</p>}{!isLoading && shelters.length === 0 && <p className="empty-state">No shelters have been added yet.</p>}{shelters.map((shelter) => <div className="data-row" key={shelter.id}><div><strong>{shelter.name}</strong><span>{shelter.address ?? 'Location details unavailable'}</span></div><div><strong>{shelter.capacity - shelter.occupiedCapacity}</strong><span>spaces available</span></div><div className="row-actions"><button className="edit-action" type="button" onClick={() => editShelter(shelter)}>Edit</button><button className="remove-action" type="button" onClick={() => setDeleteRequest({ type: 'shelter', id: shelter.id, label: shelter.name })}>Remove</button></div></div>)}</div>
         </section>}
 
         {page === 'supplies' && <section className="page-section">
-          <div className="page-heading"><div><p className="eyebrow">Inventory control</p><h2>Supplies and stock</h2><p className="muted">Keep medical, food, and water resources ready for dispatch.</p></div><button className="primary-button" type="button" onClick={() => openResourceForm('medical')}>Add supply <span aria-hidden="true">+</span></button></div>
+          <div className="page-heading"><div><p className="eyebrow">Inventory control</p><h2>Supplies and stock</h2><p className="resource-muted">Keep medical, food, and water resources ready for dispatch.</p></div><button className="primary-button" type="button" onClick={() => openResourceForm('medical')}>Add supply <span aria-hidden="true">+</span></button></div>
           <div className="supply-cards">{medicalSupplies.map((supply) => <div className="inventory-card" key={supply.id}><span className="inventory-type">Medical</span><strong>{supply.name}</strong><span>{supply.quantityOnHand} {supply.unit} available</span><small>Alert at {supply.lowStockThreshold} {supply.unit}</small><div className="card-actions"><button className="edit-action" type="button" onClick={() => editSupply(supply)}>Edit</button><button className="remove-action" type="button" onClick={() => setDeleteRequest({ type: 'medical', id: supply.id, label: supply.name })}>Remove</button></div></div>)}{foodWaterStock.map((stock) => <div className="inventory-card" key={stock.id}><span className="inventory-type food">Food / water</span><strong>{stock.itemName}</strong><span>{stock.quantityOnHand} {stock.unit} available</span><small>Alert at {stock.lowStockThreshold} {stock.unit}</small><div className="card-actions"><button className="edit-action" type="button" onClick={() => editStock(stock)}>Edit</button><button className="remove-action" type="button" onClick={() => setDeleteRequest({ type: 'food', id: stock.id, label: stock.itemName })}>Remove</button></div></div>)}</div>
           <button className="secondary-button add-food-button" type="button" onClick={() => openResourceForm('food')}>Add food or water stock</button>
         </section>}
 
-        {page === 'allocations' && <section className="page-section"><div className="page-heading"><div><p className="eyebrow">Distribution tracking</p><h2>Resource allocations</h2><p className="muted">Track resources dispatched to shelters, field units, and incident responses.</p></div></div><div className="empty-panel"><span className="empty-symbol">↗</span><h2>Allocation history is ready for the next step</h2><p className="muted">Create an allocation from an available resource once help requests are connected.</p></div></section>}
+        {page === 'allocations' && <section className="page-section"><div className="page-heading"><div><p className="eyebrow">Distribution tracking</p><h2>Resource allocations</h2><p className="resource-muted">Track resources dispatched to shelters, field units, and incident responses.</p></div></div><div className="empty-panel"><span className="empty-symbol">↗</span><h2>Allocation history is ready for the next step</h2><p className="resource-muted">Create an allocation from an available resource once help requests are connected.</p></div></section>}
       </main>
     </div>
   )
