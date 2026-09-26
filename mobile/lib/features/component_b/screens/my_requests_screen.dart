@@ -286,7 +286,7 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<int>(
-                value: type,
+                initialValue: type,
                 items: List.generate(
                   helpRequestTypeLabels.length,
                   (index) => DropdownMenuItem(
