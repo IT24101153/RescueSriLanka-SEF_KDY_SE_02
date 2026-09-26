@@ -21,8 +21,13 @@ public interface IImageStore
     /// <summary>Shown in logs and health output so the active backend is never a guess.</summary>
     string Name { get; }
 
+    /// <summary>
+    /// <paramref name="category"/> groups photos that belong together on disk or
+    /// in Cloudinary (e.g. "incidents", "avatars") — <paramref name="ownerId"/> is
+    /// the incident or user the photo is for.
+    /// </summary>
     Task<StoredImage> SaveAsync(
-        Guid incidentId, IFormFile file, CancellationToken ct = default);
+        Guid ownerId, string category, IFormFile file, CancellationToken ct = default);
 
     /// <summary>
     /// Reads the bytes back for the Incident Analysis Agent's vision step.

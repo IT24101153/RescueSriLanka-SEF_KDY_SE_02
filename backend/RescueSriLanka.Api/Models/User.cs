@@ -33,6 +33,14 @@ public class User
     [MaxLength(50)]
     public string? District { get; set; }
 
+    /// <summary>
+    /// Where the profile photo lives — an absolute Cloudinary URL or a
+    /// site-relative path under wwwroot, whichever <see cref="Services.Storage.IImageStore"/>
+    /// is active. Null until they upload one.
+    /// </summary>
+    [MaxLength(1024)]
+    public string? PhotoUrl { get; set; }
+
     /// <summary>Opt-out switch for every email this platform sends them.</summary>
     public bool EmailNotificationsEnabled { get; set; } = true;
 

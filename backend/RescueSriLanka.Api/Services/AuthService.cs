@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.DTOs.Auth;
 using RescueSriLanka.Api.Data;
+using RescueSriLanka.Api.Features.ComponentA.Services;
 using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Services.Storage;
 
 namespace RescueSriLanka.Api.Services;
 
@@ -25,6 +27,10 @@ public interface IAuthService
     /// </returns>
     Task<User?> UpdatePreferencesAsync(
         Guid id, UpdatePreferencesRequest request, CancellationToken cancellationToken = default);
+
+    /// <returns>The updated user, or null when the account is gone.</returns>
+    /// <exception cref="ArgumentException">The file fails <see cref="ImageStorageService.Validate"/>.</exception>
+    Task<User?> UpdatePhotoAsync(Guid id, IFormFile file, CancellationToken cancellationToken = default);
 }
 
 public class AuthService(
@@ -32,6 +38,7 @@ public class AuthService(
     IJwtTokenService tokenService,
     IPasswordHasher<User> passwordHasher,
     INotificationQueue notificationQueue,
+    IImageStore imageStore,
     ILogger<AuthService> logger) : IAuthService
 {
     /// <returns>null when the credentials are wrong or the account is disabled.</returns>
@@ -176,6 +183,25 @@ public class AuthService(
             user.EmailNotificationsEnabled = enabled;
         }
 
+        // Same omitted/null/string shape as District above.
+        switch (request.PhoneNumber.ValueKind)
+        {
+            case JsonValueKind.Undefined:
+                break;
+
+            case JsonValueKind.Null:
+                user.PhoneNumber = null;
+                break;
+
+            case JsonValueKind.String:
+                var phone = request.PhoneNumber.GetString();
+                user.PhoneNumber = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
+                break;
+
+            default:
+                throw new ArgumentException("phoneNumber must be a string or null.");
+        }
+
         user.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
@@ -192,6 +218,27 @@ public class AuthService(
             notificationQueue.Enqueue(
                 new NotificationJob(NotificationKind.DistrictBriefing, user.Id));
         }
+
+        return user;
+    }
+
+    /// <summary>Replaces the profile photo. The old upload, if any, is left where it is —
+    /// neither store supports deleting by URL alone, and an orphaned file costs nothing to keep.</summary>
+    public async Task<User?> UpdatePhotoAsync(
+        Guid id, IFormFile file, CancellationToken cancellationToken = default)
+    {
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        if (user is null) return null;
+
+        ImageStorageService.Validate(file);
+
+        var stored = await imageStore.SaveAsync(id, "avatars", file, cancellationToken);
+        user.PhotoUrl = stored.Location;
+        user.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Updated profile photo for {Email} via {Store}", user.Email, imageStore.Name);
 
         return user;
     }

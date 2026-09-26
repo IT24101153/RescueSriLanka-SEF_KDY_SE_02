@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/config.dart';
@@ -32,6 +34,7 @@ class AuthService extends ChangeNotifier {
 
   static const String _storageKey = 'rsl.session';
   static const Duration _timeout = Duration(seconds: 15);
+  static const Duration _uploadTimeout = Duration(seconds: 45);
 
   final http.Client _client;
   final FlutterSecureStorage _secureStorage;
@@ -109,17 +112,20 @@ class AuthService extends ChangeNotifier {
     'district': ?district,
   });
 
-  /// Saves the notification settings, then folds the user the API returns back
-  /// into the stored session — otherwise the profile screen would show the new
-  /// district while the app still remembered the old one.
+  /// Saves the notification settings and/or the profile fields below, then
+  /// folds the user the API returns back into the stored session — otherwise
+  /// the profile screen would show the new values while the app still
+  /// remembered the old ones.
   ///
-  /// [clearDistrict] exists because null already means "leave this alone": the
-  /// API distinguishes an absent field from an explicit null, and only the
-  /// latter unsubscribes someone.
+  /// [clearDistrict] and [clearPhoneNumber] exist because null already means
+  /// "leave this alone": the API distinguishes an absent field from an
+  /// explicit null, and only the latter clears it.
   Future<AuthResult> updatePreferences({
     String? district,
     bool clearDistrict = false,
     bool? emailNotificationsEnabled,
+    String? phoneNumber,
+    bool clearPhoneNumber = false,
   }) async {
     final current = _session;
     if (current == null) {
@@ -129,6 +135,10 @@ class AuthService extends ChangeNotifier {
     final body = <String, dynamic>{
       if (clearDistrict) 'district': null else 'district': ?district,
       'emailNotificationsEnabled': ?emailNotificationsEnabled,
+      if (clearPhoneNumber)
+        'phoneNumber': null
+      else
+        'phoneNumber': ?phoneNumber,
     };
 
     http.Response response;
@@ -163,12 +173,79 @@ class AuthService extends ChangeNotifier {
       );
     }
 
+    return _applySession(current, response.body);
+  }
+
+  /// Uploads a new profile photo. Same multipart shape the report screen uses
+  /// for incident photos — the field name must match the controller's
+  /// `IFormFile` parameter.
+  Future<AuthResult> updatePhoto(File photo) async {
+    final current = _session;
+    if (current == null) {
+      return const AuthResult.failure('Please sign in first.');
+    }
+
+    final extension = photo.path.split('.').last.toLowerCase();
+    final subtype = switch (extension) {
+      'png' => 'png',
+      'webp' => 'webp',
+      'heic' => 'heic',
+      _ => 'jpeg',
+    };
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${AppConfig.apiBaseUrl}/api/auth/me/photo'),
+    )
+      ..headers['Authorization'] = 'Bearer ${current.token}'
+      ..files.add(
+        await http.MultipartFile.fromPath(
+          'photo',
+          photo.path,
+          contentType: MediaType('image', subtype),
+        ),
+      );
+
+    http.Response response;
+    try {
+      final streamed = await _client.send(request).timeout(_uploadTimeout);
+      response = await http.Response.fromStream(streamed);
+    } catch (_) {
+      return AuthResult.failure(
+        'Cannot reach the server at ${AppConfig.apiBaseUrl}.',
+      );
+    }
+
+    if (response.statusCode == 401) {
+      await handleUnauthorized();
+      return const AuthResult.failure(
+        'Your session has expired. Please sign in again.',
+      );
+    }
+
+    if (response.statusCode != 200) {
+      return AuthResult.failure(
+        _readMessage(response.body) ??
+            'Could not upload the photo (HTTP ${response.statusCode}).',
+      );
+    }
+
+    return _applySession(current, response.body);
+  }
+
+  /// Folds a `UserDto` response back into the stored session — shared by
+  /// every call that edits the profile, so the app never shows a value the
+  /// server did not actually save.
+  Future<AuthResult> _applySession(
+    AuthSession current,
+    String responseBody,
+  ) async {
     try {
       final updated = AuthSession(
         token: current.token,
         expiresAt: current.expiresAt,
         user: AuthUser.fromJson(
-          jsonDecode(response.body) as Map<String, dynamic>,
+          jsonDecode(responseBody) as Map<String, dynamic>,
         ),
       );
 

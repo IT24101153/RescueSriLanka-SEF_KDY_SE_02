@@ -4,23 +4,25 @@ import '../../core/theme.dart';
 import '../../../features/component_a/services/api_client.dart';
 import '../../services/auth_service.dart';
 
-/// Profile → Notification settings.
+/// Profile → the editable fields: phone number, home district, and whether to
+/// be emailed about them.
 ///
-/// Two decisions live here: which district's warnings you want, and whether you
-/// want email at all. A citizen who has set a district is emailed whenever a
-/// coordinator confirms a High or Critical disaster there — which makes this
-/// screen the subscription, and worth being explicit about what it does.
-class NotificationSettings extends StatefulWidget {
-  const NotificationSettings({super.key, required this.auth});
+/// A citizen who has set a district is emailed whenever a coordinator confirms
+/// a High or Critical disaster there, and the phone number is what lets a
+/// coordinator reach them about a report — which makes this screen the
+/// subscription, and worth being explicit about what it does.
+class ProfileEditForm extends StatefulWidget {
+  const ProfileEditForm({super.key, required this.auth});
 
   final AuthService auth;
 
   @override
-  State<NotificationSettings> createState() => _NotificationSettingsState();
+  State<ProfileEditForm> createState() => _ProfileEditFormState();
 }
 
-class _NotificationSettingsState extends State<NotificationSettings> {
+class _ProfileEditFormState extends State<ProfileEditForm> {
   final ApiClient _api = ApiClient.anonymous();
+  final _phone = TextEditingController();
 
   List<String> _districts = const [];
   String? _district;
@@ -35,6 +37,7 @@ class _NotificationSettingsState extends State<NotificationSettings> {
     super.initState();
 
     final user = widget.auth.user;
+    _phone.text = user?.phoneNumber ?? '';
     _district = user?.district;
     _emailsOn = user?.emailNotificationsEnabled ?? true;
 
@@ -44,6 +47,7 @@ class _NotificationSettingsState extends State<NotificationSettings> {
   @override
   void dispose() {
     _api.dispose();
+    _phone.dispose();
     super.dispose();
   }
 
@@ -67,17 +71,22 @@ class _NotificationSettingsState extends State<NotificationSettings> {
   /// True when the form differs from what the server last told us.
   bool get _dirty {
     final user = widget.auth.user;
-    return _district != user?.district ||
+    return _phone.text.trim() != (user?.phoneNumber ?? '') ||
+        _district != user?.district ||
         _emailsOn != (user?.emailNotificationsEnabled ?? true);
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
 
+    final phone = _phone.text.trim();
+
     final result = await widget.auth.updatePreferences(
+      phoneNumber: phone,
+      // An empty box means "remove it" to the API, so clearing it has to be
+      // said out loud — same reasoning as the district below.
+      clearPhoneNumber: phone.isEmpty,
       district: _district,
-      // A null district means "leave it alone" to the API, so clearing it has
-      // to be said out loud.
       clearDistrict: _district == null,
       emailNotificationsEnabled: _emailsOn,
     );
@@ -86,11 +95,7 @@ class _NotificationSettingsState extends State<NotificationSettings> {
     setState(() => _saving = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.ok ? 'Notification settings saved.' : result.message!,
-        ),
-      ),
+      SnackBar(content: Text(result.ok ? 'Profile saved.' : result.message!)),
     );
   }
 
@@ -108,23 +113,43 @@ class _NotificationSettingsState extends State<NotificationSettings> {
         children: [
           Row(
             children: [
-              const Icon(Icons.notifications_active_outlined,
-                  size: 19, color: AppColors.brand),
+              const Icon(
+                Icons.edit_outlined,
+                size: 19,
+                color: AppColors.brand,
+              ),
               const SizedBox(width: 8),
               Text(
-                'Notification settings',
+                'Edit profile',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ink,
-                    ),
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ink,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 16),
+
           const Text(
-            'Pick your district and we will email you whenever a coordinator '
-            'confirms a High or Critical disaster there.',
-            style: TextStyle(fontSize: 12.5, height: 1.5),
+            'Phone number',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _phone,
+            enabled: !_saving,
+            keyboardType: TextInputType.phone,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              isDense: true,
+              hintText: 'Not set',
+              prefixIcon: Icon(Icons.phone_outlined, size: 19),
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 16),
 
@@ -140,13 +165,16 @@ class _NotificationSettingsState extends State<NotificationSettings> {
           if (_loading)
             const _LoadingRow()
           else if (_loadError != null)
-            _ErrorRow(message: _loadError!, onRetry: () {
-              setState(() {
-                _loading = true;
-                _loadError = null;
-              });
-              _loadDistricts();
-            })
+            _ErrorRow(
+              message: _loadError!,
+              onRetry: () {
+                setState(() {
+                  _loading = true;
+                  _loadError = null;
+                });
+                _loadDistricts();
+              },
+            )
           else
             _DistrictField(
               districts: _districts,
@@ -158,7 +186,9 @@ class _NotificationSettingsState extends State<NotificationSettings> {
           const SizedBox(height: 6),
           SwitchListTile.adaptive(
             value: _emailsOn,
-            onChanged: _saving ? null : (value) => setState(() => _emailsOn = value),
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _emailsOn = value),
             contentPadding: EdgeInsets.zero,
             dense: true,
             activeThumbColor: AppColors.brand,
@@ -210,7 +240,7 @@ class _NotificationSettingsState extends State<NotificationSettings> {
                       color: AppColors.brandInk,
                     ),
                   )
-                : const Text('Save settings'),
+                : const Text('Save changes'),
           ),
         ],
       ),

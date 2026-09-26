@@ -12,14 +12,14 @@ public class LocalDiskImageStore(
     public string Name => "local-disk";
 
     public async Task<StoredImage> SaveAsync(
-        Guid incidentId, IFormFile file, CancellationToken ct = default)
+        Guid ownerId, string category, IFormFile file, CancellationToken ct = default)
     {
         // Never trust the client's filename — generate our own.
         var extension = Path.GetExtension(file.FileName);
         extension = extension.Length is > 0 and <= 6 ? extension.ToLowerInvariant() : ".jpg";
         var storedName = $"{Guid.NewGuid():N}{extension}";
 
-        var folder = Path.Combine(WebRoot, "uploads", "incidents", incidentId.ToString());
+        var folder = Path.Combine(WebRoot, "uploads", category, ownerId.ToString());
         Directory.CreateDirectory(folder);
 
         await using (var stream = File.Create(Path.Combine(folder, storedName)))
@@ -27,8 +27,8 @@ public class LocalDiskImageStore(
             await file.CopyToAsync(stream, ct);
         }
 
-        logger.LogInformation("Stored image on disk for incident {IncidentId}", incidentId);
-        return new StoredImage($"/uploads/incidents/{incidentId}/{storedName}", null);
+        logger.LogInformation("Stored {Category} image on disk for {OwnerId}", category, ownerId);
+        return new StoredImage($"/uploads/{category}/{ownerId}/{storedName}", null);
     }
 
     public async Task<byte[]?> ReadAsync(string location, CancellationToken ct = default)

@@ -35,7 +35,7 @@ public class ImageStorageService(
     {
         var contentType = Validate(file);
 
-        var stored = await store.SaveAsync(incidentId, file, ct);
+        var stored = await store.SaveAsync(incidentId, "incidents", file, ct);
 
         var image = new IncidentImage
         {

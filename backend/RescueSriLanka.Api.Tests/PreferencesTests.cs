@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,6 +8,7 @@ using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Services.Storage;
 
 namespace RescueSriLanka.Api.Tests;
 
@@ -41,9 +43,22 @@ public class PreferencesTests
         public void Enqueue(NotificationJob job) => Jobs.Add(job);
     }
 
+    /// <summary>Not exercised here — these tests never touch the photo.</summary>
+    private sealed class StubImageStore : IImageStore
+    {
+        public string Name => "stub";
+
+        public Task<StoredImage> SaveAsync(
+            Guid ownerId, string category, IFormFile file, CancellationToken ct = default) =>
+            Task.FromResult(new StoredImage("https://cdn.test/avatar.jpg", "avatar"));
+
+        public Task<byte[]?> ReadAsync(string location, CancellationToken ct = default) =>
+            Task.FromResult<byte[]?>(null);
+    }
+
     private static AuthService NewService(AppDbContext db, RecordingQueue? queue = null) =>
         new(db, new StubTokenService(), new PasswordHasher<User>(),
-            queue ?? new RecordingQueue(), NullLogger<AuthService>.Instance);
+            queue ?? new RecordingQueue(), new StubImageStore(), NullLogger<AuthService>.Instance);
 
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
@@ -152,6 +167,70 @@ public class PreferencesTests
 
         Assert.Equal("Kandy", updated!.District);
         Assert.True(updated.EmailNotificationsEnabled);
+    }
+
+    // --------------------------------------------------------- phone number
+
+    private static async Task<User> NewUserWithPhoneAsync(AppDbContext db, string? phone = "0771234567")
+    {
+        var user = new User
+        {
+            FullName = "Test Citizen",
+            Email = "citizen@example.com",
+            PasswordHash = "-",
+            PhoneNumber = phone
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        return user;
+    }
+
+    [Fact]
+    public async Task ExplicitNullClearsThePhoneNumber()
+    {
+        using var db = NewDb();
+        var user = await NewUserWithPhoneAsync(db);
+
+        var updated = await NewService(db)
+            .UpdatePreferencesAsync(user.Id, FromJson("""{"phoneNumber":null}"""));
+
+        Assert.Null(updated!.PhoneNumber);
+    }
+
+    [Fact]
+    public async Task OmittingThePhoneNumberLeavesItAlone()
+    {
+        using var db = NewDb();
+        var user = await NewUserWithPhoneAsync(db);
+
+        var updated = await NewService(db).UpdatePreferencesAsync(
+            user.Id, FromJson("""{"emailNotificationsEnabled":false}"""));
+
+        Assert.Equal("0771234567", updated!.PhoneNumber);
+    }
+
+    [Fact]
+    public async Task AnEmptyStringAlsoClearsThePhoneNumber()
+    {
+        using var db = NewDb();
+        var user = await NewUserWithPhoneAsync(db);
+
+        var updated = await NewService(db)
+            .UpdatePreferencesAsync(user.Id, FromJson("""{"phoneNumber":"  "}"""));
+
+        Assert.Null(updated!.PhoneNumber);
+    }
+
+    [Fact]
+    public async Task APhoneNumberCanBeSet()
+    {
+        using var db = NewDb();
+        var user = await NewUserWithPhoneAsync(db, phone: null);
+
+        var updated = await NewService(db)
+            .UpdatePreferencesAsync(user.Id, FromJson("""{"phoneNumber":"0711234567"}"""));
+
+        Assert.Equal("0711234567", updated!.PhoneNumber);
     }
 
     // ------------------------------------------------------ emails triggered

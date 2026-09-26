@@ -99,4 +99,34 @@ public class AuthController(IAuthService authService) : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    /// <summary>Replaces the signed-in user's profile photo. This is what the app's
+    /// Profile screen calls when someone taps the avatar to change it.</summary>
+    [HttpPost("me/photo")]
+    [Authorize]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<UserDto>> UpdatePhoto(
+        IFormFile photo,
+        CancellationToken cancellationToken)
+    {
+        var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (!Guid.TryParse(id, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var user = await authService.UpdatePhotoAsync(userId, photo, cancellationToken);
+            return user is null ? Unauthorized() : Ok(UserDto.FromUser(user));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }

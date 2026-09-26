@@ -1,11 +1,13 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 
-import '../../core/config.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
 import '../auth/login_screen.dart';
 import '../auth/register_screen.dart';
-import 'notification_settings.dart';
+import 'profile_edit_form.dart';
 import '../../../shared/widgets/app_ui.dart';
 
 /// Profile tab. Shows who is signed in, or offers the two ways to get there.
@@ -32,68 +34,166 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-class _SignedIn extends StatelessWidget {
+class _SignedIn extends StatefulWidget {
   const _SignedIn({required this.auth});
 
   final AuthService auth;
 
   @override
+  State<_SignedIn> createState() => _SignedInState();
+}
+
+class _SignedInState extends State<_SignedIn> {
+  bool _uploadingPhoto = false;
+
+  Future<void> _changePhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null || !mounted) return;
+
+    File picked;
+    try {
+      final file = await ImagePicker().pickImage(
+        source: source,
+        // A profile photo never needs to be larger than it will ever be shown.
+        maxWidth: 1024,
+        imageQuality: 85,
+      );
+      if (file == null || !mounted) return;
+      picked = File(file.path);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open the camera on this device.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _uploadingPhoto = true);
+    final result = await widget.auth.updatePhoto(picked);
+    if (!mounted) return;
+    setState(() => _uploadingPhoto = false);
+
+    if (!result.ok) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(result.message!)));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final user = auth.user!;
+    final user = widget.auth.user!;
+    final photoUrl = user.resolvedPhotoUrl;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
       children: [
-        Row(
-          children: [
-            CircleAvatar(
-              radius: 27,
-              backgroundColor: AppColors.brand.withValues(alpha: 0.2),
-              child: Text(
-                user.shortName.characters.first.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.brandInk,
-                ),
+        Center(
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              CircleAvatar(
+                radius: 44,
+                backgroundColor: AppColors.brand.withValues(alpha: 0.2),
+                backgroundImage: photoUrl != null
+                    ? NetworkImage(photoUrl)
+                    : null,
+                child: photoUrl == null
+                    ? Text(
+                        user.shortName.characters.first.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandInk,
+                        ),
+                      )
+                    : null,
               ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    user.fullName,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ink,
+              if (_uploadingPhoto)
+                const Positioned.fill(
+                  child: CircleAvatar(
+                    backgroundColor: Colors.black45,
+                    child: SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(user.email, style: const TextStyle(fontSize: 13)),
-                ],
+                ),
+              Positioned(
+                bottom: -2,
+                right: -2,
+                child: Material(
+                  color: AppColors.brand,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: _uploadingPhoto ? null : _changePhoto,
+                    child: const Padding(
+                      padding: EdgeInsets.all(7),
+                      child: Icon(
+                        Icons.camera_alt,
+                        size: 16,
+                        color: AppColors.brandInk,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+        const SizedBox(height: 14),
+        Center(
+          child: Text(
+            user.fullName,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Center(
+          child: Text(
+            user.email,
+            style: const TextStyle(fontSize: 13, color: AppColors.body),
+          ),
+        ),
+
         const SizedBox(height: 24),
-
-        _InfoRow(label: 'Role', value: user.role),
-        if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty)
-          _InfoRow(label: 'Phone', value: user.phoneNumber!),
-        _InfoRow(label: 'District', value: user.district ?? 'Not set'),
-        _InfoRow(label: 'Server', value: AppConfig.apiBaseUrl),
-
-        const SizedBox(height: 22),
-        NotificationSettings(auth: auth),
+        ProfileEditForm(auth: widget.auth),
 
         const SizedBox(height: 28),
         OutlinedButton.icon(
           onPressed: () async {
             final messenger = ScaffoldMessenger.of(context);
-            await auth.signOut();
+            await widget.auth.signOut();
             messenger.showSnackBar(
               const SnackBar(content: Text('Signed out.')),
             );
@@ -161,38 +261,6 @@ class _SignedOut extends StatelessWidget {
           child: const Text('Create an account'),
         ),
       ],
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 9),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 82,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 12.5, color: AppColors.body),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 13.5, color: AppColors.ink),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

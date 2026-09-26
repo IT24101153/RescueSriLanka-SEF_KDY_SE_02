@@ -21,7 +21,7 @@ dependencies:
   geolocator: ^14.0.2
   image_picker: ^1.2.3
   shared_preferences: ^2.5.5
-  flutter_secure_storage: ^9.2.4
+  flutter_secure_storage: ^11.2.0
   intl: ^0.20.2
 dev_dependencies:
   flutter_test:
@@ -34,3 +34,10 @@ flutter:
 
   assets:
     - assets/
+
+dependency_overrides:
+  # geolocator_linux pins package_info_plus ^9.0.0, but 9.0.1's Android
+  # build script unconditionally applies the Kotlin Gradle Plugin, which
+  # breaks compilation under AGP 9's built-in Kotlin support. 10.x skips
+  # that on AGP >= 9.
+  package_info_plus: ^10.2.1
