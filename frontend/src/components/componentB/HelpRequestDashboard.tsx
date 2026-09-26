@@ -67,11 +67,9 @@ export default function Dashboard() {
     try {
       const response = await authFetch("/api/HelpRequests");
       if (!response.ok) {
-        throw new Error(
-          response.status === 401 || response.status === 403
-              ? "Your dashboard session is not authorized. Please sign out and sign in again as the coordinator."
-              : "Unable to load live request data. Make sure the API is running.",
-        );
+        throw new Error(response.status === 401 || response.status === 403
+          ? "Your dashboard session is not authorized. Please sign out and sign in again as the coordinator."
+          : `The API returned HTTP ${response.status}. Check the backend terminal for database or migration errors.`);
       }
       setRequests(await response.json());
     } catch (error) {
@@ -83,8 +81,6 @@ export default function Dashboard() {
 
   useEffect(() => { loadRequests(); }, [loadRequests]);
 
-  if (showAdvisories) return <TravelAdvisoryManager onBack={() => setShowAdvisories(false)} />;
-
   const metrics = useMemo(() => ({
     total: requests.length,
     pendingVerification: requests.filter((r) => r.verificationStatus === 0).length,
@@ -95,6 +91,8 @@ export default function Dashboard() {
     .filter((r) => r.status !== 3 && r.status !== 4)
     .sort((a, b) => b.urgencyScore - a.urgencyScore || +new Date(b.createdAt) - +new Date(a.createdAt))
     .slice(0, 5), [requests]);
+
+  if (showAdvisories) return <TravelAdvisoryManager onBack={() => setShowAdvisories(false)} />;
 
   return (
     <div className="dashboard-page">

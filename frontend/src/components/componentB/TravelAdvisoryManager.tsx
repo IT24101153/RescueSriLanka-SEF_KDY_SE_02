@@ -29,7 +29,11 @@ export default function TravelAdvisoryManager({ onBack }: { onBack: () => void }
     setLoading(true); setError(null);
     try {
       const response = await authFetch("/api/TravelAdvisories/all");
-      if (!response.ok) throw new Error(`Unable to load advisories (HTTP ${response.status}).`);
+      if (!response.ok) {
+        throw new Error(response.status === 404
+          ? "The advisory endpoint was not found. Restart the RescueSriLanka API so it loads the latest Component B routes, then refresh this page."
+          : `The API returned HTTP ${response.status}. Check the backend terminal for database or migration errors.`);
+      }
       setItems(await response.json());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load advisories.");
@@ -78,7 +82,7 @@ export default function TravelAdvisoryManager({ onBack }: { onBack: () => void }
     {success && <div role="status" className="b-advisory-message is-success">{success}</div>}
     <div className="b-advisory-layout">
       <form className="b-advisory-form" onSubmit={submit}>
-        <h2>{editing ? "Edit advisory" : "New advisory"}</h2>
+        <div className="b-advisory-section-heading"><span className="b-advisory-icon">＋</span><div><h2>{editing ? "Edit advisory" : "Create an advisory"}</h2><p>Share a clear, location specific safety notice.</p></div></div>
         <label>Area name<input required maxLength={200} value={form.areaName} onChange={e => setForm({ ...form, areaName: e.target.value })}/></label>
         <div className="b-advisory-coordinates"><label>Latitude<input required type="number" min={-90} max={90} step="any" value={form.latitude} onChange={e => setForm({ ...form, latitude: e.target.value })}/></label><label>Longitude<input required type="number" min={-180} max={180} step="any" value={form.longitude} onChange={e => setForm({ ...form, longitude: e.target.value })}/></label></div>
         <label>Radius (metres)<input required type="number" min={1} max={100000} value={form.radiusMeters} onChange={e => setForm({ ...form, radiusMeters: e.target.value })}/></label>
@@ -88,6 +92,7 @@ export default function TravelAdvisoryManager({ onBack }: { onBack: () => void }
         <div className="b-advisory-form-actions"><button disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Create advisory"}</button>{editing && <button type="button" onClick={() => { setEditing(null); setForm(initial); }}>Cancel edit</button>}</div>
       </form>
       <div className="b-advisory-list">
+        <div className="b-advisory-list-heading"><div><h2>Published advisories</h2><p>Review active and past safety notices.</p></div><span className="b-advisory-count">{items.length} {items.length === 1 ? "notice" : "notices"}</span></div>
         <div className="b-advisory-filters"><input aria-label="Search advisories" placeholder="Search area or reason" value={query} onChange={e => { setQuery(e.target.value); setPage(0); }}/><select aria-label="Filter safety level" value={level} onChange={e => { setLevel(e.target.value); setPage(0); }}><option value="all">All levels</option>{labels.map((name, i) => <option key={name} value={i}>{name}</option>)}</select><select aria-label="Sort advisories" value={sort} onChange={e => { setSort(e.target.value); setPage(0); }}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></div>
         {loading ? <p className="b-advisory-empty">Loading advisories…</p> : filtered.length === 0 ? <p className="b-advisory-empty">{items.length ? "No advisories match these filters." : "No advisories have been added."}</p> : <>
           <ul>{filtered.slice(page * 8, (page + 1) * 8).map(item => <li key={item.id}><div><span className={`b-advisory-level level-${item.safetyLevel}`}>{labels[item.safetyLevel]}</span><h3>{item.areaName}</h3><p>{item.reason}</p><small>{item.latitude.toFixed(4)}, {item.longitude.toFixed(4)} · {item.radiusMeters} m · {item.expiresAt ? `Expires ${new Date(item.expiresAt).toLocaleString()}` : "No expiry"}</small></div><div className="b-advisory-actions"><button onClick={() => startEdit(item)}>Edit</button><button onClick={() => void remove(item)}>Delete</button></div></li>)}</ul>

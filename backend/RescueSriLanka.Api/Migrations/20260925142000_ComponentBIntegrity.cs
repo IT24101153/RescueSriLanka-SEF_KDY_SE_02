@@ -76,6 +76,12 @@ public sealed class ComponentBIntegrity : Migration
                 CASE "VerificationStatus" WHEN 'PendingVerification' THEN 0 WHEN 'Verified' THEN 1 ELSE 2 END;
             ALTER TABLE "TravelAdvisories" ALTER COLUMN "SafetyLevel" TYPE integer USING
                 CASE "SafetyLevel" WHEN 'Safe' THEN 0 WHEN 'Caution' THEN 1 ELSE 2 END;
+            ALTER TABLE "HelpRequests" ALTER COLUMN "Description" TYPE text;
+            ALTER TABLE "HelpRequests" ALTER COLUMN "VerificationNotes" TYPE text;
+            ALTER TABLE "HelpRequests" ALTER COLUMN "ImageUrl" TYPE text;
+            ALTER TABLE "RequestStatusHistories" ALTER COLUMN "Notes" TYPE text;
+            ALTER TABLE "TravelAdvisories" ALTER COLUMN "AreaName" TYPE text;
+            ALTER TABLE "TravelAdvisories" ALTER COLUMN "Reason" TYPE text;
             """);
     }
 }

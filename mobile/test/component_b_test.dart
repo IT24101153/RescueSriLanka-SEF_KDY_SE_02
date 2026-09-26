@@ -35,14 +35,19 @@ void main() {
     });
   });
 
-  testWidgets('request submission requires a description and location', (tester) async {
+  testWidgets('request submission requires a description and location', (
+    tester,
+  ) async {
     await tester.pumpWidget(const MaterialApp(home: SubmitRequestScreen()));
 
     await tester.tap(find.text('Submit request'));
     await tester.pump();
     expect(find.text('Please describe what help you need.'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField).first, 'Need water for my family');
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Need water for my family',
+    );
     await tester.tap(find.text('Submit request'));
     await tester.pump();
     expect(find.text('Please share your location first.'), findsOneWidget);

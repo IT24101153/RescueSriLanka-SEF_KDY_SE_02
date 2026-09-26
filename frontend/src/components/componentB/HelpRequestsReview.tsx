@@ -100,13 +100,15 @@ export default function HelpRequestsReview() {
     setError(null);
     try {
       const res = await authFetch(`/api/HelpRequests`);
-      if (!res.ok) throw new Error(`Server responded ${res.status}`);
+      if (!res.ok) throw new Error(`The API returned HTTP ${res.status}. Check the backend terminal for database or migration errors.`);
       const data: HelpRequestDto[] = await res.json();
       const sorted = [...data].sort((a, b) => b.urgencyScore - a.urgencyScore);
       setRequests(sorted);
       setSelectedId((current) => current ?? (sorted.length > 0 ? sorted[0].id : null));
-    } catch {
-      setError("Couldn't reach the request service. Check the API is running.");
+    } catch (cause) {
+      setError(cause instanceof Error
+        ? cause.message
+        : "Couldn't reach the request service. Check the API is running.");
     } finally {
       setLoading(false);
     }
