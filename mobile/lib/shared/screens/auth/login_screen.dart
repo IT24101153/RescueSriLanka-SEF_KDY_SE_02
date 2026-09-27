@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
+import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 /// Sign-in for citizens and tourists.
@@ -136,7 +137,22 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
 
-            const SizedBox(height: 22),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _busy
+                    ? null
+                    : () => Navigator.of(context).push<bool>(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ForgotPasswordScreen(auth: widget.auth),
+                          ),
+                        ),
+                child: const Text('Forgot password?'),
+              ),
+            ),
+
+            const SizedBox(height: 10),
             FilledButton(
               onPressed: _busy ? null : _submit,
               style: FilledButton.styleFrom(

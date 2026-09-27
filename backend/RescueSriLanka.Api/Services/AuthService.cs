@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +7,7 @@ using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentA.Services;
 using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Services.Email;
 using RescueSriLanka.Api.Services.Storage;
 
 namespace RescueSriLanka.Api.Services;
@@ -31,6 +33,23 @@ public interface IAuthService
     /// <returns>The updated user, or null when the account is gone.</returns>
     /// <exception cref="ArgumentException">The file fails <see cref="ImageStorageService.Validate"/>.</exception>
     Task<User?> UpdatePhotoAsync(Guid id, IFormFile file, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Emails a one-time code for a forgotten password. Always completes
+    /// successfully from the caller's point of view — whether the address has
+    /// an account is never revealed by this call's outcome.
+    /// </summary>
+    Task RequestPasswordResetAsync(ForgotPasswordRequest request, CancellationToken cancellationToken = default);
+
+    /// <returns>
+    /// A reset token to spend with <see cref="ResetPasswordAsync"/>, or null
+    /// when the code is wrong, expired, already used, or over its attempt limit.
+    /// </returns>
+    Task<VerifyResetCodeResponse?> VerifyResetCodeAsync(
+        VerifyResetCodeRequest request, CancellationToken cancellationToken = default);
+
+    /// <returns>False when the token is wrong, expired, or already spent.</returns>
+    Task<bool> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);
 }
 
 public class AuthService(
@@ -39,8 +58,17 @@ public class AuthService(
     IPasswordHasher<User> passwordHasher,
     INotificationQueue notificationQueue,
     IImageStore imageStore,
+    IEmailSender emailSender,
     ILogger<AuthService> logger) : IAuthService
 {
+    // A code short enough to type from memory, alive just long enough for one
+    // sitting, and dead the moment too many wrong guesses have been made
+    // against it.
+    private static readonly TimeSpan OtpValidity = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan ResetTokenValidity = TimeSpan.FromMinutes(10);
+    private const int MaxOtpAttempts = 5;
+
+
     /// <returns>null when the credentials are wrong or the account is disabled.</returns>
     public async Task<AuthResponse?> LoginAsync(
         LoginRequest request,
@@ -241,6 +269,127 @@ public class AuthService(
             "Updated profile photo for {Email} via {Store}", user.Email, imageStore.Name);
 
         return user;
+    }
+
+    public async Task RequestPasswordResetAsync(
+        ForgotPasswordRequest request, CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(
+            u => u.Email == email && u.IsActive, cancellationToken);
+
+        if (user is null)
+        {
+            logger.LogInformation(
+                "Password reset requested for {Email}, which has no active account.", email);
+            return;
+        }
+
+        // A fresh request retires whatever came before it — only one code
+        // should ever be live for an account at a time.
+        var stale = await db.PasswordResetCodes
+            .Where(c => c.UserId == user.Id && c.ConsumedAt == null)
+            .ToListAsync(cancellationToken);
+        db.PasswordResetCodes.RemoveRange(stale);
+
+        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+
+        db.PasswordResetCodes.Add(new PasswordResetCode
+        {
+            UserId = user.Id,
+            CodeHash = passwordHasher.HashPassword(user, code),
+            ExpiresAt = DateTime.UtcNow.Add(OtpValidity)
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        // Awaited rather than queued: unlike a district warning, a citizen is
+        // looking at their phone for this code right now, and a request that
+        // reports success before the email is even attempted would leave them
+        // waiting on nothing. This also bypasses EmailOptions.Enabled — that
+        // switch silences optional broadcasts, not the one email account
+        // recovery depends on.
+        try
+        {
+            await emailSender.SendAsync(
+                EmailTemplates.PasswordResetCode(user, code, OtpValidity), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to send password reset code to {Email}", email);
+        }
+    }
+
+    public async Task<VerifyResetCodeResponse?> VerifyResetCodeAsync(
+        VerifyResetCodeRequest request, CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(
+            u => u.Email == email && u.IsActive, cancellationToken);
+        if (user is null) return null;
+
+        var record = await db.PasswordResetCodes
+            .Where(c => c.UserId == user.Id && c.ConsumedAt == null && c.VerifiedAt == null)
+            .OrderByDescending(c => c.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (record is null || record.ExpiresAt < DateTime.UtcNow || record.Attempts >= MaxOtpAttempts)
+        {
+            return null;
+        }
+
+        var verification = passwordHasher.VerifyHashedPassword(user, record.CodeHash, request.Code);
+        if (verification == PasswordVerificationResult.Failed)
+        {
+            record.Attempts++;
+            await db.SaveChangesAsync(cancellationToken);
+            return null;
+        }
+
+        var resetToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var expiresAt = DateTime.UtcNow.Add(ResetTokenValidity);
+
+        record.VerifiedAt = DateTime.UtcNow;
+        record.ResetTokenHash = passwordHasher.HashPassword(user, resetToken);
+        record.ResetTokenExpiresAt = expiresAt;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new VerifyResetCodeResponse { ResetToken = resetToken, ExpiresAt = expiresAt };
+    }
+
+    public async Task<bool> ResetPasswordAsync(
+        ResetPasswordRequest request, CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(
+            u => u.Email == email && u.IsActive, cancellationToken);
+        if (user is null) return false;
+
+        var record = await db.PasswordResetCodes
+            .Where(c => c.UserId == user.Id && c.ConsumedAt == null && c.VerifiedAt != null)
+            .OrderByDescending(c => c.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (record?.ResetTokenHash is null || record.ResetTokenExpiresAt is not { } expiry
+            || expiry < DateTime.UtcNow)
+        {
+            return false;
+        }
+
+        var verification = passwordHasher.VerifyHashedPassword(user, record.ResetTokenHash, request.ResetToken);
+        if (verification == PasswordVerificationResult.Failed)
+        {
+            return false;
+        }
+
+        user.PasswordHash = passwordHasher.HashPassword(user, request.NewPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+        record.ConsumedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation("Password reset completed for {Email}", email);
+        return true;
     }
 
     private AuthResponse BuildResponse(User user)

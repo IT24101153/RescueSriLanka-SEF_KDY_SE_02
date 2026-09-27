@@ -51,6 +51,52 @@ public class AuthController(IAuthService authService) : ControllerBase
         }
     }
 
+    /// <summary>Emails a one-time code for a forgotten password. Always reports
+    /// success — the response must never reveal whether the address has an account.</summary>
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ForgotPassword(
+        [FromBody] ForgotPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        await authService.RequestPasswordResetAsync(request, cancellationToken);
+        return Ok(new { message = "If an account exists for that email, a reset code has been sent." });
+    }
+
+    /// <summary>Checks the emailed code and, if correct, issues the token
+    /// <see cref="ResetPassword"/> spends to actually change the password.</summary>
+    [HttpPost("verify-reset-code")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(VerifyResetCodeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<VerifyResetCodeResponse>> VerifyResetCode(
+        [FromBody] VerifyResetCodeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await authService.VerifyResetCodeAsync(request, cancellationToken);
+
+        return result is null
+            ? BadRequest(new { message = "That code is invalid or has expired." })
+            : Ok(result);
+    }
+
+    /// <summary>Spends the token from <see cref="VerifyResetCode"/> to set a new password.</summary>
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword(
+        [FromBody] ResetPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ok = await authService.ResetPasswordAsync(request, cancellationToken);
+
+        return ok
+            ? Ok(new { message = "Password updated. Please sign in." })
+            : BadRequest(new { message = "That reset request is invalid or has expired." });
+    }
+
     /// <summary>Returns the signed-in user — used by both clients to restore a session.</summary>
     [HttpGet("me")]
     [Authorize]
