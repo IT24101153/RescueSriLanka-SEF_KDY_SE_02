@@ -345,19 +345,6 @@
   cursor: pointer;
 }
 
-.link {
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--accent-strong);
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.link:hover {
-  color: var(--accent-strong);
-  text-decoration: underline;
-}
-
 /* ---------- Button ---------- */
 
 .btn {
