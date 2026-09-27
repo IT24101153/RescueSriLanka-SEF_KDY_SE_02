@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { apiFetch } from '../../../shared/api/client'
+import { getSession } from '../../../shared/auth/session'
 import type { Incident, IncidentStatus } from '../types'
 import { STATUS_LABEL } from '../severity'
 
@@ -17,13 +18,20 @@ type ReviewPanelProps = {
  * rejecting the AI's grading of it.
  */
 
-/** Which transitions are offered from each status, in lifecycle order. */
+/**
+ * Which transitions are offered from each status, in lifecycle order.
+ *
+ * Rejected still offers Verified: a coordinator can reconsider a mistaken
+ * rejection at any time, not just within the same sitting. Resolved is the
+ * only true dead end — a closed, legitimate report with nothing left to
+ * decide.
+ */
 const NEXT_STATUSES: Record<IncidentStatus, IncidentStatus[]> = {
   Reported: ['Verified', 'Rejected'],
   Verified: ['InProgress', 'Resolved'],
   InProgress: ['Resolved'],
   Resolved: [],
-  Rejected: [],
+  Rejected: ['Verified'],
 }
 
 /** Rejecting or resolving takes the incident off the live map — worth a prompt. */
@@ -41,6 +49,11 @@ export default function ReviewPanel({ incident, onChanged }: ReviewPanelProps) {
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<IncidentStatus | null>(null)
 
+  const [deleting, setDeleting] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const canDelete = getSession()?.user.role === 'EmergencyCoordinator'
   const options = NEXT_STATUSES[incident.status] ?? []
 
   async function move(next: IncidentStatus) {
@@ -57,6 +70,21 @@ export default function ReviewPanel({ incident, onChanged }: ReviewPanelProps) {
     } finally {
       setBusy(null)
       setConfirming(null)
+    }
+  }
+
+  /** Permanently removes the report — a duplicate, spam, or test entry that
+   * should not exist on record at all, rather than just be marked Rejected. */
+  async function remove() {
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await apiFetch(`/api/incidents/${incident.id}`, { method: 'DELETE' })
+      onChanged()
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Could not delete the report.')
+      setDeleting(false)
+      setConfirmingDelete(false)
     }
   }
 
@@ -121,6 +149,52 @@ export default function ReviewPanel({ incident, onChanged }: ReviewPanelProps) {
                 : `Mark ${STATUS_LABEL[next]?.toLowerCase() ?? next}`}
             </button>
           ))}
+        </div>
+      )}
+
+      {canDelete && (
+        <div className="review__danger">
+          {deleteError && (
+            <p className="agent__error" role="alert">
+              {deleteError}
+            </p>
+          )}
+
+          {confirmingDelete ? (
+            <div className="review__confirm">
+              <p>
+                Delete this report permanently? This removes it, its photos, and
+                its safety zone for good — it will not appear as Rejected on
+                record, it will simply be gone. This cannot be undone.
+              </p>
+              <div className="review__actions">
+                <button
+                  type="button"
+                  className="btn-reject"
+                  disabled={deleting}
+                  onClick={() => void remove()}
+                >
+                  {deleting ? 'Deleting…' : 'Yes, delete permanently'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-link"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn-link review__delete"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              Delete report
+            </button>
+          )}
         </div>
       )}
     </section>

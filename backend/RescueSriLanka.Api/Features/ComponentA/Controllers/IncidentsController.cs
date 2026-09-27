@@ -120,6 +120,16 @@ public class IncidentsController(
         return incident is null ? NotFound() : Ok(incident);
     }
 
+    /// <summary>Permanently deletes a report — for a duplicate, spam, or test
+    /// report. Rejecting it via the status endpoint is the usual call; this is
+    /// for when the report should not exist on record at all.</summary>
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = Coordinator)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct) =>
+        await incidentService.DeleteAsync(id, ct) ? NoContent() : NotFound();
+
     /// <summary>Coordinator overrides the severity the AI proposed.</summary>
     [HttpPatch("{id:guid}/severity")]
     [Authorize(Roles = Coordinator)]

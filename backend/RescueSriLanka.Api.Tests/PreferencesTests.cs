@@ -8,6 +8,7 @@ using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services;
+using RescueSriLanka.Api.Services.Email;
 using RescueSriLanka.Api.Services.Storage;
 
 namespace RescueSriLanka.Api.Tests;
@@ -56,9 +57,19 @@ public class PreferencesTests
             Task.FromResult<byte[]?>(null);
     }
 
+    /// <summary>Not exercised here — these tests never touch password reset.</summary>
+    private sealed class StubEmailSender : IEmailSender
+    {
+        public string Name => "stub";
+
+        public Task<bool> SendAsync(EmailMessage message, CancellationToken ct = default) =>
+            Task.FromResult(true);
+    }
+
     private static AuthService NewService(AppDbContext db, RecordingQueue? queue = null) =>
         new(db, new StubTokenService(), new PasswordHasher<User>(),
-            queue ?? new RecordingQueue(), new StubImageStore(), NullLogger<AuthService>.Instance);
+            queue ?? new RecordingQueue(), new StubImageStore(), new StubEmailSender(),
+            NullLogger<AuthService>.Instance);
 
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
