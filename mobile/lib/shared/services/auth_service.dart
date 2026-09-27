@@ -21,6 +21,27 @@ class AuthResult {
   final String? message;
 }
 
+/// Result of a call that has nothing to return but ok/failure, such as
+/// requesting a reset code or spending one to change the password.
+class SimpleResult {
+  const SimpleResult.success([this.message]) : ok = true;
+  const SimpleResult.failure(this.message) : ok = false;
+
+  final bool ok;
+  final String? message;
+}
+
+/// Result of checking a forgot-password code: success carries the token the
+/// next step spends to actually change the password.
+class VerifyCodeResult {
+  const VerifyCodeResult.success(this.resetToken) : ok = true, message = null;
+  const VerifyCodeResult.failure(this.message) : ok = false, resetToken = null;
+
+  final bool ok;
+  final String? resetToken;
+  final String? message;
+}
+
 /// Holds the signed-in session for the whole app.
 ///
 /// A ChangeNotifier rather than a state-management package: one value, a
@@ -111,6 +132,107 @@ class AuthService extends ChangeNotifier {
     // the district, and list any warnings in force there.
     'district': ?district,
   });
+
+  /// Asks the API to email a one-time code for a forgotten password. Always
+  /// reports success on a 200 — the API deliberately never says whether the
+  /// address has an account, so neither does this.
+  Future<SimpleResult> forgotPassword({required String email}) async {
+    http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/auth/forgot-password'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email.trim()}),
+          )
+          .timeout(_timeout);
+    } catch (_) {
+      return SimpleResult.failure(
+        'Cannot reach the server at ${AppConfig.apiBaseUrl}.',
+      );
+    }
+
+    if (response.statusCode != 200) {
+      return SimpleResult.failure(
+        _readMessage(response.body) ??
+            'Could not send the code (HTTP ${response.statusCode}).',
+      );
+    }
+
+    return SimpleResult.success(_readMessage(response.body));
+  }
+
+  /// Checks the emailed code. On success, returns the token the reset-password
+  /// step spends to actually change the password.
+  Future<VerifyCodeResult> verifyResetCode({
+    required String email,
+    required String code,
+  }) async {
+    http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/auth/verify-reset-code'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email.trim(), 'code': code.trim()}),
+          )
+          .timeout(_timeout);
+    } catch (_) {
+      return VerifyCodeResult.failure(
+        'Cannot reach the server at ${AppConfig.apiBaseUrl}.',
+      );
+    }
+
+    if (response.statusCode != 200) {
+      return VerifyCodeResult.failure(
+        _readMessage(response.body) ?? 'That code is invalid or has expired.',
+      );
+    }
+
+    try {
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      return VerifyCodeResult.success(decoded['resetToken'] as String);
+    } catch (_) {
+      return const VerifyCodeResult.failure(
+        'The server sent a response the app could not read.',
+      );
+    }
+  }
+
+  /// Spends the token from [verifyResetCode] to set a new password.
+  Future<SimpleResult> resetPassword({
+    required String email,
+    required String resetToken,
+    required String newPassword,
+  }) async {
+    http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/auth/reset-password'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'email': email.trim(),
+              'resetToken': resetToken,
+              'newPassword': newPassword,
+            }),
+          )
+          .timeout(_timeout);
+    } catch (_) {
+      return SimpleResult.failure(
+        'Cannot reach the server at ${AppConfig.apiBaseUrl}.',
+      );
+    }
+
+    if (response.statusCode != 200) {
+      return SimpleResult.failure(
+        _readMessage(response.body) ??
+            'Could not reset the password (HTTP ${response.statusCode}).',
+      );
+    }
+
+    return SimpleResult.success(_readMessage(response.body));
+  }
 
   /// Saves the notification settings and/or the profile fields below, then
   /// folds the user the API returns back into the stored session — otherwise

@@ -17,6 +17,7 @@ namespace RescueSriLanka.Api.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<PasswordResetCode> PasswordResetCodes => Set<PasswordResetCode>();
 
     // ---- Component A — Incident & Disaster Map ----
     public DbSet<Incident> Incidents => Set<Incident>();
@@ -64,6 +65,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(user => user.Role)
                 .HasConversion<string>()
                 .HasMaxLength(40);
+        });
+
+        modelBuilder.Entity<PasswordResetCode>(entity =>
+        {
+            entity.ToTable("password_reset_codes");
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(code => code.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // A citizen may have several rows over time (old, expired
+            // requests); this is what "find the live one" runs on.
+            entity.HasIndex(code => new { code.UserId, code.ConsumedAt });
         });
 
         modelBuilder.Entity<Incident>(entity =>

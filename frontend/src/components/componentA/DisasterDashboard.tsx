@@ -282,7 +282,7 @@ export default function DisasterDashboard() {
       )}
 
       {selected && (
-        <>
+        <div className="drawer-overlay">
           <div
             className="drawer__scrim"
             onClick={() => setSelected(null)}
@@ -343,7 +343,7 @@ export default function DisasterDashboard() {
               onChanged={() => void refreshAfterDecision(selected.id)}
             />
           </aside>
-        </>
+        </div>
       )}
     </div>
   )

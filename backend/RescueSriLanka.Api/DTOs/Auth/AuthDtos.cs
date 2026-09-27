@@ -69,6 +69,41 @@ public record UpdatePreferencesRequest
     public JsonElement PhoneNumber { get; init; }
 }
 
+public record ForgotPasswordRequest
+{
+    [Required, EmailAddress, MaxLength(256)]
+    public required string Email { get; init; }
+}
+
+public record VerifyResetCodeRequest
+{
+    [Required, EmailAddress, MaxLength(256)]
+    public required string Email { get; init; }
+
+    [Required, StringLength(6, MinimumLength = 6)]
+    public required string Code { get; init; }
+}
+
+/// <summary>Handed back once the emailed code checks out. The app spends this,
+/// not the code itself, to actually change the password.</summary>
+public record VerifyResetCodeResponse
+{
+    public required string ResetToken { get; init; }
+    public required DateTime ExpiresAt { get; init; }
+}
+
+public record ResetPasswordRequest
+{
+    [Required, EmailAddress, MaxLength(256)]
+    public required string Email { get; init; }
+
+    [Required]
+    public required string ResetToken { get; init; }
+
+    [Required, MinLength(8), MaxLength(128)]
+    public required string NewPassword { get; init; }
+}
+
 /// <summary>The user as the clients see it — never exposes the password hash.</summary>
 public record UserDto
 {

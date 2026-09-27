@@ -216,9 +216,6 @@ export default function LoginPage({ onSignedIn }: LoginPageProps) {
                 />
                 <span>Keep me signed in</span>
               </label>
-              <a className="link" href="#forgot">
-                Forgot password?
-              </a>
             </div>
 
             <button className="btn" type="submit" disabled={submitting}>
