@@ -4,6 +4,8 @@ public class HelpRequest
 {
     public Guid Id { get; set; }
 
+    public Guid? UserId { get; set; }
+
     public required string RequesterName { get; set; }
 
     public required string ContactNumber { get; set; }

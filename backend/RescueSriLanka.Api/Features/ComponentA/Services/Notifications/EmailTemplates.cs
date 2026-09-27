@@ -283,6 +283,122 @@ public static class EmailTemplates
         };
     }
 
+      public static EmailMessage ResourceAccepted(
+        User user,
+        string itemType,
+        string itemName,
+        string details,
+        string? district)
+      {
+        var subject = $"Your {itemType} was accepted by RescueSriLanka";
+        var location = district ?? "your registered district";
+        var facts = new (string Label, string Value)[]
+        {
+          ("Item", itemName),
+          ("Details", details),
+          ("District", location),
+          ("Status", "Accepted")
+        };
+
+        var html = Wrap(
+          heading: $"Your {Escape(itemType)} was accepted",
+          accent: Brand,
+          bodyHtml: $"""
+            <p style="margin:0 0 16px">Hello {Escape(user.ShortName())},</p>
+            <p style="margin:0 0 16px">
+              A RescueSriLanka manager has accepted your {Escape(itemType)}. Thank you for
+              helping people affected by the emergency.
+            </p>
+            {FactTable(facts)}
+            <p style="margin:20px 0 0;color:{Body}">
+              The response team will coordinate delivery or collection for {Escape(location)}.
+              Please keep your phone available in case the team needs to contact you.
+            </p>
+            """);
+
+        var text = new StringBuilder()
+          .AppendLine($"Hello {user.ShortName()},")
+          .AppendLine()
+          .AppendLine($"A RescueSriLanka manager has accepted your {itemType}.")
+          .AppendLine("Thank you for helping people affected by the emergency.")
+          .AppendLine()
+          .AppendJoin(Environment.NewLine, facts.Select(f => $"{f.Label,-10}: {f.Value}"))
+          .AppendLine()
+          .AppendLine()
+          .AppendLine($"The response team will coordinate delivery or collection for {location}.")
+          .AppendLine("Please keep your phone available in case the team needs to contact you.")
+          .AppendLine()
+          .AppendLine("— RescueSriLanka")
+          .ToString();
+
+        return new EmailMessage
+        {
+          ToAddress = user.Email,
+          ToName = user.FullName,
+          Subject = subject,
+          HtmlBody = html,
+          TextBody = text,
+          BypassTestRedirect = true
+        };
+      }
+
+      public static EmailMessage ResourcesDispatched(
+        User user,
+        string resourceType,
+        decimal quantity,
+        string? district)
+      {
+        var subject = "Your requested resources have been sent by RescueSriLanka";
+        var location = district ?? "your registered district";
+        var facts = new (string Label, string Value)[]
+        {
+          ("Item Dispatched", resourceType),
+          ("Quantity", $"{quantity:G29}"),
+          ("District", location),
+          ("Status", "Dispatched")
+        };
+
+        var html = Wrap(
+          heading: "Relief resources are on the way",
+          accent: Brand,
+          bodyHtml: $"""
+            <p style="margin:0 0 16px">Hello {Escape(user.ShortName())},</p>
+            <p style="margin:0 0 16px">
+              A RescueSriLanka manager has dispatched <strong style="color:{Ink}">{quantity:G29} unit(s) of {Escape(resourceType)}</strong>
+              for your help request.
+            </p>
+            {FactTable(facts)}
+            <p style="margin:20px 0 0;color:{Body}">
+              The relief supplies are being coordinated for {Escape(location)}.
+              Please keep your phone available in case our distribution team needs to reach you.
+            </p>
+            """);
+
+        var text = new StringBuilder()
+          .AppendLine($"Hello {user.ShortName()},")
+          .AppendLine()
+          .AppendLine($"A RescueSriLanka manager has dispatched {quantity:G29} unit(s) of {resourceType} for your help request.")
+          .AppendLine()
+          .AppendJoin(Environment.NewLine, facts.Select(f => $"{f.Label,-16}: {f.Value}"))
+          .AppendLine()
+          .AppendLine()
+          .AppendLine($"The relief supplies are being coordinated for {location}.")
+          .AppendLine("Please keep your phone available in case our distribution team needs to reach you.")
+          .AppendLine()
+          .AppendLine("— RescueSriLanka")
+          .ToString();
+
+        return new EmailMessage
+        {
+          ToAddress = user.Email,
+          ToName = user.FullName,
+          Subject = subject,
+          HtmlBody = html,
+          TextBody = text,
+          BypassTestRedirect = true
+        };
+      }
+
     /// <summary>
     /// First email a new citizen gets. Tells them what they signed up for and,
     /// if their district is already under warning, says so up front — someone

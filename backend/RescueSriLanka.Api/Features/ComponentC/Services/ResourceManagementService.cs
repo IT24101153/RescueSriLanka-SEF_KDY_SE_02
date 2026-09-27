@@ -1,7 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Features.ComponentC.DTOs;
 using RescueSriLanka.Api.Data;
+using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Features.ComponentC.Models;
+using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
+using RescueSriLanka.Api.Services.Email;
+using Microsoft.Extensions.Options;
 
 namespace RescueSriLanka.Api.Features.ComponentC.Services;
 
@@ -41,7 +45,7 @@ public interface IResourceManagementService
 
     Task<ResourceAllocationResponse?> ReleaseAsync(Guid allocationId, CancellationToken cancellationToken);
 
-    Task<HelpRequestResponse> CreateHelpRequestAsync(CreateHelpRequestRequest request, CancellationToken cancellationToken);
+    Task<HelpRequestResponse> CreateHelpRequestAsync(CreateHelpRequestRequest request, Guid? userId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken);
 
@@ -50,7 +54,7 @@ public interface IResourceManagementService
         UpdateHelpRequestStatusRequest request,
         CancellationToken cancellationToken);
 
-    Task<DonationResponse> CreateDonationAsync(CreateDonationRequest request, CancellationToken cancellationToken);
+    Task<DonationResponse> CreateDonationAsync(CreateDonationRequest request, Guid? userId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken);
 
@@ -60,7 +64,11 @@ public interface IResourceManagementService
         CancellationToken cancellationToken);
 }
 
-public class ResourceManagementService(AppDbContext dbContext) : IResourceManagementService
+public class ResourceManagementService(
+    AppDbContext dbContext,
+    IEmailSender? emailSender = null,
+    IOptions<EmailOptions>? emailOptions = null,
+    ILogger<ResourceManagementService>? logger = null) : IResourceManagementService
 {
     public async Task<IReadOnlyList<Shelter>> GetSheltersAsync(CancellationToken cancellationToken) =>
         await dbContext.Shelters
@@ -274,6 +282,7 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
 
     public async Task<HelpRequestResponse> CreateHelpRequestAsync(
         CreateHelpRequestRequest request,
+        Guid? userId,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.RequesterName) ||
@@ -287,6 +296,7 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
         var helpRequest = new HelpRequest
         {
             Id = Guid.NewGuid(),
+            UserId = userId,
             RequesterName = request.RequesterName.Trim(),
             ContactNumber = request.ContactNumber.Trim(),
             NeedType = request.NeedType.Trim(),
@@ -297,15 +307,19 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
 
         dbContext.ResourceHelpRequests.Add(helpRequest);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return ToResponse(helpRequest);
+        return ToResponse(helpRequest, null);
     }
 
-    public async Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken) =>
-        [.. (await dbContext.ResourceHelpRequests
+    public async Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken)
+    {
+        var requests = await dbContext.ResourceHelpRequests
             .AsNoTracking()
             .OrderByDescending(request => request.CreatedAtUtc)
-            .ToListAsync(cancellationToken))
-        .Select(ToResponse)];
+            .ToListAsync(cancellationToken);
+        var userIds = requests.Where(request => request.UserId is not null).Select(request => request.UserId!.Value).ToArray();
+        var districts = await dbContext.Users.AsNoTracking().Where(user => userIds.Contains(user.Id)).ToDictionaryAsync(user => user.Id, user => user.District, cancellationToken);
+        return [.. requests.Select(request => ToResponse(request, request.UserId is Guid id && districts.TryGetValue(id, out var district) ? district : null))];
+    }
 
     public async Task<HelpRequestResponse?> UpdateHelpRequestStatusAsync(
         Guid id,
@@ -328,11 +342,23 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
 
         helpRequest.Status = status;
         await dbContext.SaveChangesAsync(cancellationToken);
-        return ToResponse(helpRequest);
+        if (status == "Accepted")
+        {
+            var user = await FindUserForHelpRequestAsync(helpRequest, cancellationToken);
+            if (user is not null)
+            {
+                await SendAcceptedEmailAsync(user, "help request", helpRequest.NeedType, helpRequest.Description, cancellationToken);
+            }
+        }
+        var district = helpRequest.UserId is Guid userId
+            ? await dbContext.Users.AsNoTracking().Where(user => user.Id == userId).Select(user => user.District).SingleOrDefaultAsync(cancellationToken)
+            : null;
+        return ToResponse(helpRequest, district);
     }
 
     public async Task<DonationResponse> CreateDonationAsync(
         CreateDonationRequest request,
+        Guid? userId,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.DonorName) ||
@@ -347,6 +373,7 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
         var donation = new Donation
         {
             Id = Guid.NewGuid(),
+            UserId = userId,
             DonorName = request.DonorName.Trim(),
             ContactNumber = request.ContactNumber.Trim(),
             DonationType = request.DonationType.Trim(),
@@ -357,15 +384,19 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
 
         dbContext.Donations.Add(donation);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return ToResponse(donation);
+        return ToResponse(donation, null);
     }
 
-    public async Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken) =>
-        [.. (await dbContext.Donations
+    public async Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken)
+    {
+        var donations = await dbContext.Donations
             .AsNoTracking()
             .OrderByDescending(donation => donation.CreatedAtUtc)
-            .ToListAsync(cancellationToken))
-        .Select(ToResponse)];
+            .ToListAsync(cancellationToken);
+        var userIds = donations.Where(donation => donation.UserId is not null).Select(donation => donation.UserId!.Value).ToArray();
+        var districts = await dbContext.Users.AsNoTracking().Where(user => userIds.Contains(user.Id)).ToDictionaryAsync(user => user.Id, user => user.District, cancellationToken);
+        return [.. donations.Select(donation => ToResponse(donation, donation.UserId is Guid id && districts.TryGetValue(id, out var district) ? district : null))];
+    }
 
     public async Task<DonationResponse?> UpdateDonationStatusAsync(
         Guid id,
@@ -388,11 +419,23 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
 
         donation.Status = status;
         await dbContext.SaveChangesAsync(cancellationToken);
-        return ToResponse(donation);
+        if (status == "Accepted")
+        {
+            var user = await FindUserForDonationAsync(donation, cancellationToken);
+            if (user is not null)
+            {
+                await SendAcceptedEmailAsync(user, "donation", donation.DonationType, $"{donation.Quantity} {donation.Unit}", cancellationToken);
+            }
+        }
+        var district = donation.UserId is Guid userId
+            ? await dbContext.Users.AsNoTracking().Where(user => user.Id == userId).Select(user => user.District).SingleOrDefaultAsync(cancellationToken)
+            : null;
+        return ToResponse(donation, district);
     }
 
-    private static HelpRequestResponse ToResponse(HelpRequest request) => new(
+    private static HelpRequestResponse ToResponse(HelpRequest request, string? district) => new(
         request.Id,
+        request.UserId,
         request.RequesterName,
         request.ContactNumber,
         request.NeedType,
@@ -400,10 +443,12 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
         request.Latitude is null ? null : (decimal?)request.Latitude,
         request.Longitude is null ? null : (decimal?)request.Longitude,
         request.Status,
-        request.CreatedAtUtc);
+        request.CreatedAtUtc,
+        district);
 
-    private static DonationResponse ToResponse(Donation donation) => new(
+    private static DonationResponse ToResponse(Donation donation, string? district) => new(
         donation.Id,
+        donation.UserId,
         donation.DonorName,
         donation.ContactNumber,
         donation.DonationType,
@@ -411,7 +456,111 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
         donation.Unit,
         donation.Notes,
         donation.Status,
-        donation.CreatedAtUtc);
+        donation.CreatedAtUtc,
+        district);
+
+    private async Task<User?> FindUserForHelpRequestAsync(HelpRequest helpRequest, CancellationToken cancellationToken)
+    {
+        if (helpRequest.UserId is Guid id)
+        {
+            var user = await dbContext.Users.AsNoTracking().SingleOrDefaultAsync(candidate =>
+                candidate.Id == id && candidate.IsActive,
+                cancellationToken);
+            if (user is not null) return user;
+        }
+
+        if (!string.IsNullOrWhiteSpace(helpRequest.ContactNumber))
+        {
+            var phone = helpRequest.ContactNumber.Trim();
+            var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(candidate =>
+                candidate.PhoneNumber == phone && candidate.IsActive,
+                cancellationToken);
+            if (user is not null) return user;
+        }
+
+        if (!string.IsNullOrWhiteSpace(helpRequest.RequesterName))
+        {
+            var name = helpRequest.RequesterName.Trim().ToLower();
+            var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(candidate =>
+                candidate.FullName.ToLower() == name && candidate.IsActive,
+                cancellationToken);
+            if (user is not null) return user;
+        }
+
+        return null;
+    }
+
+    private async Task<User?> FindUserForDonationAsync(Donation donation, CancellationToken cancellationToken)
+    {
+        if (donation.UserId is Guid id)
+        {
+            var user = await dbContext.Users.AsNoTracking().SingleOrDefaultAsync(candidate =>
+                candidate.Id == id && candidate.IsActive,
+                cancellationToken);
+            if (user is not null) return user;
+        }
+
+        if (!string.IsNullOrWhiteSpace(donation.ContactNumber))
+        {
+            var phone = donation.ContactNumber.Trim();
+            var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(candidate =>
+                candidate.PhoneNumber == phone && candidate.IsActive,
+                cancellationToken);
+            if (user is not null) return user;
+        }
+
+        if (!string.IsNullOrWhiteSpace(donation.DonorName))
+        {
+            var name = donation.DonorName.Trim().ToLower();
+            var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(candidate =>
+                candidate.FullName.ToLower() == name && candidate.IsActive,
+                cancellationToken);
+            if (user is not null) return user;
+        }
+
+        return null;
+    }
+
+    private async Task SendAcceptedEmailAsync(
+        User user,
+        string itemType,
+        string itemName,
+        string details,
+        CancellationToken cancellationToken)
+    {
+        if (emailSender is null || emailOptions?.Value.Enabled != true) return;
+
+        try
+        {
+            await emailSender.SendAsync(
+                EmailTemplates.ResourceAccepted(user, itemType, itemName, details, user.District),
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger?.LogError(exception, "Failed to send accepted {ItemType} email to {Email}.", itemType, user.Email);
+        }
+    }
+
+    private async Task SendDispatchedEmailAsync(
+        User user,
+        string resourceType,
+        decimal quantity,
+        CancellationToken cancellationToken)
+    {
+        if (emailSender is null || emailOptions?.Value.Enabled != true) return;
+
+        try
+        {
+            await emailSender.SendAsync(
+                EmailTemplates.ResourcesDispatched(user, resourceType, quantity, user.District),
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger?.LogError(exception, "Failed to send resources dispatched email to {Email}.", user.Email);
+        }
+    }
 
     public async Task<ResourceAllocationResponse> AllocateAsync(
         AllocateResourceRequest request,
@@ -427,7 +576,7 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
         {
             Id = Guid.NewGuid(),
             ResourceType = resourceType,
-            ResourceId = request.ResourceId,
+            ResourceId = request.ResourceId != Guid.Empty ? request.ResourceId : Guid.NewGuid(),
             Quantity = request.Quantity,
             HelpRequestId = request.HelpRequestId,
             IncidentId = request.IncidentId
@@ -445,7 +594,8 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
                 await AllocateFoodWaterStockAsync(request, cancellationToken);
                 break;
             default:
-                throw new ArgumentException("Resource type must be Shelter, MedicalSupply, or FoodWaterStock.");
+                // Clothes, Other, or custom resources do not require stock deduction.
+                break;
         }
 
         dbContext.ResourceAllocations.Add(allocation);
@@ -455,6 +605,12 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
                 .SingleOrDefaultAsync(item => item.Id == helpRequestId, cancellationToken)
                 ?? throw new KeyNotFoundException("Help request was not found.");
             helpRequest.Status = "Fulfilled";
+
+            var user = await FindUserForHelpRequestAsync(helpRequest, cancellationToken);
+            if (user is not null)
+            {
+                await SendDispatchedEmailAsync(user, resourceType, request.Quantity, cancellationToken);
+            }
         }
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToResponse(allocation);
@@ -476,19 +632,19 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
                 .Where(shelter => shelter.IsActive && shelter.Capacity - shelter.OccupiedCapacity >= request.Quantity)
                 .OrderByDescending(shelter => shelter.Capacity - shelter.OccupiedCapacity)
                 .Select(shelter => (Guid?)shelter.Id)
-                .FirstOrDefaultAsync(cancellationToken),
+                .FirstOrDefaultAsync(cancellationToken) ?? throw new InvalidOperationException("No active shelter has enough availability."),
             "medicalsupply" => await dbContext.MedicalSupplies
                 .Where(supply => supply.IsActive && supply.QuantityOnHand >= request.Quantity)
                 .OrderByDescending(supply => supply.QuantityOnHand)
                 .Select(supply => (Guid?)supply.Id)
-                .FirstOrDefaultAsync(cancellationToken),
+                .FirstOrDefaultAsync(cancellationToken) ?? throw new InvalidOperationException("No active medical supply has enough availability."),
             "foodwaterstock" => await dbContext.FoodWaterStocks
                 .Where(stock => stock.IsActive && stock.QuantityOnHand >= request.Quantity)
                 .OrderByDescending(stock => stock.QuantityOnHand)
                 .Select(stock => (Guid?)stock.Id)
-                .FirstOrDefaultAsync(cancellationToken),
-            _ => throw new ArgumentException("Resource type must be Shelter, MedicalSupply, or FoodWaterStock.")
-        } ?? throw new InvalidOperationException("No active resource has enough availability.");
+                .FirstOrDefaultAsync(cancellationToken) ?? throw new InvalidOperationException("No active food/water stock has enough availability."),
+            _ => Guid.NewGuid() // Clothes or custom items
+        };
 
         return await AllocateAsync(
             new AllocateResourceRequest(
@@ -507,12 +663,14 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
             throw new ArgumentException("Resource type is required.");
         }
 
-        return resourceType.Trim() switch
+        var trimmed = resourceType.Trim();
+        return trimmed.ToLowerInvariant() switch
         {
-            "Shelter" or "shelter" => "Shelter",
-            "MedicalSupply" or "medical" or "medicalsupply" => "MedicalSupply",
-            "FoodWaterStock" or "food" or "foodwaterstock" => "FoodWaterStock",
-            _ => throw new ArgumentException("Resource type must be Shelter, MedicalSupply, or FoodWaterStock.")
+            "shelter" => "Shelter",
+            "medicalsupply" or "medical" => "MedicalSupply",
+            "foodwaterstock" or "food" => "FoodWaterStock",
+            "clothes" or "clothing" => "Clothes",
+            _ => trimmed
         };
     }
 
@@ -531,18 +689,27 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
         switch (allocation.ResourceType.ToLowerInvariant())
         {
             case "shelter":
-                var shelter = await dbContext.Shelters.SingleAsync(item => item.Id == allocation.ResourceId, cancellationToken);
-                shelter.OccupiedCapacity = Math.Max(0, shelter.OccupiedCapacity - (int)allocation.Quantity);
+                var shelter = await dbContext.Shelters.SingleOrDefaultAsync(item => item.Id == allocation.ResourceId, cancellationToken);
+                if (shelter is not null)
+                {
+                    shelter.OccupiedCapacity = Math.Max(0, shelter.OccupiedCapacity - (int)allocation.Quantity);
+                }
                 break;
             case "medicalsupply":
-                var supply = await dbContext.MedicalSupplies.SingleAsync(item => item.Id == allocation.ResourceId, cancellationToken);
-                supply.QuantityOnHand += (int)allocation.Quantity;
-                supply.UpdatedAtUtc = DateTime.UtcNow;
+                var supply = await dbContext.MedicalSupplies.SingleOrDefaultAsync(item => item.Id == allocation.ResourceId, cancellationToken);
+                if (supply is not null)
+                {
+                    supply.QuantityOnHand += (int)allocation.Quantity;
+                    supply.UpdatedAtUtc = DateTime.UtcNow;
+                }
                 break;
             case "foodwaterstock":
-                var stock = await dbContext.FoodWaterStocks.SingleAsync(item => item.Id == allocation.ResourceId, cancellationToken);
-                stock.QuantityOnHand += allocation.Quantity;
-                stock.UpdatedAtUtc = DateTime.UtcNow;
+                var stock = await dbContext.FoodWaterStocks.SingleOrDefaultAsync(item => item.Id == allocation.ResourceId, cancellationToken);
+                if (stock is not null)
+                {
+                    stock.QuantityOnHand += allocation.Quantity;
+                    stock.UpdatedAtUtc = DateTime.UtcNow;
+                }
                 break;
         }
 

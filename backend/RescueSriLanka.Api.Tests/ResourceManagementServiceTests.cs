@@ -133,6 +133,56 @@ public class ResourceManagementServiceTests
         Assert.Equal("Resource type is required.", ex.Message);
     }
 
+    [Fact]
+    public async Task AllocateAsync_WithClothes_FulfillsHelpRequestSuccessfully()
+    {
+        await using var context = CreateContext();
+        var requestId = Guid.NewGuid();
+        context.ResourceHelpRequests.Add(new HelpRequest
+        {
+            Id = requestId,
+            RequesterName = "Kamal Gunaratne",
+            ContactNumber = "0771234567",
+            NeedType = "Clothes",
+            Description = "Warm clothing"
+        });
+        await context.SaveChangesAsync();
+
+        var service = new ResourceManagementService(context);
+        var allocation = await service.AllocateAsync(
+            new AllocateResourceRequest("Clothes", Guid.NewGuid(), 10, requestId, null),
+            CancellationToken.None);
+
+        Assert.Equal("Clothes", allocation.ResourceType);
+        Assert.Equal(10, allocation.Quantity);
+        Assert.Equal("Fulfilled", (await context.ResourceHelpRequests.FindAsync(requestId))!.Status);
+    }
+
+    [Fact]
+    public async Task MatchAndAllocateAsync_WithOtherCustomType_FulfillsHelpRequestSuccessfully()
+    {
+        await using var context = CreateContext();
+        var requestId = Guid.NewGuid();
+        context.ResourceHelpRequests.Add(new HelpRequest
+        {
+            Id = requestId,
+            RequesterName = "Sunil Perera",
+            ContactNumber = "0751234567",
+            NeedType = "Tents",
+            Description = "Emergency shelter kits"
+        });
+        await context.SaveChangesAsync();
+
+        var service = new ResourceManagementService(context);
+        var allocation = await service.MatchAndAllocateAsync(
+            new MatchResourceRequest("Tents and Blankets", 5, requestId, null),
+            CancellationToken.None);
+
+        Assert.Equal("Tents and Blankets", allocation.ResourceType);
+        Assert.Equal(5, allocation.Quantity);
+        Assert.Equal("Fulfilled", (await context.ResourceHelpRequests.FindAsync(requestId))!.Status);
+    }
+
     private static AppDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())

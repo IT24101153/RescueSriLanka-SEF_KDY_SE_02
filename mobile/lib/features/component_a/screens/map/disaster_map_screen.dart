@@ -466,28 +466,31 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final place in _results)
-                ListTile(
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  leading: const Icon(
-                    Icons.place_outlined,
-                    size: 20,
-                    color: AppColors.body,
-                  ),
-                  title: Text(
-                    place.shortName,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                Material(
+                  color: AppColors.surface,
+                  child: ListTile(
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    leading: const Icon(
+                      Icons.place_outlined,
+                      size: 20,
+                      color: AppColors.body,
                     ),
+                    title: Text(
+                      place.shortName,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      place.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11.5),
+                    ),
+                    onTap: () => _goToPlace(place),
                   ),
-                  subtitle: Text(
-                    place.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11.5),
-                  ),
-                  onTap: () => _goToPlace(place),
                 ),
               // Photon's results are OpenStreetMap data, which asks for credit.
               const Padding(

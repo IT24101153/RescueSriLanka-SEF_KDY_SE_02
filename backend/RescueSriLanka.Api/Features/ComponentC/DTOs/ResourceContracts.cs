@@ -79,6 +79,7 @@ public record CreateHelpRequestRequest(
 
 public record HelpRequestResponse(
     Guid Id,
+    Guid? UserId,
     string RequesterName,
     string ContactNumber,
     string NeedType,
@@ -86,7 +87,8 @@ public record HelpRequestResponse(
     decimal? Latitude,
     decimal? Longitude,
     string Status,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    string? District);
 
 public record UpdateHelpRequestStatusRequest(string Status);
 
@@ -100,6 +102,7 @@ public record CreateDonationRequest(
 
 public record DonationResponse(
     Guid Id,
+    Guid? UserId,
     string DonorName,
     string ContactNumber,
     string DonationType,
@@ -107,4 +110,5 @@ public record DonationResponse(
     string Unit,
     string? Notes,
     string Status,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    string? District);

@@ -9,12 +9,13 @@ class ResourceApi {
   // The base URL comes from the shared config, like every other section's
   // client, so this works on iOS and the web too and not only on the Android
   // emulator.
-  ResourceApi({http.Client? client, String? baseUrl})
+  ResourceApi({http.Client? client, String? baseUrl, this._token})
     : _client = client ?? http.Client(),
       _baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
 
   final http.Client _client;
   final String _baseUrl;
+  final String? _token;
 
   Future<HelpRequest> createHelpRequest({
     required String name,
@@ -70,7 +71,10 @@ class ResourceApi {
   Future<http.Response> _post(String path, Map<String, dynamic> body) => _send(
     () => _client.post(
       Uri.parse('$_baseUrl$path'),
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
       body: jsonEncode(body),
     ),
   );

@@ -57,6 +57,8 @@ class _ReportScreenState extends State<ReportScreen> {
   String _type = 'Flood';
   Position? _position;
   File? _photo;
+  List<String> _districts = const [];
+  bool _districtsUnavailable = false;
 
   bool _locating = false;
   bool _submitting = false;
@@ -69,6 +71,24 @@ class _ReportScreenState extends State<ReportScreen> {
     // Most reports are filed from the scene, so lead with the device's own
     // position rather than making someone type coordinates.
     if (widget.auth.isSignedIn) _locate();
+    if (widget.auth.isSignedIn) _loadDistricts();
+  }
+
+  Future<void> _loadDistricts() async {
+    final api = ApiClient(auth: widget.auth);
+    try {
+      final districts = await api.fetchDistricts();
+      if (mounted) {
+        setState(() {
+          _districts = districts;
+          _districtsUnavailable = districts.isEmpty;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _districtsUnavailable = true);
+    } finally {
+      api.dispose();
+    }
   }
 
   @override
@@ -420,14 +440,40 @@ class _ReportScreenState extends State<ReportScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: TextFormField(
-                            controller: _district,
-                            textCapitalization: TextCapitalization.words,
-                            decoration: const InputDecoration(
-                              labelText: 'District',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
+                          child: _districts.isNotEmpty
+                              ? DropdownButtonFormField<String>(
+                                  initialValue:
+                                      _districts.contains(_district.text)
+                                      ? _district.text
+                                      : null,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'District',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  hint: const Text('Select district'),
+                                  items: _districts
+                                      .map((district) => DropdownMenuItem(
+                                            value: district,
+                                            child: Text(district,
+                                                overflow:
+                                                    TextOverflow.ellipsis),
+                                          ))
+                                      .toList(),
+                                  onChanged: (district) =>
+                                      _district.text = district ?? '',
+                                )
+                              : TextFormField(
+                                  controller: _district,
+                                  textCapitalization: TextCapitalization.words,
+                                  decoration: InputDecoration(
+                                    labelText: 'District',
+                                    hintText: _districtsUnavailable
+                                        ? 'Enter district'
+                                        : 'Loading districts…',
+                                    border: const OutlineInputBorder(),
+                                  ),
+                                ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(

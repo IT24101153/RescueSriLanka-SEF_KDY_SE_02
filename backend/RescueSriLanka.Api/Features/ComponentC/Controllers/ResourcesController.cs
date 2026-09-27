@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using RescueSriLanka.Api.Features.ComponentC.DTOs;
 using RescueSriLanka.Api.Features.ComponentC.Services;
@@ -203,7 +204,10 @@ public class ResourcesController(IResourceManagementService resourceService) : C
     {
         try
         {
-            var helpRequest = await resourceService.CreateHelpRequestAsync(request, cancellationToken);
+            var userId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+                ? parsedUserId
+                : (Guid?)null;
+            var helpRequest = await resourceService.CreateHelpRequestAsync(request, userId, cancellationToken);
             return Created($"api/resources/help-requests/{helpRequest.Id}", helpRequest);
         }
         catch (ArgumentException exception)
@@ -241,7 +245,10 @@ public class ResourcesController(IResourceManagementService resourceService) : C
     {
         try
         {
-            var donation = await resourceService.CreateDonationAsync(request, cancellationToken);
+            var userId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+                ? parsedUserId
+                : (Guid?)null;
+            var donation = await resourceService.CreateDonationAsync(request, userId, cancellationToken);
             return Created($"api/resources/donations/{donation.Id}", donation);
         }
         catch (ArgumentException exception)

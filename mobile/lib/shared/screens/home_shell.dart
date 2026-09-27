@@ -63,7 +63,7 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ),
         _Tab(
-          screen: const ResourceHomePage(),
+          screen: ResourceHomePage(auth: widget.auth),
           destination: const NavigationDestination(
             icon: Icon(Icons.inventory_2_outlined),
             selectedIcon: Icon(Icons.inventory_2),

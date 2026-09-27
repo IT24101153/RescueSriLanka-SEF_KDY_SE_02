@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/core/theme.dart';
+import '../../../shared/services/auth_service.dart';
 import '../../../shared/widgets/app_ui.dart';
 import '../services/resource_api.dart';
 
@@ -10,14 +11,16 @@ import '../services/resource_api.dart';
 /// /api/resources/*. Styling comes from the shared kit, so this reads like the
 /// disaster map and the report form.
 class ResourceHomePage extends StatefulWidget {
-  const ResourceHomePage({super.key});
+  const ResourceHomePage({super.key, this.auth});
+
+  final AuthService? auth;
 
   @override
   State<ResourceHomePage> createState() => _ResourceHomePageState();
 }
 
 class _ResourceHomePageState extends State<ResourceHomePage> {
-  final _api = ResourceApi();
+  late final ResourceApi _api;
 
   int _section = 0;
   List<HelpRequest> _requests = [];
@@ -27,6 +30,7 @@ class _ResourceHomePageState extends State<ResourceHomePage> {
   @override
   void initState() {
     super.initState();
+    _api = ResourceApi(token: widget.auth?.token);
     _loadRequests();
   }
 
