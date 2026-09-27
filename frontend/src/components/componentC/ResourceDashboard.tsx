@@ -15,12 +15,15 @@ type Shelter = { id: string; name: string; address: string; latitude: number; lo
 type Supply = { id: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number }
 type FoodWaterStock = { id: string; itemName: string; unit: string; quantityOnHand: number; lowStockThreshold: number }
 type ResourceAlert = { resourceType: string; resourceId: string; name: string; quantityOnHand: number; lowStockThreshold: number; unit: string }
+type ResourceHelpRequest = { id: string; requesterName: string; contactNumber: string; needType: string; description: string; status: string; createdAtUtc: string }
+type Donation = { id: string; donorName: string; contactNumber: string; donationType: string; quantity: number; unit: string; notes?: string; status: string; createdAtUtc: string }
 type ShelterForm = { name: string; address: string; latitude: string; longitude: string; capacity: string }
 type SupplyForm = { name: string; unit: string; quantityOnHand: string; lowStockThreshold: string }
 type StockForm = { itemName: string; unit: string; quantityOnHand: string; lowStockThreshold: string }
 type ResourceType = 'shelter' | 'medical' | 'food'
-type Page = 'overview' | 'shelters' | 'supplies' | 'allocations'
+type Page = 'overview' | 'shelters' | 'supplies' | 'allocations' | 'donate'
 type DeleteRequest = { type: ResourceType; id: string; label: string }
+type FulfillmentRequest = { id: string; resourceType: string; quantity: string }
 
 async function getResources<T>(path: string): Promise<T> {
   const response = await fetch(`/api/resources/${path}`)
@@ -36,6 +39,8 @@ function ResourceDashboard() {
   const [medicalSupplies, setMedicalSupplies] = useState<Supply[]>([])
   const [foodWaterStock, setFoodWaterStock] = useState<FoodWaterStock[]>([])
   const [alerts, setAlerts] = useState<ResourceAlert[]>([])
+  const [helpRequests, setHelpRequests] = useState<ResourceHelpRequest[]>([])
+  const [donations, setDonations] = useState<Donation[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -48,21 +53,26 @@ function ResourceDashboard() {
   const [stockForm, setStockForm] = useState<StockForm>({ itemName: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
   const [page, setPage] = useState<Page>('overview')
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null)
+  const [fulfillmentRequest, setFulfillmentRequest] = useState<FulfillmentRequest | null>(null)
 
   const loadResources = async () => {
     setIsLoading(true)
     setError('')
     try {
-      const [shelterData, medicalData, foodData, alertData] = await Promise.all([
+      const [shelterData, medicalData, foodData, alertData, helpRequestData, donationData] = await Promise.all([
         getResources<Shelter[]>('shelters'),
         getResources<Supply[]>('medical-supplies'),
         getResources<FoodWaterStock[]>('food-water-stock'),
         getResources<ResourceAlert[]>('alerts/low-stock'),
+        getResources<ResourceHelpRequest[]>('help-requests'),
+        getResources<Donation[]>('donations'),
       ])
       setShelters(shelterData)
       setMedicalSupplies(medicalData)
       setFoodWaterStock(foodData)
       setAlerts(alertData)
+      setHelpRequests(helpRequestData)
+      setDonations(donationData)
     } catch (resourceError) {
       setError(resourceError instanceof Error ? resourceError.message : 'Unable to load resources.')
     } finally {
@@ -200,6 +210,67 @@ function ResourceDashboard() {
     await removeResource(request.type, request.id, request.label)
   }
 
+  const updateRequestStatus = async (id: string, status: 'Accepted' | 'Rejected') => {
+    setError('')
+    try {
+      const response = await fetch(`/api/resources/help-requests/${id}/status`, {
+        method: 'PATCH',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ status }),
+      })
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(result?.error ?? 'Unable to update the request.')
+      }
+      await loadResources()
+    } catch (statusError) {
+      setError(statusError instanceof Error ? statusError.message : 'Unable to update the request.')
+    }
+  }
+
+  const updateDonationStatus = async (id: string, status: 'Accepted' | 'Rejected') => {
+    setError('')
+    try {
+      const response = await fetch(`/api/resources/donations/${id}/status`, {
+        method: 'PATCH',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ status }),
+      })
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(result?.error ?? 'Unable to update the donation.')
+      }
+      await loadResources()
+    } catch (statusError) {
+      setError(statusError instanceof Error ? statusError.message : 'Unable to update the donation.')
+    }
+  }
+
+  const fulfillRequest = async () => {
+    if (!fulfillmentRequest || Number(fulfillmentRequest.quantity) <= 0) return
+    setError('')
+    try {
+      const response = await fetch('/api/resources/allocations/match', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          resourceType: fulfillmentRequest.resourceType,
+          quantity: Number(fulfillmentRequest.quantity),
+          helpRequestId: fulfillmentRequest.id,
+          incidentId: null,
+        }),
+      })
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(result?.error ?? 'Unable to send resources.')
+      }
+      setFulfillmentRequest(null)
+      await loadResources()
+    } catch (fulfillmentError) {
+      setError(fulfillmentError instanceof Error ? fulfillmentError.message : 'Unable to send resources.')
+    }
+  }
+
   const navigate = (nextPage: Page) => setPage(nextPage)
 
   return (
@@ -213,7 +284,8 @@ function ResourceDashboard() {
           <button className={`nav-link ${page === 'overview' ? 'active' : ''}`} type="button" onClick={() => navigate('overview')}>Overview</button>
           <button className={`nav-link ${page === 'shelters' ? 'active' : ''}`} type="button" onClick={() => navigate('shelters')}>Shelters</button>
           <button className={`nav-link ${page === 'supplies' ? 'active' : ''}`} type="button" onClick={() => navigate('supplies')}>Supplies</button>
-          <button className={`nav-link ${page === 'allocations' ? 'active' : ''}`} type="button" onClick={() => navigate('allocations')}>Allocations</button>
+          <button className={`nav-link ${page === 'allocations' ? 'active' : ''}`} type="button" onClick={() => navigate('allocations')}>Requests</button>
+          <button className={`nav-link ${page === 'donate' ? 'active' : ''}`} type="button" onClick={() => navigate('donate')}>Donate</button>
         </nav>
         <div className="sidebar-footer">
           <span className="status-dot" />
@@ -225,7 +297,7 @@ function ResourceDashboard() {
         <header className="topbar">
           <div>
             <p className="eyebrow">Emergency response operations</p>
-            <h1>{page === 'overview' ? 'Resource overview' : page[0].toUpperCase() + page.slice(1)}</h1>
+            <h1>{page === 'overview' ? 'Resource overview' : page === 'allocations' ? 'Requests' : page === 'donate' ? 'Donate' : page[0].toUpperCase() + page.slice(1)}</h1>
           </div>
           <button className="profile-button" type="button" aria-label="Open user profile">DR</button>
         </header>
@@ -337,7 +409,9 @@ function ResourceDashboard() {
           <button className="secondary-button add-food-button" type="button" onClick={() => openResourceForm('food')}>Add food or water stock</button>
         </section>}
 
-        {page === 'allocations' && <section className="page-section"><div className="page-heading"><div><p className="eyebrow">Distribution tracking</p><h2>Resource allocations</h2><p className="muted">Track resources dispatched to shelters, field units, and incident responses.</p></div></div><div className="empty-panel"><span className="empty-symbol">↗</span><h2>Allocation history is ready for the next step</h2><p className="muted">Create an allocation from an available resource once help requests are connected.</p></div></section>}
+        {page === 'donate' && <section className="page-section"><div className="page-heading"><div><p className="eyebrow">Community support</p><h2>Donation offers</h2><p className="muted">Review items offered by people who want to support the response effort.</p></div></div><div className="data-table">{isLoading && <p className="empty-state">Loading donations...</p>}{!isLoading && donations.length === 0 && <p className="empty-state">No donation offers yet.</p>}{donations.map((donation) => <div className="data-row request-row" key={donation.id}><div><strong>{donation.donationType}</strong><span>{donation.quantity} {donation.unit}</span></div><div><strong>{donation.donorName}</strong><span>{donation.contactNumber}</span></div><div><strong>{donation.status}</strong><span>{donation.notes || 'No notes provided'}</span></div><div className="request-actions">{donation.status === 'PendingReview' && <><button className="primary-button compact-button" type="button" onClick={() => void updateDonationStatus(donation.id, 'Accepted')}>Accept</button><button className="danger-button compact-button" type="button" onClick={() => void updateDonationStatus(donation.id, 'Rejected')}>Reject</button></>}{donation.status === 'Accepted' && <span className="fulfilled-label">Accepted</span>}</div></div>)}</div></section>}
+
+        {page === 'allocations' && <section className="page-section"><div className="page-heading"><div><p className="eyebrow">Incoming requests</p><h2>Resource requests</h2><p className="muted">Review support requests, accept or reject them, and send available resources.</p></div></div><div className="data-table">{isLoading && <p className="empty-state">Loading requests...</p>}{!isLoading && helpRequests.length === 0 && <p className="empty-state">No resource requests yet.</p>}{helpRequests.map((request) => <div className="data-row request-row" key={request.id}><div><strong>{request.needType}</strong><span>{request.description}</span></div><div><strong>{request.requesterName}</strong><span>{request.contactNumber}</span></div><div><strong>{request.status}</strong><span>Request status</span></div><div className="request-actions">{request.status === 'Pending' && <><button className="primary-button compact-button" type="button" onClick={() => void updateRequestStatus(request.id, 'Accepted')}>Accept</button><button className="danger-button compact-button" type="button" onClick={() => void updateRequestStatus(request.id, 'Rejected')}>Reject</button></>}{request.status === 'Accepted' && !fulfillmentRequest && <button className="primary-button compact-button" type="button" onClick={() => setFulfillmentRequest({ id: request.id, resourceType: request.needType.toLowerCase().includes('medical') ? 'MedicalSupply' : request.needType.toLowerCase().includes('shelter') ? 'Shelter' : 'FoodWaterStock', quantity: '1' })}>Send resources</button>}{request.status === 'Fulfilled' && <span className="fulfilled-label">Sent</span>}</div>{fulfillmentRequest?.id === request.id && <div className="fulfillment-form"><label>Resource<select value={fulfillmentRequest.resourceType} onChange={(event) => setFulfillmentRequest({ ...fulfillmentRequest, resourceType: event.target.value })}><option value="FoodWaterStock">Food / water</option><option value="MedicalSupply">Medical supply</option><option value="Shelter">Shelter space</option></select></label><label>Quantity<input min="1" step="any" type="number" value={fulfillmentRequest.quantity} onChange={(event) => setFulfillmentRequest({ ...fulfillmentRequest, quantity: event.target.value })} /></label><button className="secondary-button" type="button" onClick={() => setFulfillmentRequest(null)}>Cancel</button><button className="primary-button" type="button" onClick={() => void fulfillRequest()}>Send now</button></div>}</div>)}</div></section>}
       </main>
     </div>
   )

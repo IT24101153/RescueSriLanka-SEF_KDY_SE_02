@@ -212,6 +212,24 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         }
     }
 
+    [Authorize(Roles = Managers)]
+    [HttpPatch("help-requests/{id:guid}/status")]
+    public async Task<IActionResult> UpdateHelpRequestStatus(
+        Guid id,
+        UpdateHelpRequestStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var helpRequest = await resourceService.UpdateHelpRequestStatusAsync(id, request, cancellationToken);
+            return helpRequest is null
+                ? NotFound(new { error = "Help request was not found." })
+                : Ok(helpRequest);
+        }
+        catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
+        catch (InvalidOperationException exception) { return Conflict(new { error = exception.Message }); }
+    }
+
     [HttpGet("donations")]
     public async Task<IActionResult> GetDonations(CancellationToken cancellationToken) =>
         Ok(await resourceService.GetDonationsAsync(cancellationToken));
@@ -230,5 +248,23 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         {
             return BadRequest(new { error = exception.Message });
         }
+    }
+
+    [Authorize(Roles = Managers)]
+    [HttpPatch("donations/{id:guid}/status")]
+    public async Task<IActionResult> UpdateDonationStatus(
+        Guid id,
+        UpdateHelpRequestStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var donation = await resourceService.UpdateDonationStatusAsync(id, request, cancellationToken);
+            return donation is null
+                ? NotFound(new { error = "Donation was not found." })
+                : Ok(donation);
+        }
+        catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
+        catch (InvalidOperationException exception) { return Conflict(new { error = exception.Message }); }
     }
 }

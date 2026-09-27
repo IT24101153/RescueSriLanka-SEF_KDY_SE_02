@@ -45,9 +45,19 @@ public interface IResourceManagementService
 
     Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken);
 
+    Task<HelpRequestResponse?> UpdateHelpRequestStatusAsync(
+        Guid id,
+        UpdateHelpRequestStatusRequest request,
+        CancellationToken cancellationToken);
+
     Task<DonationResponse> CreateDonationAsync(CreateDonationRequest request, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken);
+
+    Task<DonationResponse?> UpdateDonationStatusAsync(
+        Guid id,
+        UpdateHelpRequestStatusRequest request,
+        CancellationToken cancellationToken);
 }
 
 public class ResourceManagementService(AppDbContext dbContext) : IResourceManagementService
@@ -297,6 +307,30 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
             .ToListAsync(cancellationToken))
         .Select(ToResponse)];
 
+    public async Task<HelpRequestResponse?> UpdateHelpRequestStatusAsync(
+        Guid id,
+        UpdateHelpRequestStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        var status = request.Status.Trim();
+        if (status is not ("Accepted" or "Rejected"))
+        {
+            throw new ArgumentException("Request status must be Accepted or Rejected.");
+        }
+
+        var helpRequest = await dbContext.ResourceHelpRequests
+            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (helpRequest is null) return null;
+        if (helpRequest.Status == "Fulfilled")
+        {
+            throw new InvalidOperationException("A fulfilled request cannot be changed.");
+        }
+
+        helpRequest.Status = status;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ToResponse(helpRequest);
+    }
+
     public async Task<DonationResponse> CreateDonationAsync(
         CreateDonationRequest request,
         CancellationToken cancellationToken)
@@ -333,6 +367,30 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
             .ToListAsync(cancellationToken))
         .Select(ToResponse)];
 
+    public async Task<DonationResponse?> UpdateDonationStatusAsync(
+        Guid id,
+        UpdateHelpRequestStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        var status = request.Status.Trim();
+        if (status is not ("Accepted" or "Rejected"))
+        {
+            throw new ArgumentException("Donation status must be Accepted or Rejected.");
+        }
+
+        var donation = await dbContext.Donations
+            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (donation is null) return null;
+        if (donation.Status == "Accepted")
+        {
+            throw new InvalidOperationException("An accepted donation cannot be changed.");
+        }
+
+        donation.Status = status;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return ToResponse(donation);
+    }
+
     private static HelpRequestResponse ToResponse(HelpRequest request) => new(
         request.Id,
         request.RequesterName,
@@ -364,7 +422,7 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
             throw new ArgumentException("Allocation quantity must be greater than zero.");
         }
 
-        var resourceType = request.ResourceType.Trim();
+        var resourceType = NormalizeResourceType(request.ResourceType);
         var allocation = new ResourceAllocation
         {
             Id = Guid.NewGuid(),
@@ -391,6 +449,13 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
         }
 
         dbContext.ResourceAllocations.Add(allocation);
+        if (request.HelpRequestId is Guid helpRequestId)
+        {
+            var helpRequest = await dbContext.ResourceHelpRequests
+                .SingleOrDefaultAsync(item => item.Id == helpRequestId, cancellationToken)
+                ?? throw new KeyNotFoundException("Help request was not found.");
+            helpRequest.Status = "Fulfilled";
+        }
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToResponse(allocation);
     }
@@ -404,7 +469,7 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
             throw new ArgumentException("Allocation quantity must be greater than zero.");
         }
 
-        var resourceType = request.ResourceType.Trim();
+        var resourceType = NormalizeResourceType(request.ResourceType);
         Guid resourceId = resourceType.ToLowerInvariant() switch
         {
             "shelter" => await dbContext.Shelters
@@ -433,6 +498,22 @@ public class ResourceManagementService(AppDbContext dbContext) : IResourceManage
                 request.HelpRequestId,
                 request.IncidentId),
             cancellationToken);
+    }
+
+    private static string NormalizeResourceType(string? resourceType)
+    {
+        if (string.IsNullOrWhiteSpace(resourceType))
+        {
+            throw new ArgumentException("Resource type is required.");
+        }
+
+        return resourceType.Trim() switch
+        {
+            "Shelter" or "shelter" => "Shelter",
+            "MedicalSupply" or "medical" or "medicalsupply" => "MedicalSupply",
+            "FoodWaterStock" or "food" or "foodwaterstock" => "FoodWaterStock",
+            _ => throw new ArgumentException("Resource type must be Shelter, MedicalSupply, or FoodWaterStock.")
+        };
     }
 
     public async Task<ResourceAllocationResponse?> ReleaseAsync(

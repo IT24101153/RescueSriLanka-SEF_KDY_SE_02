@@ -88,6 +88,8 @@ public record HelpRequestResponse(
     string Status,
     DateTime CreatedAtUtc);
 
+public record UpdateHelpRequestStatusRequest(string Status);
+
 public record CreateDonationRequest(
     string DonorName,
     string ContactNumber,
