@@ -35,6 +35,16 @@ class ResourceApi {
     return _decode<HelpRequest>(response, path, HelpRequest.fromJson);
   }
 
+  Future<List<HelpRequest>> createHelpRequestsBatch({
+    required List<ResourceSubmissionItem> items,
+  }) async {
+    const path = '/api/resources/help-requests/batch';
+    final response = await _post(path, {
+      'items': items.map((item) => item.toJson()).toList(),
+    });
+    return _decodeList(response, path, HelpRequest.fromJson);
+  }
+
   Future<Donation> createDonation({
     required String name,
     required String phone,
@@ -53,6 +63,18 @@ class ResourceApi {
       'notes': notes,
     });
     return _decode<Donation>(response, path, Donation.fromJson);
+  }
+
+  Future<List<Donation>> createDonationsBatch({
+    required List<ResourceSubmissionItem> items,
+    String? notes,
+  }) async {
+    const path = '/api/resources/donations/batch';
+    final response = await _post(path, {
+      'items': items.map((item) => item.toJson()).toList(),
+      'notes': notes,
+    });
+    return _decodeList(response, path, Donation.fromJson);
   }
 
   Future<List<HelpRequest>> getHelpRequests() async {
@@ -155,6 +177,27 @@ class ResourceApi {
         .map((item) => factory(item as Map<String, dynamic>))
         .toList();
   }
+}
+
+class ResourceSubmissionItem {
+  const ResourceSubmissionItem({
+    required this.category,
+    required this.itemName,
+    required this.quantity,
+    required this.unit,
+  });
+
+  final String category;
+  final String itemName;
+  final double quantity;
+  final String unit;
+
+  Map<String, dynamic> toJson() => {
+        'category': category,
+        'itemName': itemName,
+        'quantity': quantity,
+        'unit': unit,
+      };
 }
 
 class HelpRequest {

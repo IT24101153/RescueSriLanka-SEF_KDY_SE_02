@@ -136,6 +136,207 @@ Color _statusTone(String status) {
   return AppColors.safe;
 }
 
+const _resourceCategories = <String, List<String>>{
+  'Food': ['Dry foods', 'Rice', 'Other'],
+  'Water': [],
+  'Medical': [
+    'Bandages',
+    'Plasters',
+    'Surgical spirits',
+    'Saline',
+    'Gauze / cotton packets',
+    'Other',
+  ],
+  'Sanitary products': ['Napkins', 'Other'],
+  'Hygiene items': ['Soap', 'Toothpaste', 'Toothbrushes', 'Other'],
+  'Other': ['Other'],
+};
+
+class _ResourceItemDraft {
+  String category = 'Food';
+  String item = 'Dry foods';
+  final customItem = TextEditingController();
+  final quantity = TextEditingController();
+  final unit = TextEditingController();
+
+  bool get needsCustomItem => category == 'Other' || item == 'Other';
+
+  String get itemName => category == 'Water'
+      ? 'Water'
+      : needsCustomItem
+      ? customItem.text.trim()
+      : item;
+
+  ResourceSubmissionItem toSubmissionItem() => ResourceSubmissionItem(
+    category: category,
+    itemName: itemName,
+    quantity: double.parse(quantity.text),
+    unit: unit.text.trim(),
+  );
+
+  void dispose() {
+    customItem.dispose();
+    quantity.dispose();
+    unit.dispose();
+  }
+}
+
+class _ResourceItemEditor extends StatelessWidget {
+  const _ResourceItemEditor({
+    required this.item,
+    required this.index,
+    required this.canRemove,
+    required this.onChanged,
+    required this.onRemove,
+    super.key,
+  });
+
+  final _ResourceItemDraft item;
+  final int index;
+  final bool canRemove;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final subcategories =
+        _resourceCategories[item.category] ?? const <String>[];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.gap),
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Item ${index + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (canRemove)
+                  IconButton(
+                    tooltip: 'Remove item',
+                    onPressed: onRemove,
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+              ],
+            ),
+            DropdownButtonFormField<String>(
+              key: ValueKey(
+                'category-${identityHashCode(item)}-${item.category}',
+              ),
+              initialValue: item.category,
+              decoration: const InputDecoration(
+                labelText: 'Category',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.category_outlined),
+              ),
+              items: _resourceCategories.keys
+                  .map(
+                    (category) => DropdownMenuItem(
+                      value: category,
+                      child: Text(category),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (category) {
+                if (category == null) return;
+                item.category = category;
+                item.item = _resourceCategories[category]?.first ?? '';
+                item.customItem.clear();
+                onChanged();
+              },
+            ),
+            if (subcategories.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.gap),
+              DropdownButtonFormField<String>(
+                key: ValueKey(
+                  'item-${identityHashCode(item)}-${item.category}-${item.item}',
+                ),
+                initialValue: item.item,
+                decoration: const InputDecoration(
+                  labelText: 'Item',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.inventory_2_outlined),
+                ),
+                items: subcategories
+                    .map(
+                      (subcategory) => DropdownMenuItem(
+                        value: subcategory,
+                        child: Text(subcategory),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (subcategory) {
+                  if (subcategory == null) return;
+                  item.item = subcategory;
+                  item.customItem.clear();
+                  onChanged();
+                },
+              ),
+            ],
+            if (item.needsCustomItem) ...[
+              const SizedBox(height: AppSpacing.gap),
+              TextFormField(
+                controller: item.customItem,
+                maxLength: 100,
+                decoration: const InputDecoration(
+                  labelText: 'Specify item',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.edit_outlined),
+                ),
+                validator: (value) => (value?.trim() ?? '').isEmpty
+                    ? 'Enter the item name.'
+                    : null,
+              ),
+            ],
+            const SizedBox(height: AppSpacing.gap),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: item.quantity,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Quantity',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.numbers),
+                    ),
+                    validator: (value) {
+                      final quantity = double.tryParse(value?.trim() ?? '');
+                      return quantity == null || quantity <= 0
+                          ? 'Enter a positive quantity.'
+                          : null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.gap),
+                Expanded(
+                  child: TextFormField(
+                    controller: item.unit,
+                    decoration: const InputDecoration(
+                      labelText: 'Unit',
+                      hintText: 'kg, packs, boxes',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.straighten),
+                    ),
+                    validator: (value) =>
+                        (value?.trim() ?? '').isEmpty ? 'Enter a unit.' : null,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class RequestHelpPage extends StatefulWidget {
   const RequestHelpPage({
     required this.api,
@@ -162,37 +363,54 @@ class RequestHelpPage extends StatefulWidget {
 
 class _RequestHelpPageState extends State<RequestHelpPage> {
   final _formKey = GlobalKey<FormState>();
-  final _description = TextEditingController();
-
-  String _needType = 'Food and water';
+  final List<_ResourceItemDraft> _items = [_ResourceItemDraft()];
   bool _submitting = false;
 
   @override
   void dispose() {
-    _description.dispose();
+    for (final item in _items) {
+      item.dispose();
+    }
     super.dispose();
+  }
+
+  void _addItem() => setState(() => _items.add(_ResourceItemDraft()));
+
+  void _removeItem(_ResourceItemDraft item) {
+    if (_items.length < 2) return;
+    setState(() {
+      _items.remove(item);
+      item.dispose();
+    });
   }
 
   Future<void> _submit() async {
     final user = widget.user;
     if (user == null || (user.phoneNumber?.trim().isEmpty ?? true)) {
-      _toast('Add your phone number in your profile before sending a request.', isError: true);
+      _toast(
+        'Add your phone number in your profile before sending a request.',
+        isError: true,
+      );
       return;
     }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _submitting = true);
     try {
-      await widget.api.createHelpRequest(
-        name: user.fullName,
-        phone: user.phoneNumber!.trim(),
-        needType: _needType,
-        description: _description.text,
+      await widget.api.createHelpRequestsBatch(
+        items: _items.map((item) => item.toSubmissionItem()).toList(),
       );
       if (!mounted) return;
-      _description.clear();
+      for (final item in _items) {
+        item.dispose();
+      }
+      setState(
+        () => _items
+          ..clear()
+          ..add(_ResourceItemDraft()),
+      );
       await widget.onSubmitted();
-      _toast('Your request was sent to the resource manager.');
+      _toast('Your items were sent to the resource manager.');
     } catch (error) {
       _toast(error.toString().replaceFirst('Exception: ', ''), isError: true);
     } finally {
@@ -241,41 +459,19 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: _needType,
-                decoration: const InputDecoration(
-                  labelText: 'Type of help needed',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.category_outlined),
+              for (var index = 0; index < _items.length; index++)
+                _ResourceItemEditor(
+                  key: ObjectKey(_items[index]),
+                  item: _items[index],
+                  index: index,
+                  canRemove: _items.length > 1,
+                  onChanged: () => setState(() {}),
+                  onRemove: () => _removeItem(_items[index]),
                 ),
-                items:
-                    const [
-                          'Food and water',
-                          'Medical aid',
-                          'Other',
-                        ]
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value),
-                          ),
-                        )
-                        .toList(),
-                onChanged: (value) => setState(() => _needType = value!),
-              ),
-              const SizedBox(height: AppSpacing.gap),
-              TextFormField(
-                controller: _description,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Describe what is needed',
-                  alignLabelWithHint: true,
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.notes_outlined),
-                ),
-                validator: (value) => (value?.trim() ?? '').isEmpty
-                    ? 'Please describe the need.'
-                    : null,
+              OutlinedButton.icon(
+                onPressed: _items.length >= 20 ? null : _addItem,
+                icon: const Icon(Icons.add),
+                label: const Text('Add another item'),
               ),
               const SizedBox(height: 18),
               AppPrimaryButton(
@@ -342,7 +538,12 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
 }
 
 class DonatePage extends StatefulWidget {
-  const DonatePage({required this.api, this.user, required this.onRefresh, super.key});
+  const DonatePage({
+    required this.api,
+    this.user,
+    required this.onRefresh,
+    super.key,
+  });
 
   final ResourceApi api;
   final AuthUser? user;
@@ -356,45 +557,26 @@ class DonatePage extends StatefulWidget {
 
 class _DonatePageState extends State<DonatePage> {
   final _formKey = GlobalKey<FormState>();
-  final _quantity = TextEditingController();
-  final _unit = TextEditingController();
   final _notes = TextEditingController();
-  final _customItem = TextEditingController();
-
-  String _donationCategory = 'Food';
-  String _donationItem = 'Dry foods';
+  final List<_ResourceItemDraft> _items = [_ResourceItemDraft()];
   bool _submitting = false;
 
-  static const Map<String, List<String>> _donationItems = {
-    'Food': ['Dry foods', 'Rice', 'Other'],
-    'Medical': [
-      'Bandages',
-      'Plasters',
-      'Surgical spirits',
-      'Saline',
-      'Gauze / cotton packets',
-      'Other',
-    ],
-    'Sanitary products': ['Napkins', 'Other'],
-    'Hygiene items': ['Soap', 'Toothpaste', 'Toothbrushes', 'Other'],
-    'Other': ['Other'],
-  };
+  void _addItem() => setState(() => _items.add(_ResourceItemDraft()));
 
-  bool get _needsCustomItem =>
-      _donationCategory == 'Other' || _donationItem == 'Other';
-
-  String get _donationType {
-    final item = _needsCustomItem ? _customItem.text.trim() : _donationItem;
-    return _donationCategory == 'Water'
-        ? 'Water'
-        : '$_donationCategory: $item';
+  void _removeItem(_ResourceItemDraft item) {
+    if (_items.length < 2) return;
+    setState(() {
+      _items.remove(item);
+      item.dispose();
+    });
   }
 
   @override
   void dispose() {
-    for (final controller in [_quantity, _unit, _notes, _customItem]) {
-      controller.dispose();
+    for (final item in _items) {
+      item.dispose();
     }
+    _notes.dispose();
     super.dispose();
   }
 
@@ -403,7 +585,9 @@ class _DonatePageState extends State<DonatePage> {
     if (user == null || (user.phoneNumber?.trim().isEmpty ?? true)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Add your phone number in your profile before donating.'),
+          content: Text(
+            'Add your phone number in your profile before donating.',
+          ),
           backgroundColor: AppColors.critical,
         ),
       );
@@ -413,19 +597,20 @@ class _DonatePageState extends State<DonatePage> {
 
     setState(() => _submitting = true);
     try {
-      await widget.api.createDonation(
-        name: user.fullName,
-        phone: user.phoneNumber!.trim(),
-        donationType: _donationType,
-        quantity: double.parse(_quantity.text),
-        unit: _unit.text,
+      await widget.api.createDonationsBatch(
+        items: _items.map((item) => item.toSubmissionItem()).toList(),
         notes: _notes.text,
       );
       if (!mounted) return;
-      _quantity.clear();
-      _unit.clear();
       _notes.clear();
-      _customItem.clear();
+      for (final item in _items) {
+        item.dispose();
+      }
+      setState(
+        () => _items
+          ..clear()
+          ..add(_ResourceItemDraft()),
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Thank you. The resource manager will contact you.'),
@@ -477,90 +662,19 @@ class _DonatePageState extends State<DonatePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: _donationCategory,
-                decoration: const InputDecoration(
-                  labelText: 'Donation category',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.category_outlined),
+              for (var index = 0; index < _items.length; index++)
+                _ResourceItemEditor(
+                  key: ObjectKey(_items[index]),
+                  item: _items[index],
+                  index: index,
+                  canRemove: _items.length > 1,
+                  onChanged: () => setState(() {}),
+                  onRemove: () => _removeItem(_items[index]),
                 ),
-                items: const [
-                  'Food',
-                  'Water',
-                  'Medical',
-                  'Sanitary products',
-                  'Hygiene items',
-                  'Other',
-                ].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    _donationCategory = value;
-                    _donationItem = _donationItems[value]?.first ?? '';
-                    _customItem.clear();
-                  });
-                },
-              ),
-              if (_donationCategory != 'Water') ...[
-                const SizedBox(height: AppSpacing.gap),
-                if (_donationItems[_donationCategory] case final options?)
-                  DropdownButtonFormField<String>(
-                    key: ValueKey(_donationCategory),
-                    initialValue: _donationItem,
-                    decoration: InputDecoration(
-                      labelText: '$_donationCategory item',
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(Icons.inventory_2_outlined),
-                    ),
-                    items: options
-                        .map((value) => DropdownMenuItem(value: value, child: Text(value)))
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() {
-                        _donationItem = value;
-                        _customItem.clear();
-                      });
-                    },
-                  ),
-              ],
-              if (_needsCustomItem) ...[
-                const SizedBox(height: AppSpacing.gap),
-                TextFormField(
-                  controller: _customItem,
-                  maxLength: 50,
-                  decoration: const InputDecoration(
-                    labelText: 'What item are you donating?',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.edit_outlined),
-                  ),
-                  validator: (value) => (value?.trim() ?? '').isEmpty
-                      ? 'Please enter the donated item.'
-                      : null,
-                ),
-              ],
-              const SizedBox(height: AppSpacing.gap),
-              Row(
-                children: [
-                  Expanded(
-                    child: _RequiredField(
-                      controller: _quantity,
-                      label: 'Quantity',
-                      icon: Icons.numbers,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.gap),
-                  Expanded(
-                    child: _RequiredField(
-                      controller: _unit,
-                      label: 'Unit (kg, boxes…)',
-                      icon: Icons.straighten,
-                    ),
-                  ),
-                ],
+              OutlinedButton.icon(
+                onPressed: _items.length >= 20 ? null : _addItem,
+                icon: const Icon(Icons.add),
+                label: const Text('Add another item'),
               ),
               const SizedBox(height: AppSpacing.gap),
               TextFormField(
@@ -703,36 +817,6 @@ class _SectionIntro extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// A required text field, styled like the report form's.
-class _RequiredField extends StatelessWidget {
-  const _RequiredField({
-    required this.controller,
-    required this.label,
-    required this.icon,
-    this.keyboardType,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final IconData icon;
-  final TextInputType? keyboardType;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-        prefixIcon: Icon(icon),
-      ),
-      validator: (value) =>
-          (value?.trim() ?? '').isEmpty ? 'This field is required.' : null,
     );
   }
 }

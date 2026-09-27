@@ -45,6 +45,59 @@ public class ResourceManagementServiceTests
     }
 
     [Fact]
+    public async Task BatchSubmissions_CreateOneManagerRecordPerItemWithProfileDetails()
+    {
+        await using var context = CreateContext();
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            FullName = "Nimal Perera",
+            Email = "nimal@example.com",
+            PasswordHash = "test-hash",
+            PhoneNumber = "0712345678",
+            District = "Kandy"
+        };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        var service = new ResourceManagementService(context);
+
+        var requests = await service.CreateHelpRequestsBatchAsync(
+            new CreateHelpRequestsBatchRequest(
+            [
+                new ResourceSubmissionItem("Food", "Rice", 5, "kg"),
+                new ResourceSubmissionItem("Medical", "Bandages", 2, "packs")
+            ]),
+            user.Id,
+            CancellationToken.None);
+        var donations = await service.CreateDonationsBatchAsync(
+            new CreateDonationsBatchRequest(
+            [
+                new ResourceSubmissionItem("Food", "Dry foods", 3, "bags"),
+                new ResourceSubmissionItem("Hygiene items", "Soap", 10, "bars")
+            ],
+            null),
+            user.Id,
+            CancellationToken.None);
+
+        Assert.Equal(2, requests.Count);
+        Assert.Equal(2, donations.Count);
+        Assert.Contains(requests, item => item.NeedType == "Food" && item.Description == "Rice - 5 kg");
+        Assert.All(requests, item =>
+        {
+            Assert.Equal(user.FullName, item.RequesterName);
+            Assert.Equal(user.PhoneNumber, item.ContactNumber);
+            Assert.Equal(user.District, item.District);
+        });
+        Assert.Contains(donations, item => item.DonationType == "Food: Dry foods" && item.Quantity == 3);
+        Assert.Contains(donations, item => item.DonationType == "Hygiene items: Soap" && item.Unit == "bars");
+        Assert.All(donations, item =>
+        {
+            Assert.Equal(user.FullName, item.DonorName);
+            Assert.Equal(user.PhoneNumber, item.ContactNumber);
+        });
+    }
+
+    [Fact]
     public async Task UpdateHelpRequestStatusAsync_AcceptsRequestAndAllocationFulfillsIt()
     {
         await using var context = CreateContext();

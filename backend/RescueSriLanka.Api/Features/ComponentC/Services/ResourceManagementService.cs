@@ -51,6 +51,8 @@ public interface IResourceManagementService
 
     Task<HelpRequestResponse> CreateHelpRequestAsync(CreateHelpRequestRequest request, Guid? userId, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<HelpRequestResponse>> CreateHelpRequestsBatchAsync(CreateHelpRequestsBatchRequest request, Guid userId, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken);
 
     Task<HelpRequestResponse?> UpdateHelpRequestStatusAsync(
@@ -59,6 +61,8 @@ public interface IResourceManagementService
         CancellationToken cancellationToken);
 
     Task<DonationResponse> CreateDonationAsync(CreateDonationRequest request, Guid? userId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<DonationResponse>> CreateDonationsBatchAsync(CreateDonationsBatchRequest request, Guid userId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken);
 
@@ -76,6 +80,9 @@ public class ResourceManagementService(
     IOptions<EmailOptions>? emailOptions = null,
     ILogger<ResourceManagementService>? logger = null) : IResourceManagementService
 {
+    private static readonly string[] ResourceCategories =
+        ["Food", "Water", "Medical", "Sanitary products", "Hygiene items", "Other"];
+
     public async Task<IReadOnlyList<Shelter>> GetSheltersAsync(CancellationToken cancellationToken) =>
         await dbContext.Shelters
             .AsNoTracking()
@@ -380,6 +387,36 @@ public class ResourceManagementService(
         return ToResponse(helpRequest, district);
     }
 
+    public async Task<IReadOnlyList<HelpRequestResponse>> CreateHelpRequestsBatchAsync(
+        CreateHelpRequestsBatchRequest request,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        ValidateSubmissionItems(request.Items);
+        var user = await dbContext.Users.AsNoTracking().SingleOrDefaultAsync(
+            candidate => candidate.Id == userId && candidate.IsActive,
+            cancellationToken)
+            ?? throw new ArgumentException("An active account is required to submit a resource request.");
+        if (string.IsNullOrWhiteSpace(user.PhoneNumber))
+        {
+            throw new ArgumentException("Add a phone number to your profile before submitting a request.");
+        }
+
+        var requests = request.Items.Select(item => new HelpRequest
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            RequesterName = user.FullName,
+            ContactNumber = user.PhoneNumber.Trim(),
+            NeedType = NormalizeResourceCategory(item.Category),
+            Description = $"{item.ItemName.Trim()} - {item.Quantity} {item.Unit.Trim()}"
+        }).ToArray();
+
+        dbContext.ResourceHelpRequests.AddRange(requests);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return [.. requests.Select(resourceRequest => ToResponse(resourceRequest, user.District))];
+    }
+
     public async Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken)
     {
         var requests = await dbContext.ResourceHelpRequests
@@ -472,6 +509,67 @@ public class ResourceManagementService(
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToResponse(donation, district);
     }
+
+    public async Task<IReadOnlyList<DonationResponse>> CreateDonationsBatchAsync(
+        CreateDonationsBatchRequest request,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        ValidateSubmissionItems(request.Items);
+        var user = await dbContext.Users.AsNoTracking().SingleOrDefaultAsync(
+            candidate => candidate.Id == userId && candidate.IsActive,
+            cancellationToken)
+            ?? throw new ArgumentException("An active account is required to submit donations.");
+        if (string.IsNullOrWhiteSpace(user.PhoneNumber))
+        {
+            throw new ArgumentException("Add a phone number to your profile before donating.");
+        }
+
+        var notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+        var donations = request.Items.Select(item => new Donation
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            DonorName = user.FullName,
+            ContactNumber = user.PhoneNumber.Trim(),
+            DonationType = $"{NormalizeResourceCategory(item.Category)}: {item.ItemName.Trim()}",
+            Quantity = item.Quantity,
+            Unit = item.Unit.Trim(),
+            Notes = notes
+        }).ToArray();
+
+        dbContext.Donations.AddRange(donations);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return [.. donations.Select(donation => ToResponse(donation, user.District))];
+    }
+
+    private static void ValidateSubmissionItems(IReadOnlyCollection<ResourceSubmissionItem> items)
+    {
+        if (items.Count is < 1 or > 20)
+        {
+            throw new ArgumentException("Submit between 1 and 20 items at a time.");
+        }
+
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.Category) ||
+                string.IsNullOrWhiteSpace(item.ItemName) ||
+                string.IsNullOrWhiteSpace(item.Unit) ||
+                item.ItemName.Trim().Length > 100 ||
+                item.Unit.Trim().Length > 40 ||
+                item.Quantity <= 0)
+            {
+                throw new ArgumentException("Each item needs a category, name, unit, and positive quantity.");
+            }
+
+            _ = NormalizeResourceCategory(item.Category);
+        }
+    }
+
+    private static string NormalizeResourceCategory(string category) =>
+        ResourceCategories.FirstOrDefault(value =>
+            string.Equals(value, category.Trim(), StringComparison.OrdinalIgnoreCase))
+        ?? throw new ArgumentException("Select a valid resource category.");
 
     public async Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken)
     {

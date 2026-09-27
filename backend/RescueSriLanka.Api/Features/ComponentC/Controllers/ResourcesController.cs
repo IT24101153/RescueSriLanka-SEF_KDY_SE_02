@@ -237,6 +237,28 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         }
     }
 
+    [Authorize]
+    [HttpPost("help-requests/batch")]
+    public async Task<IActionResult> CreateHelpRequestsBatch(
+        CreateHelpRequestsBatchRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var requests = await resourceService.CreateHelpRequestsBatchAsync(request, userId, cancellationToken);
+            return Ok(requests);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
+    }
+
     [Authorize(Roles = Managers)]
     [HttpPatch("help-requests/{id:guid}/status")]
     public async Task<IActionResult> UpdateHelpRequestStatus(
@@ -275,6 +297,28 @@ public class ResourcesController(IResourceManagementService resourceService) : C
                 : (Guid?)null;
             var donation = await resourceService.CreateDonationAsync(request, userId, cancellationToken);
             return Created($"api/resources/donations/{donation.Id}", donation);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
+    }
+
+    [Authorize]
+    [HttpPost("donations/batch")]
+    public async Task<IActionResult> CreateDonationsBatch(
+        CreateDonationsBatchRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var donations = await resourceService.CreateDonationsBatchAsync(request, userId, cancellationToken);
+            return Ok(donations);
         }
         catch (ArgumentException exception)
         {

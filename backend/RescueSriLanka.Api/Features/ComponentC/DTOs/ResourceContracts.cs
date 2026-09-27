@@ -100,6 +100,18 @@ public record CreateDonationRequest(
     string Unit,
     string? Notes);
 
+public record ResourceSubmissionItem(
+    string Category,
+    string ItemName,
+    decimal Quantity,
+    string Unit);
+
+public record CreateHelpRequestsBatchRequest(List<ResourceSubmissionItem> Items);
+
+public record CreateDonationsBatchRequest(
+    List<ResourceSubmissionItem> Items,
+    string? Notes);
+
 public record DonationResponse(
     Guid Id,
     Guid? UserId,

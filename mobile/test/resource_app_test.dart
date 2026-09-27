@@ -44,14 +44,14 @@ void main() {
     expect(find.text('Your name'), findsNothing);
     expect(find.text('Contact number'), findsNothing);
 
-    final requestTypeDropdown = find.byType(DropdownButtonFormField<String>);
+    final requestTypeDropdown = find.byType(DropdownButtonFormField<String>).first;
     await tester.ensureVisible(requestTypeDropdown);
     await tester.pumpAndSettle();
     await tester.tap(requestTypeDropdown);
     await tester.pumpAndSettle();
     expect(find.text('Shelter'), findsNothing);
     expect(find.text('Rescue'), findsNothing);
-    expect(find.text('Food and water'), findsWidgets);
+    expect(find.text('Food'), findsWidgets);
   });
 
   testWidgets('donation categories show medical subcategories and custom item', (
@@ -86,6 +86,34 @@ void main() {
 
     await tester.tap(find.text('Other').last);
     await tester.pumpAndSettle();
-    expect(find.text('What item are you donating?'), findsOneWidget);
+    expect(find.text('Specify item'), findsOneWidget);
+  });
+
+  testWidgets('request and donation forms can add another item row', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(theme: buildAppTheme(), home: const ResourceHomePage()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Item 1'), findsOneWidget);
+    final requestAddButton = find.text('Add another item').first;
+    await tester.ensureVisible(requestAddButton);
+    await tester.pumpAndSettle();
+    await tester.tap(requestAddButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Item 1'), findsOneWidget);
+    expect(find.text('Item 2'), findsOneWidget);
+
+    await tester.tap(find.text('Donate'));
+    await tester.pumpAndSettle();
+    expect(find.text('Item 1'), findsOneWidget);
+    final donationAddButton = find.text('Add another item').last;
+    await tester.ensureVisible(donationAddButton);
+    await tester.pumpAndSettle();
+    await tester.tap(donationAddButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Item 2'), findsOneWidget);
   });
 }
