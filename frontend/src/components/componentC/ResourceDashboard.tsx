@@ -13,7 +13,6 @@ function authHeaders(base?: Record<string, string>): Record<string, string> {
 
 type Supply = { id: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number }
 type FoodWaterStock = { id: string; itemName: string; unit: string; quantityOnHand: number; lowStockThreshold: number }
-type DonatedSupply = { id: string; donationId: string; name: string; donorName: string; quantityOnHand: number; unit: string; notes?: string | null; updatedAtUtc: string }
 type ManagedSupply = { id: string; category: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number; isActive: boolean; updatedAtUtc: string }
 type ResourceAlert = { resourceType: string; resourceId: string; name: string; quantityOnHand: number; lowStockThreshold: number; unit: string }
 type ResourceHelpRequest = { id: string; requesterName: string; contactNumber: string; needType: string; description: string; status: string; createdAtUtc: string; district?: string | null }
@@ -33,6 +32,7 @@ const MANAGED_SUPPLY_ITEMS: Record<string, string[]> = {
   'Hygiene items': ['Soap', 'Toothpaste', 'Toothbrushes', 'Other'],
   Other: ['Other'],
 }
+const SUPPLY_CATEGORIES = ['Food', 'Water', 'Medical', 'Sanitary products', 'Hygiene items', 'Other'] as const
 
 async function getResources<T>(path: string): Promise<T> {
   const response = await fetch(`/api/resources/${path}`)
@@ -46,7 +46,6 @@ async function getResources<T>(path: string): Promise<T> {
 function ResourceDashboard() {
   const [medicalSupplies, setMedicalSupplies] = useState<Supply[]>([])
   const [foodWaterStock, setFoodWaterStock] = useState<FoodWaterStock[]>([])
-  const [donatedSupplies, setDonatedSupplies] = useState<DonatedSupply[]>([])
   const [managedSupplies, setManagedSupplies] = useState<ManagedSupply[]>([])
   const [alerts, setAlerts] = useState<ResourceAlert[]>([])
   const [helpRequests, setHelpRequests] = useState<ResourceHelpRequest[]>([])
@@ -60,8 +59,8 @@ function ResourceDashboard() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [supplyForm, setSupplyForm] = useState<SupplyForm>({ name: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
   const [stockForm, setStockForm] = useState<StockForm>({ itemName: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
-  const [managedCategory, setManagedCategory] = useState('Food')
-  const [managedItem, setManagedItem] = useState('Dry foods')
+  const [managedCategory, setManagedCategory] = useState('Medical')
+  const [managedItem, setManagedItem] = useState('Bandages')
   const [managedCustomName, setManagedCustomName] = useState('')
   const [page, setPage] = useState<Page>('overview')
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null)
@@ -75,10 +74,9 @@ function ResourceDashboard() {
     setIsLoading(true)
     setError('')
     try {
-      const [medicalData, foodData, donatedData, managedData, alertData, helpRequestData, donationData] = await Promise.all([
+      const [medicalData, foodData, managedData, alertData, helpRequestData, donationData] = await Promise.all([
         getResources<Supply[]>('medical-supplies'),
         getResources<FoodWaterStock[]>('food-water-stock'),
-        getResources<DonatedSupply[]>('donated-supplies'),
         getResources<ManagedSupply[]>('managed-supplies'),
         getResources<ResourceAlert[]>('alerts/low-stock'),
         getResources<ResourceHelpRequest[]>('help-requests'),
@@ -86,7 +84,6 @@ function ResourceDashboard() {
       ])
       setMedicalSupplies(medicalData)
       setFoodWaterStock(foodData)
-      setDonatedSupplies(donatedData)
       setManagedSupplies(managedData)
       setAlerts(alertData)
       setHelpRequests(helpRequestData)
@@ -114,11 +111,11 @@ function ResourceDashboard() {
               : managedItem,
           unit: stockForm.unit,
           quantityOnHand: Number(stockForm.quantityOnHand),
-          lowStockThreshold: Number(stockForm.lowStockThreshold),
+          lowStockThreshold: 0,
         }
       : isMedical
-      ? { name: supplyForm.name, unit: supplyForm.unit, quantityOnHand: Number(supplyForm.quantityOnHand), lowStockThreshold: Number(supplyForm.lowStockThreshold) }
-      : { itemName: stockForm.itemName, unit: stockForm.unit, quantityOnHand: Number(stockForm.quantityOnHand), lowStockThreshold: Number(stockForm.lowStockThreshold) }
+      ? { name: supplyForm.name, unit: supplyForm.unit, quantityOnHand: Number(supplyForm.quantityOnHand), lowStockThreshold: 0 }
+      : { itemName: stockForm.itemName, unit: stockForm.unit, quantityOnHand: Number(stockForm.quantityOnHand), lowStockThreshold: 0 }
     try {
       const endpoint = isManaged ? '/api/resources/managed-supplies' : `/api/resources/${path}`
       const response = await fetch(editingId ? `${endpoint}/${editingId}` : endpoint, { method: editingId ? 'PUT' : 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
@@ -174,16 +171,6 @@ function ResourceDashboard() {
         unit: stock.unit,
         detail: 'Food / water',
       })),
-    ...donatedSupplies
-      .filter((supply) => supply.quantityOnHand > 0)
-      .map((supply) => ({
-        key: `DonatedSupply:${supply.id}`,
-        resourceType: 'DonatedSupply',
-        name: supply.name,
-        quantityOnHand: supply.quantityOnHand,
-        unit: supply.unit,
-        detail: `Donated by ${supply.donorName}`,
-      })),
     ...managedSupplies
       .filter((supply) => supply.quantityOnHand > 0)
       .map((supply) => ({
@@ -195,6 +182,21 @@ function ResourceDashboard() {
         detail: supply.category,
       })),
   ]
+  type InventoryTableRow = { id: string; name: string; unit: string; quantity: number; type: ResourceType }
+  const categoryInventory: Record<string, InventoryTableRow[]> = Object.fromEntries(
+    SUPPLY_CATEGORIES.map((category) => [category, []]),
+  )
+  for (const supply of medicalSupplies) {
+    categoryInventory.Medical.push({ id: supply.id, name: supply.name, unit: supply.unit, quantity: supply.quantityOnHand, type: 'medical' })
+  }
+  for (const stock of foodWaterStock) {
+    const category = /water/i.test(stock.itemName) ? 'Water' : 'Food'
+    categoryInventory[category].push({ id: stock.id, name: stock.itemName, unit: stock.unit, quantity: stock.quantityOnHand, type: 'food' })
+  }
+  for (const supply of managedSupplies) {
+    const category = SUPPLY_CATEGORIES.find((value) => value.toLowerCase() === supply.category.toLowerCase()) ?? 'Other'
+    categoryInventory[category].push({ id: supply.id, name: supply.name, unit: supply.unit, quantity: supply.quantityOnHand, type: 'managed' })
+  }
   const preferredSupplyKey = (needType: string) => {
     const need = needType.toLowerCase()
     const preferred = need.includes('medical')
@@ -213,7 +215,11 @@ function ResourceDashboard() {
 
   const openResourceForm = (type: ResourceType) => {
     setFormError('')
-    setResourceType(type)
+    setResourceType('managed')
+    const category = type === 'food' ? 'Food' : 'Medical'
+    setManagedCategory(category)
+    setManagedItem(MANAGED_SUPPLY_ITEMS[category][0])
+    setManagedCustomName('')
     setEditingId(null)
     setIsFormOpen(true)
   }
@@ -416,57 +422,43 @@ function ResourceDashboard() {
               <div className="modal-heading">
                 <div>
                   <p className="eyebrow">{editingId ? 'Update resource' : 'New resource'}</p>
-                  <h2 id="resource-form-title">{editingId ? 'Edit' : 'Add'} {resourceType === 'medical' ? 'medical supplies' : resourceType === 'food' ? 'food or water stock' : 'categorized supplies'}</h2>
+              <h2 id="resource-form-title">{editingId ? 'Edit' : 'Add'} {resourceType === 'medical' ? 'medical supplies' : resourceType === 'food' ? 'food or water stock' : 'supplies'}</h2>
                 </div>
                 <button className="close-button" type="button" aria-label="Close form" onClick={() => { setEditingId(null); setIsFormOpen(false) }}>x</button>
               </div>
-              <div className="resource-tabs" role="tablist" aria-label="Resource type">
-                <button className={resourceType === 'medical' ? 'selected' : ''} type="button" onClick={() => { setResourceType('medical'); setFormError('') }}>Medical supply</button>
-                <button className={resourceType === 'food' ? 'selected' : ''} type="button" onClick={() => { setResourceType('food'); setFormError('') }}>Food / water</button>
-                <button className={resourceType === 'managed' ? 'selected' : ''} type="button" onClick={() => { setResourceType('managed'); setEditingId(null); setFormError('') }}>Other categories</button>
-              </div>
               <form onSubmit={submitInventory}>
-                {resourceType === 'managed' && (
+                {resourceType === 'managed' ? (
                   <>
                     <label>
                       Category
-                      <select
-                        value={managedCategory}
-                        onChange={(event) => {
-                          const category = event.target.value
-                          setManagedCategory(category)
-                          setManagedItem(MANAGED_SUPPLY_ITEMS[category][0] ?? '')
-                          setManagedCustomName('')
-                        }}
-                      >
+                      <select value={managedCategory} onChange={(event) => {
+                        const category = event.target.value
+                        setManagedCategory(category)
+                        setManagedItem(MANAGED_SUPPLY_ITEMS[category][0] ?? '')
+                        setManagedCustomName('')
+                      }}>
                         {Object.keys(MANAGED_SUPPLY_ITEMS).map((category) => <option key={category} value={category}>{category}</option>)}
                       </select>
                     </label>
-                    {MANAGED_SUPPLY_ITEMS[managedCategory].length > 0 && (
-                      <label>
-                        Item
-                        <select
-                          value={managedItem}
-                          onChange={(event) => {
-                            setManagedItem(event.target.value)
-                            setManagedCustomName('')
-                          }}
-                        >
-                          {MANAGED_SUPPLY_ITEMS[managedCategory].map((item) => <option key={item} value={item}>{item}</option>)}
-                        </select>
-                      </label>
-                    )}
+                    <label>
+                      Item
+                      <select value={managedItem} onChange={(event) => {
+                        setManagedItem(event.target.value)
+                        setManagedCustomName('')
+                      }}>
+                        {MANAGED_SUPPLY_ITEMS[managedCategory].map((item) => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </label>
                     {(managedCategory === 'Other' || managedItem === 'Other') && (
                       <label>
-                        Supply name
+                        Item name
                         <input required maxLength={100} value={managedCustomName} onChange={(event) => setManagedCustomName(event.target.value)} />
                       </label>
                     )}
                   </>
-                )}
-                {resourceType !== 'managed' && (
+                ) : (
                   <label>
-                    {resourceType === 'medical' ? 'Supply name' : 'Item name'}
+                    Item
                     <input required value={resourceType === 'medical' ? supplyForm.name : stockForm.itemName} onChange={(event) => resourceType === 'medical' ? setSupplyForm({ ...supplyForm, name: event.target.value }) : setStockForm({ ...stockForm, itemName: event.target.value })} />
                   </label>
                 )}
@@ -478,10 +470,6 @@ function ResourceDashboard() {
                   <label>
                     Quantity on hand
                     <input required min="0" type="number" step="any" value={resourceType === 'medical' ? supplyForm.quantityOnHand : stockForm.quantityOnHand} onChange={(event) => resourceType === 'medical' ? setSupplyForm({ ...supplyForm, quantityOnHand: event.target.value }) : setStockForm({ ...stockForm, quantityOnHand: event.target.value })} />
-                  </label>
-                  <label>
-                    Low-stock threshold
-                    <input required min="0" type="number" step="any" value={resourceType === 'medical' ? supplyForm.lowStockThreshold : stockForm.lowStockThreshold} onChange={(event) => resourceType === 'medical' ? setSupplyForm({ ...supplyForm, lowStockThreshold: event.target.value }) : setStockForm({ ...stockForm, lowStockThreshold: event.target.value })} />
                   </label>
                 </div>
                 {formError && <p className="form-error" role="alert">{formError}</p>}
@@ -579,52 +567,40 @@ function ResourceDashboard() {
                 Add supply <span aria-hidden="true">+</span>
               </button>
             </div>
-            <div className="supply-cards">
-              {medicalSupplies.map((supply) => (
-                <div className="inventory-card" key={supply.id}>
-                  <span className="inventory-type">Medical</span>
-                  <strong>{supply.name}</strong>
-                  <span>{supply.quantityOnHand} {supply.unit} available</span>
-                  <small>Alert at {supply.lowStockThreshold} {supply.unit}</small>
-                  <div className="card-actions">
-                    <button className="edit-action" type="button" onClick={() => editSupply(supply)}>Edit</button>
-                    <button className="remove-action" type="button" onClick={() => setDeleteRequest({ type: 'medical', id: supply.id, label: supply.name })}>Remove</button>
-                  </div>
-                </div>
-              ))}
-              {foodWaterStock.map((stock) => (
-                <div className="inventory-card" key={stock.id}>
-                  <span className="inventory-type food">Food / water</span>
-                  <strong>{stock.itemName}</strong>
-                  <span>{stock.quantityOnHand} {stock.unit} available</span>
-                  <small>Alert at {stock.lowStockThreshold} {stock.unit}</small>
-                  <div className="card-actions">
-                    <button className="edit-action" type="button" onClick={() => editStock(stock)}>Edit</button>
-                    <button className="remove-action" type="button" onClick={() => setDeleteRequest({ type: 'food', id: stock.id, label: stock.itemName })}>Remove</button>
-                  </div>
-                </div>
-              ))}
-              {managedSupplies.map((supply) => (
-                <div className="inventory-card" key={supply.id}>
-                  <span className="inventory-type food">{supply.category}</span>
-                  <strong>{supply.name}</strong>
-                  <span>{supply.quantityOnHand} {supply.unit} available</span>
-                  <small>Alert at {supply.lowStockThreshold} {supply.unit}</small>
-                </div>
-              ))}
-              {donatedSupplies.map((supply) => (
-                <div className="inventory-card" key={supply.id}>
-                  <span className="inventory-type food">Community donation</span>
-                  <strong>{supply.name}</strong>
-                  <span>{supply.quantityOnHand} {supply.unit} available</span>
-                  <small>Donated by {supply.donorName}</small>
-                  {supply.notes && <small>{supply.notes}</small>}
-                </div>
-              ))}
+            <div className="category-inventory">
+              {SUPPLY_CATEGORIES.map((category) => {
+                const items = categoryInventory[category]
+                return (
+                  <section className="category-inventory-section" key={category} aria-labelledby={`inventory-${category.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`}>
+                    <div className="category-inventory-heading">
+                      <h3 id={`inventory-${category.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`}>{category}</h3>
+                      <span>{items.length} {items.length === 1 ? 'item' : 'items'}</span>
+                    </div>
+                    <div className="data-table inventory-table-wrap">
+                      <table className="inventory-table">
+                        <thead><tr><th>Supply</th><th>Available quantity</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody>
+                          {items.length === 0
+                            ? <tr><td className="inventory-empty" colSpan={4}>No supplies in this category yet.</td></tr>
+                            : items.map((item) => (
+                              <tr key={item.id}>
+                                <td>{item.name}</td>
+                                <td>{item.quantity} {item.unit}</td>
+                                <td><span className={`inventory-status ${item.quantity > 0 ? 'is-available' : 'is-empty'}`}>{item.quantity > 0 ? 'Available' : 'Out of stock'}</span></td>
+                                <td className="inventory-actions">
+                                  {item.type === 'medical' && <button className="edit-action" type="button" onClick={() => { const supply = medicalSupplies.find((value) => value.id === item.id); if (supply) editSupply(supply) }}>Edit</button>}
+                                  {item.type === 'food' && <button className="edit-action" type="button" onClick={() => { const stock = foodWaterStock.find((value) => value.id === item.id); if (stock) editStock(stock) }}>Edit</button>}
+                                  {item.type !== 'managed' && <button className="remove-action" type="button" onClick={() => setDeleteRequest({ type: item.type, id: item.id, label: item.name })}>Remove</button>}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )
+              })}
             </div>
-            <button className="secondary-button add-food-button" type="button" onClick={() => openResourceForm('food')}>
-              Add food or water stock
-            </button>
           </section>
         )}
 

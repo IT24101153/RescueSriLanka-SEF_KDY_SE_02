@@ -58,6 +58,15 @@ public class ResourceManagementServiceTests
             District = "Kandy"
         };
         context.Users.Add(user);
+        context.ManagedSupplies.Add(new ManagedSupply
+        {
+            Id = Guid.NewGuid(),
+            Category = "Hygiene items",
+            Name = "Soap",
+            Unit = "bars",
+            QuantityOnHand = 4,
+            LowStockThreshold = 1
+        });
         await context.SaveChangesAsync();
         var service = new ResourceManagementService(context);
 
@@ -104,7 +113,8 @@ public class ResourceManagementServiceTests
             CancellationToken.None);
         Assert.Equal(2, acceptedBatch!.Count);
         Assert.All(acceptedBatch, item => Assert.Equal("Accepted", item.Status));
-        Assert.Equal(2, await context.DonatedSupplies.CountAsync());
+        Assert.Equal(2, await context.ManagedSupplies.CountAsync());
+        Assert.Equal(14, (await context.ManagedSupplies.SingleAsync(item => item.Name == "Soap")).QuantityOnHand);
     }
 
     [Fact]
@@ -156,7 +166,7 @@ public class ResourceManagementServiceTests
             Id = donationId,
             DonorName = "Lanka Community Group",
             ContactNumber = "0812234567",
-            DonationType = "Food and water",
+            DonationType = "Food: Rice",
             Quantity = 50,
             Unit = "packs"
         });
@@ -170,9 +180,9 @@ public class ResourceManagementServiceTests
 
         Assert.Equal("Accepted", result!.Status);
         Assert.Equal("Accepted", (await context.Donations.FindAsync(donationId))!.Status);
-        var supply = await context.DonatedSupplies.SingleAsync();
-        Assert.Equal(donationId, supply.DonationId);
-        Assert.Equal("Food and water", supply.Name);
+        var supply = await context.ManagedSupplies.SingleAsync();
+        Assert.Equal("Food", supply.Category);
+        Assert.Equal("Rice", supply.Name);
         Assert.Equal(50, supply.QuantityOnHand);
         Assert.Equal("packs", supply.Unit);
     }

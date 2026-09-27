@@ -628,16 +628,7 @@ public class ResourceManagementService(
         donation.Status = status;
         if (status == "Accepted")
         {
-            dbContext.DonatedSupplies.Add(new DonatedSupply
-            {
-                Id = Guid.NewGuid(),
-                DonationId = donation.Id,
-                Name = donation.DonationType,
-                DonorName = donation.DonorName,
-                QuantityOnHand = donation.Quantity,
-                Unit = donation.Unit,
-                Notes = donation.Notes
-            });
+            await AddDonationToManagedStockAsync(donation, cancellationToken);
         }
         await dbContext.SaveChangesAsync(cancellationToken);
         if (status == "Accepted")
@@ -679,16 +670,7 @@ public class ResourceManagementService(
             donation.Status = status;
             if (status == "Accepted")
             {
-                dbContext.DonatedSupplies.Add(new DonatedSupply
-                {
-                    Id = Guid.NewGuid(),
-                    DonationId = donation.Id,
-                    Name = donation.DonationType,
-                    DonorName = donation.DonorName,
-                    QuantityOnHand = donation.Quantity,
-                    Unit = donation.Unit,
-                    Notes = donation.Notes
-                });
+                await AddDonationToManagedStockAsync(donation, cancellationToken);
             }
         }
 
@@ -711,6 +693,54 @@ public class ResourceManagementService(
             ? await dbContext.Users.AsNoTracking().Where(user => user.Id == id).Select(user => user.District).SingleOrDefaultAsync(cancellationToken)
             : null;
         return [.. donations.Select(donation => ToResponse(donation, district))];
+    }
+
+    private async Task AddDonationToManagedStockAsync(
+        Donation donation,
+        CancellationToken cancellationToken)
+    {
+        var (category, name) = DonationCategoryAndName(donation.DonationType);
+        var unit = donation.Unit.Trim();
+        var existing = await dbContext.ManagedSupplies.FirstOrDefaultAsync(supply =>
+            supply.IsActive &&
+            supply.Category == category &&
+            supply.Name.ToLower() == name.ToLower() &&
+            supply.Unit.ToLower() == unit.ToLower(),
+            cancellationToken);
+
+        if (existing is null)
+        {
+            dbContext.ManagedSupplies.Add(new ManagedSupply
+            {
+                Id = Guid.NewGuid(),
+                Category = category,
+                Name = name,
+                Unit = unit,
+                QuantityOnHand = donation.Quantity,
+                LowStockThreshold = 0
+            });
+            return;
+        }
+
+        existing.QuantityOnHand += donation.Quantity;
+        existing.UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    private static (string Category, string Name) DonationCategoryAndName(string donationType)
+    {
+        var separator = donationType.IndexOf(':');
+        if (separator > 0)
+        {
+            var categoryText = donationType[..separator].Trim();
+            var category = ResourceCategories.FirstOrDefault(value =>
+                string.Equals(value, categoryText, StringComparison.OrdinalIgnoreCase));
+            if (category is not null)
+            {
+                return (category, donationType[(separator + 1)..].Trim());
+            }
+        }
+
+        return ("Other", donationType.Trim());
     }
 
     private static HelpRequestResponse ToResponse(HelpRequest request, string? district) => new(
