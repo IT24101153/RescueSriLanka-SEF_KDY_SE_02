@@ -97,6 +97,27 @@ public class ResourcesController(IResourceManagementService resourceService) : C
     public async Task<IActionResult> GetFoodWaterStock(CancellationToken cancellationToken) =>
         Ok(await resourceService.GetFoodWaterStockAsync(cancellationToken));
 
+    [HttpGet("managed-supplies")]
+    public async Task<IActionResult> GetManagedSupplies(CancellationToken cancellationToken) =>
+        Ok(await resourceService.GetManagedSuppliesAsync(cancellationToken));
+
+    [Authorize(Roles = Managers)]
+    [HttpPost("managed-supplies")]
+    public async Task<IActionResult> CreateManagedSupply(
+        CreateManagedSupplyRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var supply = await resourceService.CreateManagedSupplyAsync(request, cancellationToken);
+            return Created($"api/resources/managed-supplies/{supply.Id}", supply);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
+    }
+
     [Authorize(Roles = Managers)]
     [HttpPost("food-water-stock")]
     public async Task<IActionResult> CreateFoodWaterStock(
@@ -237,6 +258,10 @@ public class ResourcesController(IResourceManagementService resourceService) : C
     [HttpGet("donations")]
     public async Task<IActionResult> GetDonations(CancellationToken cancellationToken) =>
         Ok(await resourceService.GetDonationsAsync(cancellationToken));
+
+    [HttpGet("donated-supplies")]
+    public async Task<IActionResult> GetDonatedSupplies(CancellationToken cancellationToken) =>
+        Ok(await resourceService.GetDonatedSuppliesAsync(cancellationToken));
 
     [HttpPost("donations")]
     public async Task<IActionResult> CreateDonation(

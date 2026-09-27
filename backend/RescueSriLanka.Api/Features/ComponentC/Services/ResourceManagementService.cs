@@ -29,6 +29,10 @@ public interface IResourceManagementService
 
     Task<IReadOnlyList<FoodWaterStock>> GetFoodWaterStockAsync(CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<ManagedSupply>> GetManagedSuppliesAsync(CancellationToken cancellationToken);
+
+    Task<ManagedSupply> CreateManagedSupplyAsync(CreateManagedSupplyRequest request, CancellationToken cancellationToken);
+
     Task<FoodWaterStock> CreateFoodWaterStockAsync(CreateFoodWaterStockRequest request, CancellationToken cancellationToken);
 
     Task<FoodWaterStock?> UpdateFoodWaterStockAsync(Guid id, UpdateFoodWaterStockRequest request, CancellationToken cancellationToken);
@@ -57,6 +61,8 @@ public interface IResourceManagementService
     Task<DonationResponse> CreateDonationAsync(CreateDonationRequest request, Guid? userId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<DonatedSupplyResponse>> GetDonatedSuppliesAsync(CancellationToken cancellationToken);
 
     Task<DonationResponse?> UpdateDonationStatusAsync(
         Guid id,
@@ -225,6 +231,42 @@ public class ResourceManagementService(
     public async Task<bool> DeleteFoodWaterStockAsync(Guid id, CancellationToken cancellationToken) =>
         await SoftDeleteAsync(dbContext.FoodWaterStocks, id, cancellationToken);
 
+    public async Task<IReadOnlyList<ManagedSupply>> GetManagedSuppliesAsync(CancellationToken cancellationToken) =>
+        await dbContext.ManagedSupplies
+            .AsNoTracking()
+            .Where(supply => supply.IsActive)
+            .OrderBy(supply => supply.Category)
+            .ThenBy(supply => supply.Name)
+            .ToListAsync(cancellationToken);
+
+    public async Task<ManagedSupply> CreateManagedSupplyAsync(
+        CreateManagedSupplyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var allowedCategories = new[] { "Food", "Water", "Medical", "Sanitary products", "Hygiene items", "Other" };
+        var category = allowedCategories.FirstOrDefault(value =>
+            string.Equals(value, request.Category.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (category is null)
+        {
+            throw new ArgumentException("Select a valid supply category.");
+        }
+
+        ValidateSupply(request.Name, request.Unit, request.QuantityOnHand, request.LowStockThreshold);
+        var supply = new ManagedSupply
+        {
+            Id = Guid.NewGuid(),
+            Category = category,
+            Name = request.Name.Trim(),
+            Unit = request.Unit.Trim(),
+            QuantityOnHand = request.QuantityOnHand,
+            LowStockThreshold = request.LowStockThreshold
+        };
+
+        dbContext.ManagedSupplies.Add(supply);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return supply;
+    }
+
     private static void ValidateShelter(string name, string address, int capacity)
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(address))
@@ -277,7 +319,19 @@ public class ResourceManagementService(
                 stock.Unit))
             .ToListAsync(cancellationToken);
 
-        return [.. supplyAlerts.Concat(stockAlerts)];
+        var managedSupplyAlerts = await dbContext.ManagedSupplies
+            .AsNoTracking()
+            .Where(supply => supply.IsActive && supply.QuantityOnHand <= supply.LowStockThreshold)
+            .Select(supply => new ResourceAlertResponse(
+                "ManagedSupply",
+                supply.Id,
+                $"{supply.Category}: {supply.Name}",
+                supply.QuantityOnHand,
+                supply.LowStockThreshold,
+                supply.Unit))
+            .ToListAsync(cancellationToken);
+
+        return [.. supplyAlerts.Concat(stockAlerts).Concat(managedSupplyAlerts)];
     }
 
     public async Task<HelpRequestResponse> CreateHelpRequestAsync(
@@ -430,6 +484,23 @@ public class ResourceManagementService(
         return [.. donations.Select(donation => ToResponse(donation, donation.UserId is Guid id && districts.TryGetValue(id, out var district) ? district : null))];
     }
 
+    public async Task<IReadOnlyList<DonatedSupplyResponse>> GetDonatedSuppliesAsync(CancellationToken cancellationToken) =>
+        [.. (await dbContext.DonatedSupplies
+            .AsNoTracking()
+            .Where(supply => supply.IsActive && supply.QuantityOnHand > 0)
+            .OrderBy(supply => supply.Name)
+            .ThenBy(supply => supply.UpdatedAtUtc)
+            .ToListAsync(cancellationToken))
+        .Select(supply => new DonatedSupplyResponse(
+            supply.Id,
+            supply.DonationId,
+            supply.Name,
+            supply.DonorName,
+            supply.QuantityOnHand,
+            supply.Unit,
+            supply.Notes,
+            supply.UpdatedAtUtc))];
+
     public async Task<DonationResponse?> UpdateDonationStatusAsync(
         Guid id,
         UpdateHelpRequestStatusRequest request,
@@ -450,6 +521,19 @@ public class ResourceManagementService(
         }
 
         donation.Status = status;
+        if (status == "Accepted")
+        {
+            dbContext.DonatedSupplies.Add(new DonatedSupply
+            {
+                Id = Guid.NewGuid(),
+                DonationId = donation.Id,
+                Name = donation.DonationType,
+                DonorName = donation.DonorName,
+                QuantityOnHand = donation.Quantity,
+                Unit = donation.Unit,
+                Notes = donation.Notes
+            });
+        }
         await dbContext.SaveChangesAsync(cancellationToken);
         if (status == "Accepted")
         {
@@ -611,6 +695,12 @@ public class ResourceManagementService(
             case "foodwaterstock":
                 await AllocateFoodWaterStockAsync(request, cancellationToken);
                 break;
+            case "donatedsupply":
+                await AllocateDonatedSupplyAsync(request, cancellationToken);
+                break;
+            case "managedsupply":
+                await AllocateManagedSupplyAsync(request, cancellationToken);
+                break;
             default:
                 // Clothes, Other, or custom resources do not require stock deduction.
                 break;
@@ -662,6 +752,16 @@ public class ResourceManagementService(
                 .OrderByDescending(stock => stock.QuantityOnHand)
                 .Select(stock => (Guid?)stock.Id)
                 .FirstOrDefaultAsync(cancellationToken) ?? throw new InvalidOperationException("No active food/water stock has enough availability."),
+            "donatedsupply" => await dbContext.DonatedSupplies
+                .Where(supply => supply.IsActive && supply.QuantityOnHand >= request.Quantity)
+                .OrderByDescending(supply => supply.QuantityOnHand)
+                .Select(supply => (Guid?)supply.Id)
+                .FirstOrDefaultAsync(cancellationToken) ?? throw new InvalidOperationException("No donated supply has enough availability."),
+            "managedsupply" => await dbContext.ManagedSupplies
+                .Where(supply => supply.IsActive && supply.QuantityOnHand >= request.Quantity)
+                .OrderByDescending(supply => supply.QuantityOnHand)
+                .Select(supply => (Guid?)supply.Id)
+                .FirstOrDefaultAsync(cancellationToken) ?? throw new InvalidOperationException("No manager-added supply has enough availability."),
             _ => Guid.NewGuid() // Clothes or custom items
         };
 
@@ -688,6 +788,8 @@ public class ResourceManagementService(
             "shelter" => "Shelter",
             "medicalsupply" or "medical" => "MedicalSupply",
             "foodwaterstock" or "food" => "FoodWaterStock",
+            "donatedsupply" => "DonatedSupply",
+            "managedsupply" => "ManagedSupply",
             "clothes" or "clothing" => "Clothes",
             _ => trimmed
         };
@@ -792,6 +894,46 @@ public class ResourceManagementService(
 
         stock.QuantityOnHand -= request.Quantity;
         stock.UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    private async Task AllocateDonatedSupplyAsync(AllocateResourceRequest request, CancellationToken cancellationToken)
+    {
+        var supply = await dbContext.DonatedSupplies.SingleOrDefaultAsync(
+            item => item.Id == request.ResourceId && item.IsActive,
+            cancellationToken)
+            ?? throw new KeyNotFoundException("Donated supply was not found.");
+
+        if (supply.QuantityOnHand < request.Quantity)
+        {
+            throw new InvalidOperationException("Donated supply stock is insufficient.");
+        }
+
+        supply.QuantityOnHand -= request.Quantity;
+        supply.UpdatedAtUtc = DateTime.UtcNow;
+        if (supply.QuantityOnHand == 0)
+        {
+            supply.IsActive = false;
+        }
+    }
+
+    private async Task AllocateManagedSupplyAsync(AllocateResourceRequest request, CancellationToken cancellationToken)
+    {
+        var supply = await dbContext.ManagedSupplies.SingleOrDefaultAsync(
+            item => item.Id == request.ResourceId && item.IsActive,
+            cancellationToken)
+            ?? throw new KeyNotFoundException("Manager-added supply was not found.");
+
+        if (supply.QuantityOnHand < request.Quantity)
+        {
+            throw new InvalidOperationException("Manager-added supply stock is insufficient.");
+        }
+
+        supply.QuantityOnHand -= request.Quantity;
+        supply.UpdatedAtUtc = DateTime.UtcNow;
+        if (supply.QuantityOnHand == 0)
+        {
+            supply.IsActive = false;
+        }
     }
 
     private static ResourceAllocationResponse ToResponse(ResourceAllocation allocation) =>

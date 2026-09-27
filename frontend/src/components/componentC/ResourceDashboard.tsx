@@ -13,15 +13,26 @@ function authHeaders(base?: Record<string, string>): Record<string, string> {
 
 type Supply = { id: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number }
 type FoodWaterStock = { id: string; itemName: string; unit: string; quantityOnHand: number; lowStockThreshold: number }
+type DonatedSupply = { id: string; donationId: string; name: string; donorName: string; quantityOnHand: number; unit: string; notes?: string | null; updatedAtUtc: string }
+type ManagedSupply = { id: string; category: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number; isActive: boolean; updatedAtUtc: string }
 type ResourceAlert = { resourceType: string; resourceId: string; name: string; quantityOnHand: number; lowStockThreshold: number; unit: string }
 type ResourceHelpRequest = { id: string; requesterName: string; contactNumber: string; needType: string; description: string; status: string; createdAtUtc: string; district?: string | null }
 type Donation = { id: string; donorName: string; contactNumber: string; donationType: string; quantity: number; unit: string; notes?: string; status: string; createdAtUtc: string; district?: string | null }
 type SupplyForm = { name: string; unit: string; quantityOnHand: string; lowStockThreshold: string }
 type StockForm = { itemName: string; unit: string; quantityOnHand: string; lowStockThreshold: string }
-type ResourceType = 'medical' | 'food'
+type ResourceType = 'medical' | 'food' | 'managed'
 type Page = 'overview' | 'supplies' | 'allocations' | 'donate'
 type DeleteRequest = { type: ResourceType; id: string; label: string }
-type FulfillmentRequest = { id: string; resourceType: string; customItem?: string; quantity: string }
+type FulfillmentRequest = { id: string; supplyKey: string; quantity: string }
+
+const MANAGED_SUPPLY_ITEMS: Record<string, string[]> = {
+  Food: ['Dry foods', 'Rice', 'Other'],
+  Water: [],
+  Medical: ['Bandages', 'Plasters', 'Surgical spirits', 'Saline', 'Gauze / cotton packets', 'Other'],
+  'Sanitary products': ['Napkins', 'Other'],
+  'Hygiene items': ['Soap', 'Toothpaste', 'Toothbrushes', 'Other'],
+  Other: ['Other'],
+}
 
 async function getResources<T>(path: string): Promise<T> {
   const response = await fetch(`/api/resources/${path}`)
@@ -35,6 +46,8 @@ async function getResources<T>(path: string): Promise<T> {
 function ResourceDashboard() {
   const [medicalSupplies, setMedicalSupplies] = useState<Supply[]>([])
   const [foodWaterStock, setFoodWaterStock] = useState<FoodWaterStock[]>([])
+  const [donatedSupplies, setDonatedSupplies] = useState<DonatedSupply[]>([])
+  const [managedSupplies, setManagedSupplies] = useState<ManagedSupply[]>([])
   const [alerts, setAlerts] = useState<ResourceAlert[]>([])
   const [helpRequests, setHelpRequests] = useState<ResourceHelpRequest[]>([])
   const [donations, setDonations] = useState<Donation[]>([])
@@ -47,6 +60,9 @@ function ResourceDashboard() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [supplyForm, setSupplyForm] = useState<SupplyForm>({ name: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
   const [stockForm, setStockForm] = useState<StockForm>({ itemName: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
+  const [managedCategory, setManagedCategory] = useState('Food')
+  const [managedItem, setManagedItem] = useState('Dry foods')
+  const [managedCustomName, setManagedCustomName] = useState('')
   const [page, setPage] = useState<Page>('overview')
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null)
   const [fulfillmentRequest, setFulfillmentRequest] = useState<FulfillmentRequest | null>(null)
@@ -58,15 +74,19 @@ function ResourceDashboard() {
     setIsLoading(true)
     setError('')
     try {
-      const [medicalData, foodData, alertData, helpRequestData, donationData] = await Promise.all([
+      const [medicalData, foodData, donatedData, managedData, alertData, helpRequestData, donationData] = await Promise.all([
         getResources<Supply[]>('medical-supplies'),
         getResources<FoodWaterStock[]>('food-water-stock'),
+        getResources<DonatedSupply[]>('donated-supplies'),
+        getResources<ManagedSupply[]>('managed-supplies'),
         getResources<ResourceAlert[]>('alerts/low-stock'),
         getResources<ResourceHelpRequest[]>('help-requests'),
         getResources<Donation[]>('donations'),
       ])
       setMedicalSupplies(medicalData)
       setFoodWaterStock(foodData)
+      setDonatedSupplies(donatedData)
+      setManagedSupplies(managedData)
       setAlerts(alertData)
       setHelpRequests(helpRequestData)
       setDonations(donationData)
@@ -82,19 +102,36 @@ function ResourceDashboard() {
     setIsSubmitting(true)
     setFormError('')
     const isMedical = resourceType === 'medical'
+    const isManaged = resourceType === 'managed'
     const path = isMedical ? 'medical-supplies' : 'food-water-stock'
     const form = isMedical ? supplyForm : stockForm
-    const body = isMedical
+    const body = isManaged
+      ? {
+          category: managedCategory,
+          name: managedCategory === 'Water'
+            ? 'Water'
+            : managedItem === 'Other' || managedCategory === 'Other'
+              ? managedCustomName.trim()
+              : managedItem,
+          unit: stockForm.unit,
+          quantityOnHand: Number(stockForm.quantityOnHand),
+          lowStockThreshold: Number(stockForm.lowStockThreshold),
+        }
+      : isMedical
       ? { name: supplyForm.name, unit: supplyForm.unit, quantityOnHand: Number(supplyForm.quantityOnHand), lowStockThreshold: Number(supplyForm.lowStockThreshold) }
       : { itemName: stockForm.itemName, unit: stockForm.unit, quantityOnHand: Number(stockForm.quantityOnHand), lowStockThreshold: Number(stockForm.lowStockThreshold) }
     try {
-      const response = await fetch(editingId ? `/api/resources/${path}/${editingId}` : `/api/resources/${path}`, { method: editingId ? 'PUT' : 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
+      const endpoint = isManaged ? '/api/resources/managed-supplies' : `/api/resources/${path}`
+      const response = await fetch(editingId ? `${endpoint}/${editingId}` : endpoint, { method: editingId ? 'PUT' : 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string; title?: string } | null
         throw new Error(result?.error ?? result?.title ?? `Unable to create ${isMedical ? 'the medical supply' : 'the food or water stock'}.`)
       }
       if (isMedical) setSupplyForm({ name: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
-      else setStockForm({ itemName: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
+      else if (isManaged) {
+        setStockForm({ itemName: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
+        setManagedCustomName('')
+      } else setStockForm({ itemName: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
       setEditingId(null)
       setIsFormOpen(false)
       await loadResources()
@@ -107,7 +144,7 @@ function ResourceDashboard() {
 
   useEffect(() => { void loadResources() }, [])
 
-  const totalSupplyValue = [...medicalSupplies, ...foodWaterStock]
+  const totalSupplyValue = [...medicalSupplies, ...foodWaterStock, ...managedSupplies]
   const totalAvailable = totalSupplyValue.reduce((sum, item) => sum + Number(item.quantityOnHand), 0)
   const totalThreshold = totalSupplyValue.reduce((sum, item) => sum + Number(item.lowStockThreshold), 0)
   const stockPercentage = totalAvailable + totalThreshold === 0
@@ -117,6 +154,57 @@ function ResourceDashboard() {
     name: 'name' in item ? item.name : item.itemName,
     percentage: Math.min(100, Math.round((Number(item.quantityOnHand) / Math.max(1, Number(item.quantityOnHand) + Number(item.lowStockThreshold))) * 100)),
   }))
+  const availableSupplies = [
+    ...medicalSupplies
+      .filter((supply) => supply.quantityOnHand > 0)
+      .map((supply) => ({
+        key: `MedicalSupply:${supply.id}`,
+        resourceType: 'MedicalSupply',
+        name: supply.name,
+        quantityOnHand: supply.quantityOnHand,
+        unit: supply.unit,
+        detail: 'Medical',
+      })),
+    ...foodWaterStock
+      .filter((stock) => stock.quantityOnHand > 0)
+      .map((stock) => ({
+        key: `FoodWaterStock:${stock.id}`,
+        resourceType: 'FoodWaterStock',
+        name: stock.itemName,
+        quantityOnHand: stock.quantityOnHand,
+        unit: stock.unit,
+        detail: 'Food / water',
+      })),
+    ...donatedSupplies
+      .filter((supply) => supply.quantityOnHand > 0)
+      .map((supply) => ({
+        key: `DonatedSupply:${supply.id}`,
+        resourceType: 'DonatedSupply',
+        name: supply.name,
+        quantityOnHand: supply.quantityOnHand,
+        unit: supply.unit,
+        detail: `Donated by ${supply.donorName}`,
+      })),
+    ...managedSupplies
+      .filter((supply) => supply.quantityOnHand > 0)
+      .map((supply) => ({
+        key: `ManagedSupply:${supply.id}`,
+        resourceType: 'ManagedSupply',
+        name: supply.name,
+        quantityOnHand: supply.quantityOnHand,
+        unit: supply.unit,
+        detail: supply.category,
+      })),
+  ]
+  const preferredSupplyKey = (needType: string) => {
+    const need = needType.toLowerCase()
+    const preferred = need.includes('medical')
+      ? availableSupplies.find((supply) => supply.resourceType === 'MedicalSupply')
+      : need.includes('food') || need.includes('water')
+        ? availableSupplies.find((supply) => supply.resourceType === 'FoodWaterStock')
+        : undefined
+    return (preferred ?? availableSupplies[0])?.key ?? ''
+  }
 
   const openResourceForm = (type: ResourceType) => {
     setFormError('')
@@ -207,23 +295,22 @@ function ResourceDashboard() {
   }
 
   const fulfillRequest = async () => {
-    if (!fulfillmentRequest || Number(fulfillmentRequest.quantity) <= 0) return
-    if (fulfillmentRequest.resourceType === 'Other' && !fulfillmentRequest.customItem?.trim()) {
-      setRequestActionError({ id: fulfillmentRequest.id, message: 'Please specify what resource is being sent.' })
+    if (!fulfillmentRequest || Number(fulfillmentRequest.quantity) <= 0 || !fulfillmentRequest.supplyKey) return
+    const [resourceType, resourceId] = fulfillmentRequest.supplyKey.split(':')
+    if (!resourceType || !resourceId) {
+      setRequestActionError({ id: fulfillmentRequest.id, message: 'Select an available supply first.' })
       return
     }
     setError('')
     setRequestActionError(null)
     setSendingRequestId(fulfillmentRequest.id)
-    const resolvedType = fulfillmentRequest.resourceType === 'Other'
-      ? (fulfillmentRequest.customItem?.trim() || 'Other')
-      : fulfillmentRequest.resourceType
     try {
-      const response = await fetch('/api/resources/allocations/match', {
+      const response = await fetch('/api/resources/allocations', {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
-          resourceType: resolvedType,
+          resourceType,
+          resourceId,
           quantity: Number(fulfillmentRequest.quantity),
           helpRequestId: fulfillmentRequest.id,
           incidentId: null,
@@ -316,19 +403,60 @@ function ResourceDashboard() {
               <div className="modal-heading">
                 <div>
                   <p className="eyebrow">{editingId ? 'Update resource' : 'New resource'}</p>
-                  <h2 id="resource-form-title">{editingId ? 'Edit' : 'Add'} {resourceType === 'medical' ? 'medical supplies' : 'food or water stock'}</h2>
+                  <h2 id="resource-form-title">{editingId ? 'Edit' : 'Add'} {resourceType === 'medical' ? 'medical supplies' : resourceType === 'food' ? 'food or water stock' : 'categorized supplies'}</h2>
                 </div>
                 <button className="close-button" type="button" aria-label="Close form" onClick={() => { setEditingId(null); setIsFormOpen(false) }}>x</button>
               </div>
               <div className="resource-tabs" role="tablist" aria-label="Resource type">
                 <button className={resourceType === 'medical' ? 'selected' : ''} type="button" onClick={() => { setResourceType('medical'); setFormError('') }}>Medical supply</button>
                 <button className={resourceType === 'food' ? 'selected' : ''} type="button" onClick={() => { setResourceType('food'); setFormError('') }}>Food / water</button>
+                <button className={resourceType === 'managed' ? 'selected' : ''} type="button" onClick={() => { setResourceType('managed'); setEditingId(null); setFormError('') }}>Other categories</button>
               </div>
               <form onSubmit={submitInventory}>
-                <label>
-                  {resourceType === 'medical' ? 'Supply name' : 'Item name'}
-                  <input required value={resourceType === 'medical' ? supplyForm.name : stockForm.itemName} onChange={(event) => resourceType === 'medical' ? setSupplyForm({ ...supplyForm, name: event.target.value }) : setStockForm({ ...stockForm, itemName: event.target.value })} />
-                </label>
+                {resourceType === 'managed' && (
+                  <>
+                    <label>
+                      Category
+                      <select
+                        value={managedCategory}
+                        onChange={(event) => {
+                          const category = event.target.value
+                          setManagedCategory(category)
+                          setManagedItem(MANAGED_SUPPLY_ITEMS[category][0] ?? '')
+                          setManagedCustomName('')
+                        }}
+                      >
+                        {Object.keys(MANAGED_SUPPLY_ITEMS).map((category) => <option key={category} value={category}>{category}</option>)}
+                      </select>
+                    </label>
+                    {MANAGED_SUPPLY_ITEMS[managedCategory].length > 0 && (
+                      <label>
+                        Item
+                        <select
+                          value={managedItem}
+                          onChange={(event) => {
+                            setManagedItem(event.target.value)
+                            setManagedCustomName('')
+                          }}
+                        >
+                          {MANAGED_SUPPLY_ITEMS[managedCategory].map((item) => <option key={item} value={item}>{item}</option>)}
+                        </select>
+                      </label>
+                    )}
+                    {(managedCategory === 'Other' || managedItem === 'Other') && (
+                      <label>
+                        Supply name
+                        <input required maxLength={100} value={managedCustomName} onChange={(event) => setManagedCustomName(event.target.value)} />
+                      </label>
+                    )}
+                  </>
+                )}
+                {resourceType !== 'managed' && (
+                  <label>
+                    {resourceType === 'medical' ? 'Supply name' : 'Item name'}
+                    <input required value={resourceType === 'medical' ? supplyForm.name : stockForm.itemName} onChange={(event) => resourceType === 'medical' ? setSupplyForm({ ...supplyForm, name: event.target.value }) : setStockForm({ ...stockForm, itemName: event.target.value })} />
+                  </label>
+                )}
                 <label>
                   Unit
                   <input required placeholder="e.g. boxes, litres, kg, sets" value={resourceType === 'medical' ? supplyForm.unit : stockForm.unit} onChange={(event) => resourceType === 'medical' ? setSupplyForm({ ...supplyForm, unit: event.target.value }) : setStockForm({ ...stockForm, unit: event.target.value })} />
@@ -463,6 +591,23 @@ function ResourceDashboard() {
                   </div>
                 </div>
               ))}
+              {managedSupplies.map((supply) => (
+                <div className="inventory-card" key={supply.id}>
+                  <span className="inventory-type food">{supply.category}</span>
+                  <strong>{supply.name}</strong>
+                  <span>{supply.quantityOnHand} {supply.unit} available</span>
+                  <small>Alert at {supply.lowStockThreshold} {supply.unit}</small>
+                </div>
+              ))}
+              {donatedSupplies.map((supply) => (
+                <div className="inventory-card" key={supply.id}>
+                  <span className="inventory-type food">Community donation</span>
+                  <strong>{supply.name}</strong>
+                  <span>{supply.quantityOnHand} {supply.unit} available</span>
+                  <small>Donated by {supply.donorName}</small>
+                  {supply.notes && <small>{supply.notes}</small>}
+                </div>
+              ))}
             </div>
             <button className="secondary-button add-food-button" type="button" onClick={() => openResourceForm('food')}>
               Add food or water stock
@@ -547,26 +692,23 @@ function ResourceDashboard() {
                       </>
                     )}
                     {request.status === 'Accepted' && !fulfillmentRequest && (
+                      <>
                       <button
                         className="primary-button compact-button"
                         type="button"
+                        disabled={availableSupplies.length === 0}
                         onClick={() =>
                           setFulfillmentRequest({
                             id: request.id,
-                            resourceType: request.needType.toLowerCase().includes('medical')
-                              ? 'MedicalSupply'
-                              : request.needType.toLowerCase().includes('cloth')
-                              ? 'Clothes'
-                              : request.needType.toLowerCase().includes('food')
-                              ? 'FoodWaterStock'
-                              : 'Other',
-                            customItem: request.needType,
+                            supplyKey: preferredSupplyKey(request.needType),
                             quantity: '1',
                           })
                         }
                       >
                         Send resources
                       </button>
+                      {availableSupplies.length === 0 && <span>No supplies in stock</span>}
+                      </>
                     )}
                     {request.status === 'Fulfilled' && <span className="fulfilled-label">Sent</span>}
                   </div>
@@ -575,42 +717,27 @@ function ResourceDashboard() {
                       <label>
                         Resource
                         <select
-                          value={fulfillmentRequest.resourceType}
+                          value={fulfillmentRequest.supplyKey}
                           onChange={(event) =>
                             setFulfillmentRequest({
                               ...fulfillmentRequest,
-                              resourceType: event.target.value,
+                              supplyKey: event.target.value,
                             })
                           }
                         >
-                          <option value="FoodWaterStock">Food / water</option>
-                          <option value="MedicalSupply">Medical supply</option>
-                          <option value="Clothes">Clothes</option>
-                          <option value="Other">Other</option>
+                          <option value="" disabled>Select an available supply</option>
+                          {availableSupplies.map((supply) => (
+                            <option key={supply.key} value={supply.key}>
+                              {supply.name} · {supply.quantityOnHand} {supply.unit} · {supply.detail}
+                            </option>
+                          ))}
                         </select>
                       </label>
-                      {fulfillmentRequest.resourceType === 'Other' && (
-                        <label>
-                          Specify resource
-                          <input
-                            type="text"
-                            placeholder="e.g. Blankets, Tents, Hygiene kits"
-                            value={fulfillmentRequest.customItem ?? ''}
-                            onChange={(event) =>
-                              setFulfillmentRequest({
-                                ...fulfillmentRequest,
-                                customItem: event.target.value,
-                              })
-                            }
-                            required
-                          />
-                        </label>
-                      )}
                       <label>
                         Quantity
                         <input
                           min="1"
-                          step="any"
+                          step={fulfillmentRequest.supplyKey.startsWith('MedicalSupply:') ? '1' : 'any'}
                           type="number"
                           value={fulfillmentRequest.quantity}
                           onChange={(event) =>
@@ -631,7 +758,7 @@ function ResourceDashboard() {
                       <button
                         className="primary-button"
                         type="button"
-                        disabled={sendingRequestId === request.id}
+                        disabled={sendingRequestId === request.id || !fulfillmentRequest.supplyKey}
                         onClick={() => void fulfillRequest()}
                       >
                         {sendingRequestId === request.id ? 'Sending…' : 'Send now'}

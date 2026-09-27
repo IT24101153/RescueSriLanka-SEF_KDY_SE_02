@@ -53,4 +53,39 @@ void main() {
     expect(find.text('Rescue'), findsNothing);
     expect(find.text('Food and water'), findsWidgets);
   });
+
+  testWidgets('donation categories show medical subcategories and custom item', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(theme: buildAppTheme(), home: const ResourceHomePage()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Donate'));
+    await tester.pumpAndSettle();
+
+    final dropdowns = find.byType(DropdownButtonFormField<String>);
+    await tester.ensureVisible(dropdowns.first);
+    await tester.tap(dropdowns.first);
+    await tester.pumpAndSettle();
+    expect(find.text('Food'), findsWidgets);
+    expect(find.text('Water'), findsWidgets);
+    expect(find.text('Medical'), findsWidgets);
+    expect(find.text('Sanitary products'), findsWidgets);
+    expect(find.text('Hygiene items'), findsWidgets);
+
+    await tester.tap(find.text('Medical').last);
+    await tester.pumpAndSettle();
+    final medicalItemDropdown = find.byType(DropdownButtonFormField<String>).last;
+    await tester.ensureVisible(medicalItemDropdown);
+    await tester.tap(medicalItemDropdown);
+    await tester.pumpAndSettle();
+    expect(find.text('Bandages'), findsWidgets);
+    expect(find.text('Plasters'), findsOneWidget);
+    expect(find.text('Saline'), findsOneWidget);
+
+    await tester.tap(find.text('Other').last);
+    await tester.pumpAndSettle();
+    expect(find.text('What item are you donating?'), findsOneWidget);
+  });
 }

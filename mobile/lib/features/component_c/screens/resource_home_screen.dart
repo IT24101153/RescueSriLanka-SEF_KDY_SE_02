@@ -359,13 +359,40 @@ class _DonatePageState extends State<DonatePage> {
   final _quantity = TextEditingController();
   final _unit = TextEditingController();
   final _notes = TextEditingController();
+  final _customItem = TextEditingController();
 
-  String _donationType = 'Food and water';
+  String _donationCategory = 'Food';
+  String _donationItem = 'Dry foods';
   bool _submitting = false;
+
+  static const Map<String, List<String>> _donationItems = {
+    'Food': ['Dry foods', 'Rice', 'Other'],
+    'Medical': [
+      'Bandages',
+      'Plasters',
+      'Surgical spirits',
+      'Saline',
+      'Gauze / cotton packets',
+      'Other',
+    ],
+    'Sanitary products': ['Napkins', 'Other'],
+    'Hygiene items': ['Soap', 'Toothpaste', 'Toothbrushes', 'Other'],
+    'Other': ['Other'],
+  };
+
+  bool get _needsCustomItem =>
+      _donationCategory == 'Other' || _donationItem == 'Other';
+
+  String get _donationType {
+    final item = _needsCustomItem ? _customItem.text.trim() : _donationItem;
+    return _donationCategory == 'Water'
+        ? 'Water'
+        : '$_donationCategory: $item';
+  }
 
   @override
   void dispose() {
-    for (final controller in [_quantity, _unit, _notes]) {
+    for (final controller in [_quantity, _unit, _notes, _customItem]) {
       controller.dispose();
     }
     super.dispose();
@@ -398,6 +425,7 @@ class _DonatePageState extends State<DonatePage> {
       _quantity.clear();
       _unit.clear();
       _notes.clear();
+      _customItem.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Thank you. The resource manager will contact you.'),
@@ -450,28 +478,67 @@ class _DonatePageState extends State<DonatePage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               DropdownButtonFormField<String>(
-                initialValue: _donationType,
+                initialValue: _donationCategory,
                 decoration: const InputDecoration(
-                  labelText: 'What are you donating?',
+                  labelText: 'Donation category',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.category_outlined),
                 ),
-                items:
-                    const [
-                          'Food and water',
-                          'Medical supplies',
-                          'Clothing',
-                          'Other',
-                        ]
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value),
-                          ),
-                        )
-                        .toList(),
-                onChanged: (value) => setState(() => _donationType = value!),
+                items: const [
+                  'Food',
+                  'Water',
+                  'Medical',
+                  'Sanitary products',
+                  'Hygiene items',
+                  'Other',
+                ].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _donationCategory = value;
+                    _donationItem = _donationItems[value]?.first ?? '';
+                    _customItem.clear();
+                  });
+                },
               ),
+              if (_donationCategory != 'Water') ...[
+                const SizedBox(height: AppSpacing.gap),
+                if (_donationItems[_donationCategory] case final options?)
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(_donationCategory),
+                    initialValue: _donationItem,
+                    decoration: InputDecoration(
+                      labelText: '$_donationCategory item',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.inventory_2_outlined),
+                    ),
+                    items: options
+                        .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _donationItem = value;
+                        _customItem.clear();
+                      });
+                    },
+                  ),
+              ],
+              if (_needsCustomItem) ...[
+                const SizedBox(height: AppSpacing.gap),
+                TextFormField(
+                  controller: _customItem,
+                  maxLength: 50,
+                  decoration: const InputDecoration(
+                    labelText: 'What item are you donating?',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.edit_outlined),
+                  ),
+                  validator: (value) => (value?.trim() ?? '').isEmpty
+                      ? 'Please enter the donated item.'
+                      : null,
+                ),
+              ],
               const SizedBox(height: AppSpacing.gap),
               Row(
                 children: [

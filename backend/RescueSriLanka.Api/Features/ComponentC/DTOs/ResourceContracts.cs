@@ -112,3 +112,20 @@ public record DonationResponse(
     string Status,
     DateTime CreatedAtUtc,
     string? District);
+
+public record DonatedSupplyResponse(
+    Guid Id,
+    Guid DonationId,
+    string Name,
+    string DonorName,
+    decimal QuantityOnHand,
+    string Unit,
+    string? Notes,
+    DateTime UpdatedAtUtc);
+
+public record CreateManagedSupplyRequest(
+    string Category,
+    string Name,
+    string Unit,
+    decimal QuantityOnHand,
+    decimal LowStockThreshold);

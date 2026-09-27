@@ -107,7 +107,79 @@ public class ResourceManagementServiceTests
 
         Assert.Equal("Accepted", result!.Status);
         Assert.Equal("Accepted", (await context.Donations.FindAsync(donationId))!.Status);
+        var supply = await context.DonatedSupplies.SingleAsync();
+        Assert.Equal(donationId, supply.DonationId);
+        Assert.Equal("Food and water", supply.Name);
+        Assert.Equal(50, supply.QuantityOnHand);
+        Assert.Equal("packs", supply.Unit);
     }
+
+    [Fact]
+    public async Task AllocateAsync_DeductsSelectedDonatedSupply()
+    {
+        await using var context = CreateContext();
+        var supplyId = Guid.NewGuid();
+        context.DonatedSupplies.Add(new DonatedSupply
+        {
+            Id = supplyId,
+            DonationId = Guid.NewGuid(),
+            Name = "Clothing",
+            DonorName = "Community group",
+            QuantityOnHand = 12,
+            Unit = "bags"
+        });
+        await context.SaveChangesAsync();
+
+        var service = new ResourceManagementService(context);
+        var allocation = await service.AllocateAsync(
+            new AllocateResourceRequest("DonatedSupply", supplyId, 5, null, null),
+            CancellationToken.None);
+
+        Assert.Equal(supplyId, allocation.ResourceId);
+        Assert.Equal(7, (await context.DonatedSupplies.FindAsync(supplyId))!.QuantityOnHand);
+    }
+
+    [Fact]
+    public async Task CreateManagedSupplyAsync_PreservesCategoryAndStockDetails()
+    {
+        await using var context = CreateContext();
+        var service = new ResourceManagementService(context);
+
+        var result = await service.CreateManagedSupplyAsync(
+            new CreateManagedSupplyRequest("Hygiene items", "Toothbrushes", "packs", 25, 5),
+            CancellationToken.None);
+
+        Assert.Equal("Hygiene items", result.Category);
+        Assert.Equal("Toothbrushes", result.Name);
+        Assert.Equal(25, result.QuantityOnHand);
+        Assert.Contains(await service.GetManagedSuppliesAsync(CancellationToken.None), supply => supply.Id == result.Id);
+    }
+
+    [Fact]
+    public async Task AllocateAsync_DeductsSelectedManagedSupply()
+    {
+        await using var context = CreateContext();
+        var supplyId = Guid.NewGuid();
+        context.ManagedSupplies.Add(new ManagedSupply
+        {
+            Id = supplyId,
+            Category = "Sanitary products",
+            Name = "Napkins",
+            Unit = "packs",
+            QuantityOnHand = 12,
+            LowStockThreshold = 2
+        });
+        await context.SaveChangesAsync();
+
+        var service = new ResourceManagementService(context);
+        var allocation = await service.AllocateAsync(
+            new AllocateResourceRequest("ManagedSupply", supplyId, 5, null, null),
+            CancellationToken.None);
+
+        Assert.Equal(supplyId, allocation.ResourceId);
+        Assert.Equal(7, (await context.ManagedSupplies.FindAsync(supplyId))!.QuantityOnHand);
+    }
+
     [Fact]
     public async Task MatchAndAllocateAsync_UsesShelterWithEnoughCapacity()
     {
