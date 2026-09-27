@@ -138,7 +138,7 @@ Color _statusTone(String status) {
 
 const _resourceCategories = <String, List<String>>{
   'Food': ['Dry foods', 'Rice', 'Other'],
-  'Water': [],
+  'Water': ['Bottled water', 'Drinking water', 'Water containers', 'Other'],
   'Medical': [
     'Bandages',
     'Plasters',
@@ -161,9 +161,7 @@ class _ResourceItemDraft {
 
   bool get needsCustomItem => category == 'Other' || item == 'Other';
 
-  String get itemName => category == 'Water'
-      ? 'Water'
-      : needsCustomItem
+  String get itemName => needsCustomItem
       ? customItem.text.trim()
       : item;
 

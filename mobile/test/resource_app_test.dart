@@ -74,6 +74,24 @@ void main() {
     expect(find.text('Sanitary products'), findsWidgets);
     expect(find.text('Hygiene items'), findsWidgets);
 
+    await tester.tap(find.text('Water').last);
+    await tester.pumpAndSettle();
+    final waterItemDropdown = find.byType(DropdownButtonFormField<String>).last;
+    await tester.ensureVisible(waterItemDropdown);
+    await tester.tap(waterItemDropdown);
+    await tester.pumpAndSettle();
+    expect(find.text('Bottled water'), findsWidgets);
+    expect(find.text('Water containers'), findsOneWidget);
+
+    await tester.tap(find.text('Bottled water').last);
+    await tester.pumpAndSettle();
+    final donationCategoryDropdown = find.byType(
+      DropdownButtonFormField<String>,
+    ).first;
+    await tester.ensureVisible(donationCategoryDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(donationCategoryDropdown);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Medical').last);
     await tester.pumpAndSettle();
     final medicalItemDropdown = find.byType(DropdownButtonFormField<String>).last;

@@ -343,4 +343,23 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
         catch (InvalidOperationException exception) { return Conflict(new { error = exception.Message }); }
     }
+
+    [Authorize(Roles = Managers)]
+    [HttpPatch("donations/batch/{submissionId:guid}/status")]
+    public async Task<IActionResult> UpdateDonationBatchStatus(
+        Guid submissionId,
+        UpdateHelpRequestStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var donations = await resourceService.UpdateDonationBatchStatusAsync(
+                submissionId, request, cancellationToken);
+            return donations is null
+                ? NotFound(new { error = "Donation submission was not found." })
+                : Ok(donations);
+        }
+        catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
+        catch (InvalidOperationException exception) { return Conflict(new { error = exception.Message }); }
+    }
 }

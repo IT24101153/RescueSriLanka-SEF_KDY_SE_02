@@ -115,6 +115,7 @@ public record CreateDonationsBatchRequest(
 public record DonationResponse(
     Guid Id,
     Guid? UserId,
+    Guid? SubmissionId,
     string DonorName,
     string ContactNumber,
     string DonationType,

@@ -72,6 +72,11 @@ public interface IResourceManagementService
         Guid id,
         UpdateHelpRequestStatusRequest request,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<DonationResponse>?> UpdateDonationBatchStatusAsync(
+        Guid submissionId,
+        UpdateHelpRequestStatusRequest request,
+        CancellationToken cancellationToken);
 }
 
 public class ResourceManagementService(
@@ -526,10 +531,12 @@ public class ResourceManagementService(
         }
 
         var notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+        var submissionId = Guid.NewGuid();
         var donations = request.Items.Select(item => new Donation
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
+            SubmissionId = submissionId,
             DonorName = user.FullName,
             ContactNumber = user.PhoneNumber.Trim(),
             DonationType = $"{NormalizeResourceCategory(item.Category)}: {item.ItemName.Trim()}",
@@ -647,6 +654,65 @@ public class ResourceManagementService(
         return ToResponse(donation, district);
     }
 
+    public async Task<IReadOnlyList<DonationResponse>?> UpdateDonationBatchStatusAsync(
+        Guid submissionId,
+        UpdateHelpRequestStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        var status = request.Status.Trim();
+        if (status is not ("Accepted" or "Rejected"))
+        {
+            throw new ArgumentException("Donation status must be Accepted or Rejected.");
+        }
+
+        var donations = await dbContext.Donations
+            .Where(item => item.SubmissionId == submissionId)
+            .ToListAsync(cancellationToken);
+        if (donations.Count == 0) return null;
+        if (donations.Any(item => item.Status == "Accepted"))
+        {
+            throw new InvalidOperationException("An accepted donation submission cannot be changed.");
+        }
+
+        foreach (var donation in donations)
+        {
+            donation.Status = status;
+            if (status == "Accepted")
+            {
+                dbContext.DonatedSupplies.Add(new DonatedSupply
+                {
+                    Id = Guid.NewGuid(),
+                    DonationId = donation.Id,
+                    Name = donation.DonationType,
+                    DonorName = donation.DonorName,
+                    QuantityOnHand = donation.Quantity,
+                    Unit = donation.Unit,
+                    Notes = donation.Notes
+                });
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        if (status == "Accepted")
+        {
+            var user = await FindUserForDonationAsync(donations[0], cancellationToken);
+            if (user is not null)
+            {
+                QueueAcceptedEmail(
+                    user,
+                    "donation",
+                    string.Join(", ", donations.Select(item => item.DonationType)),
+                    string.Join("; ", donations.Select(item => $"{item.Quantity} {item.Unit}")));
+            }
+        }
+
+        var userId = donations[0].UserId;
+        var district = userId is Guid id
+            ? await dbContext.Users.AsNoTracking().Where(user => user.Id == id).Select(user => user.District).SingleOrDefaultAsync(cancellationToken)
+            : null;
+        return [.. donations.Select(donation => ToResponse(donation, district))];
+    }
+
     private static HelpRequestResponse ToResponse(HelpRequest request, string? district) => new(
         request.Id,
         request.UserId,
@@ -663,6 +729,7 @@ public class ResourceManagementService(
     private static DonationResponse ToResponse(Donation donation, string? district) => new(
         donation.Id,
         donation.UserId,
+        donation.SubmissionId,
         donation.DonorName,
         donation.ContactNumber,
         donation.DonationType,

@@ -17,7 +17,7 @@ type DonatedSupply = { id: string; donationId: string; name: string; donorName: 
 type ManagedSupply = { id: string; category: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number; isActive: boolean; updatedAtUtc: string }
 type ResourceAlert = { resourceType: string; resourceId: string; name: string; quantityOnHand: number; lowStockThreshold: number; unit: string }
 type ResourceHelpRequest = { id: string; requesterName: string; contactNumber: string; needType: string; description: string; status: string; createdAtUtc: string; district?: string | null }
-type Donation = { id: string; donorName: string; contactNumber: string; donationType: string; quantity: number; unit: string; notes?: string; status: string; createdAtUtc: string; district?: string | null }
+type Donation = { id: string; userId?: string | null; submissionId?: string | null; donorName: string; contactNumber: string; donationType: string; quantity: number; unit: string; notes?: string | null; status: string; createdAtUtc: string; district?: string | null }
 type SupplyForm = { name: string; unit: string; quantityOnHand: string; lowStockThreshold: string }
 type StockForm = { itemName: string; unit: string; quantityOnHand: string; lowStockThreshold: string }
 type ResourceType = 'medical' | 'food' | 'managed'
@@ -27,7 +27,7 @@ type FulfillmentRequest = { id: string; supplyKey: string; quantity: string }
 
 const MANAGED_SUPPLY_ITEMS: Record<string, string[]> = {
   Food: ['Dry foods', 'Rice', 'Other'],
-  Water: [],
+  Water: ['Bottled water', 'Drinking water', 'Water containers', 'Other'],
   Medical: ['Bandages', 'Plasters', 'Surgical spirits', 'Saline', 'Gauze / cotton packets', 'Other'],
   'Sanitary products': ['Napkins', 'Other'],
   'Hygiene items': ['Soap', 'Toothpaste', 'Toothbrushes', 'Other'],
@@ -69,6 +69,7 @@ function ResourceDashboard() {
   const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null)
   const [sendingRequestId, setSendingRequestId] = useState<string | null>(null)
   const [requestActionError, setRequestActionError] = useState<{ id: string; message: string } | null>(null)
+  const [updatingDonationKey, setUpdatingDonationKey] = useState<string | null>(null)
 
   const loadResources = async () => {
     setIsLoading(true)
@@ -108,9 +109,7 @@ function ResourceDashboard() {
     const body = isManaged
       ? {
           category: managedCategory,
-          name: managedCategory === 'Water'
-            ? 'Water'
-            : managedItem === 'Other' || managedCategory === 'Other'
+          name: managedItem === 'Other' || managedCategory === 'Other'
               ? managedCustomName.trim()
               : managedItem,
           unit: stockForm.unit,
@@ -205,6 +204,12 @@ function ResourceDashboard() {
         : undefined
     return (preferred ?? availableSupplies[0])?.key ?? ''
   }
+  const donationGroups = Object.entries(donations.reduce<Record<string, Donation[]>>((groups, donation) => {
+    const key = donation.submissionId ?? `single:${donation.id}`
+    if (!groups[key]) groups[key] = []
+    groups[key].push(donation)
+    return groups
+  }, {})).map(([key, items]) => ({ key, items }))
 
   const openResourceForm = (type: ResourceType) => {
     setFormError('')
@@ -276,10 +281,16 @@ function ResourceDashboard() {
     }
   }
 
-  const updateDonationStatus = async (id: string, status: 'Accepted' | 'Rejected') => {
+  const updateDonationStatus = async (submission: Donation[], status: 'Accepted' | 'Rejected') => {
     setError('')
+    const first = submission[0]
+    const key = first.submissionId ?? first.id
+    setUpdatingDonationKey(key)
     try {
-      const response = await fetch(`/api/resources/donations/${id}/status`, {
+      const endpoint = first.submissionId
+        ? `/api/resources/donations/batch/${first.submissionId}/status`
+        : `/api/resources/donations/${first.id}/status`
+      const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ status }),
@@ -291,6 +302,8 @@ function ResourceDashboard() {
       await loadResources()
     } catch (statusError) {
       setError(statusError instanceof Error ? statusError.message : 'Unable to update the donation.')
+    } finally {
+      setUpdatingDonationKey(null)
     }
   }
 
@@ -627,32 +640,41 @@ function ResourceDashboard() {
             <div className="data-table">
               {isLoading && <p className="empty-state">Loading donations...</p>}
               {!isLoading && donations.length === 0 && <p className="empty-state">No donation offers yet.</p>}
-              {donations.map((donation) => (
-                <div className="data-row request-row" key={donation.id}>
-                  <div>
-                    <strong>{donation.donationType}</strong>
-                    <span>{donation.quantity} {donation.unit}</span>
+              {donationGroups.map(({ key, items }) => {
+                const first = items[0]
+                const pending = items.some((item) => item.status === 'PendingReview')
+                const accepted = items.every((item) => item.status === 'Accepted')
+                const rejected = items.every((item) => item.status === 'Rejected')
+                return (
+                  <div className="data-row request-row" key={key}>
+                    <div>
+                      <strong>{items.length === 1 ? first.donationType : `${items.length} donated items`}</strong>
+                      {items.map((item) => (
+                        <span key={item.id}>{item.donationType}: {item.quantity} {item.unit}</span>
+                      ))}
+                    </div>
+                    <div>
+                      <strong>{first.donorName}</strong>
+                      <span>{first.contactNumber}</span>
+                      <span>{first.district || 'District not set'}</span>
+                    </div>
+                    <div>
+                      <strong>{accepted ? 'Accepted' : rejected ? 'Rejected' : first.status}</strong>
+                      <span>{items.map((item) => item.notes).filter((note): note is string => Boolean(note)).join(' · ') || 'No notes provided'}</span>
+                    </div>
+                    <div className="request-actions">
+                      {pending && (
+                        <>
+                          <button className="primary-button compact-button" type="button" disabled={updatingDonationKey === key} onClick={() => void updateDonationStatus(items, 'Accepted')}>{updatingDonationKey === key ? 'Accepting…' : 'Accept all'}</button>
+                          <button className="danger-button compact-button" type="button" disabled={updatingDonationKey === key} onClick={() => void updateDonationStatus(items, 'Rejected')}>{updatingDonationKey === key ? 'Updating…' : 'Reject all'}</button>
+                        </>
+                      )}
+                      {accepted && <span className="fulfilled-label">Accepted</span>}
+                      {rejected && <span className="fulfilled-label">Rejected</span>}
+                    </div>
                   </div>
-                  <div>
-                    <strong>{donation.donorName}</strong>
-                    <span>{donation.contactNumber}</span>
-                    <span>{donation.district || 'District not set'}</span>
-                  </div>
-                  <div>
-                    <strong>{donation.status}</strong>
-                    <span>{donation.notes || 'No notes provided'}</span>
-                  </div>
-                  <div className="request-actions">
-                    {donation.status === 'PendingReview' && (
-                      <>
-                        <button className="primary-button compact-button" type="button" onClick={() => void updateDonationStatus(donation.id, 'Accepted')}>Accept</button>
-                        <button className="danger-button compact-button" type="button" onClick={() => void updateDonationStatus(donation.id, 'Rejected')}>Reject</button>
-                      </>
-                    )}
-                    {donation.status === 'Accepted' && <span className="fulfilled-label">Accepted</span>}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </section>
         )}

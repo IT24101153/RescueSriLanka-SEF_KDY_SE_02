@@ -308,6 +308,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(donation => donation.Notes).HasMaxLength(1000);
             entity.Property(donation => donation.Status).HasMaxLength(30).IsRequired();
             entity.HasIndex(donation => new { donation.Status, donation.CreatedAtUtc });
+            entity.HasIndex(donation => donation.SubmissionId);
         });
 
         modelBuilder.Entity<DonatedSupply>(entity =>

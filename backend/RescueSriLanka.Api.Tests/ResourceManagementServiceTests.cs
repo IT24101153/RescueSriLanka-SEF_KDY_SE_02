@@ -81,6 +81,8 @@ public class ResourceManagementServiceTests
 
         Assert.Equal(2, requests.Count);
         Assert.Equal(2, donations.Count);
+        Assert.NotNull(donations[0].SubmissionId);
+        Assert.Equal(donations[0].SubmissionId, donations[1].SubmissionId);
         Assert.Contains(requests, item => item.NeedType == "Food" && item.Description == "Rice - 5 kg");
         Assert.All(requests, item =>
         {
@@ -95,6 +97,14 @@ public class ResourceManagementServiceTests
             Assert.Equal(user.FullName, item.DonorName);
             Assert.Equal(user.PhoneNumber, item.ContactNumber);
         });
+
+        var acceptedBatch = await service.UpdateDonationBatchStatusAsync(
+            donations[0].SubmissionId!.Value,
+            new UpdateHelpRequestStatusRequest("Accepted"),
+            CancellationToken.None);
+        Assert.Equal(2, acceptedBatch!.Count);
+        Assert.All(acceptedBatch, item => Assert.Equal("Accepted", item.Status));
+        Assert.Equal(2, await context.DonatedSupplies.CountAsync());
     }
 
     [Fact]
