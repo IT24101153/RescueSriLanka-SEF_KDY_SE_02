@@ -15,6 +15,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
         Task<HelpRequestResponseDto?> GetByIdAsync(Guid id);
         Task<List<HelpRequestResponseDto>> GetAllAsync();
         Task<List<HelpRequestResponseDto>> GetByCitizenAsync(Guid citizenId);
+        Task<HelpRequestResponseDto?> UpdateAsync(Guid id, Guid citizenId, UpdateHelpRequestDto dto);
         Task<HelpRequestResponseDto?> UpdateStatusAsync(Guid id, Guid changedByUserId, UpdateHelpRequestStatusDto dto);
         Task<List<StatusHistoryDto>> GetHistoryAsync(Guid id);
         Task<HelpRequestResponseDto?> VerifyAsync(Guid id, Guid verifiedByUserId, VerifyHelpRequestDto dto);
@@ -26,6 +27,8 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
 
         public async Task<HelpRequestResponseDto> CreateAsync(Guid citizenId, CreateHelpRequestDto dto)
         {
+            await EnsureRelatedIncidentExistsAsync(dto.RelatedIncidentId);
+
             var entity = new HelpRequest
             {
                 CitizenId = citizenId,
@@ -73,10 +76,42 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             return [.. entities.Select(ToDto)];
         }
 
+        public async Task<HelpRequestResponseDto?> UpdateAsync(Guid id, Guid citizenId, UpdateHelpRequestDto dto)
+        {
+            var entity = await _db.HelpRequests.FindAsync(id);
+            if (entity is null) return null;
+            if (entity.CitizenId != citizenId)
+                throw new UnauthorizedAccessException("Only the requester can edit this help request.");
+            if (entity.Status != HelpRequestStatus.Pending ||
+                entity.VerificationStatus != VerificationStatus.PendingVerification)
+            {
+                throw new InvalidOperationException(
+                    "A request can only be edited while it is pending verification and assignment.");
+            }
+
+            await EnsureRelatedIncidentExistsAsync(dto.RelatedIncidentId);
+            entity.Type = dto.Type;
+            entity.Description = dto.Description;
+            entity.Latitude = dto.Latitude;
+            entity.Longitude = dto.Longitude;
+            entity.RelatedIncidentId = dto.RelatedIncidentId;
+            entity.ImageUrl = dto.ImageUrl;
+            entity.UrgencyScore = await CalculateUrgencyScoreAsync(entity);
+            entity.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return ToDto(entity);
+        }
+
         public async Task<HelpRequestResponseDto?> UpdateStatusAsync(Guid id, Guid changedByUserId, UpdateHelpRequestStatusDto dto)
         {
             var entity = await _db.HelpRequests.FindAsync(id);
             if (entity is null) return null;
+
+            if (!IsAllowedStatusTransition(entity.Status, dto.NewStatus))
+            {
+                throw new InvalidOperationException(
+                    $"Cannot change a help request from {entity.Status} to {dto.NewStatus}.");
+            }
 
             var oldStatus = entity.Status;
             entity.Status = dto.NewStatus;
@@ -114,7 +149,19 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             // behaviour is wanted (e.g. leave status untouched).
             if (!dto.IsReal)
             {
+                var oldStatus = entity.Status;
                 entity.Status = HelpRequestStatus.Cancelled;
+                if (oldStatus != HelpRequestStatus.Cancelled)
+                {
+                    _db.RequestStatusHistories.Add(new RequestStatusHistory
+                    {
+                        HelpRequestId = entity.Id,
+                        OldStatus = oldStatus,
+                        NewStatus = HelpRequestStatus.Cancelled,
+                        ChangedByUserId = verifiedByUserId,
+                        Notes = dto.Notes ?? "Report rejected during verification."
+                    });
+                }
             }
 
             await _db.SaveChangesAsync();
@@ -163,6 +210,28 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             score = Math.Min(score, 100);
             return await Task.FromResult(score);
         }
+
+        private async Task EnsureRelatedIncidentExistsAsync(Guid? incidentId)
+        {
+            if (incidentId is not null &&
+                !await _db.Incidents.AnyAsync(incident => incident.Id == incidentId.Value))
+            {
+                throw new ArgumentException("The related incident does not exist.", nameof(incidentId));
+            }
+        }
+
+        private static bool IsAllowedStatusTransition(
+            HelpRequestStatus current,
+            HelpRequestStatus next) => (current, next) switch
+        {
+            (HelpRequestStatus.Pending, HelpRequestStatus.Assigned) => true,
+            (HelpRequestStatus.Pending, HelpRequestStatus.Cancelled) => true,
+            (HelpRequestStatus.Assigned, HelpRequestStatus.InProgress) => true,
+            (HelpRequestStatus.Assigned, HelpRequestStatus.Cancelled) => true,
+            (HelpRequestStatus.InProgress, HelpRequestStatus.Resolved) => true,
+            (HelpRequestStatus.InProgress, HelpRequestStatus.Cancelled) => true,
+            _ => false
+        };
 
         private static HelpRequestResponseDto ToDto(HelpRequest entity) => new()
         {

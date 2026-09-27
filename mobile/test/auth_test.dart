@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mobile/shared/models/auth.dart';
@@ -11,22 +12,23 @@ import 'package:mobile/shared/services/auth_service.dart';
 
 /// Builds an AuthResponse body the way the API returns one.
 String authBody({DateTime? expiresAt}) => jsonEncode({
-      'token': 'test-token',
-      'expiresAt': (expiresAt ?? DateTime.now().add(const Duration(hours: 8)))
-          .toIso8601String(),
-      'user': {
-        'id': '11111111-1111-1111-1111-111111111111',
-        'fullName': 'Nimali Perera',
-        'email': 'nimali@example.lk',
-        'role': 'Citizen',
-      },
-    });
+  'token': 'test-token',
+  'expiresAt': (expiresAt ?? DateTime.now().add(const Duration(hours: 8)))
+      .toIso8601String(),
+  'user': {
+    'id': '11111111-1111-1111-1111-111111111111',
+    'fullName': 'Nimali Perera',
+    'email': 'nimali@example.lk',
+    'role': 'Citizen',
+  },
+});
 
 void main() {
   setUp(() {
     // Each test starts with empty storage, so a saved session cannot leak
     // between them.
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
   });
 
   group('AuthSession', () {
@@ -46,9 +48,11 @@ void main() {
 
     test('knows when it has expired', () {
       final stale = AuthSession.fromJson(
-        jsonDecode(authBody(
-          expiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
-        )) as Map<String, dynamic>,
+        jsonDecode(
+          authBody(
+            expiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
+          ),
+        ) as Map<String, dynamic>,
       );
 
       expect(stale.isExpired, isTrue);
@@ -70,8 +74,12 @@ void main() {
       expect(auth.isSignedIn, isTrue);
       expect(auth.token, 'test-token');
 
+      expect(
+        await const FlutterSecureStorage().read(key: 'rsl.session'),
+        isNotNull,
+      );
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('rsl.session'), isNotNull);
+      expect(prefs.getString('rsl.session'), isNull);
     });
 
     test('reports bad credentials without signing in', () async {
@@ -127,14 +135,18 @@ void main() {
       await auth.signOut();
 
       expect(auth.isSignedIn, isFalse);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('rsl.session'), isNull);
+      expect(
+        await const FlutterSecureStorage().read(key: 'rsl.session'),
+        isNull,
+      );
     });
 
     test('restore brings back a valid stored session', () async {
-      SharedPreferences.setMockInitialValues({'rsl.session': authBody()});
+      FlutterSecureStorage.setMockInitialValues({'rsl.session': authBody()});
 
-      final auth = AuthService(client: MockClient((_) async => http.Response('{}', 500)));
+      final auth = AuthService(
+        client: MockClient((_) async => http.Response('{}', 500)),
+      );
       await auth.restore();
 
       expect(auth.isSignedIn, isTrue);
@@ -142,17 +154,39 @@ void main() {
     });
 
     test('restore discards an expired token instead of using it', () async {
-      SharedPreferences.setMockInitialValues({
+      FlutterSecureStorage.setMockInitialValues({
         'rsl.session': authBody(
           expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
         ),
       });
 
-      final auth = AuthService(client: MockClient((_) async => http.Response('{}', 500)));
+      final auth = AuthService(
+        client: MockClient((_) async => http.Response('{}', 500)),
+      );
       await auth.restore();
 
       // An expired token would otherwise fail every later call with a 401.
       expect(auth.isSignedIn, isFalse);
+      expect(
+        await const FlutterSecureStorage().read(key: 'rsl.session'),
+        isNull,
+      );
+    });
+
+    test('migrates a legacy session into secure storage and removes its plain copy', () async {
+      SharedPreferences.setMockInitialValues({'rsl.session': authBody()});
+      FlutterSecureStorage.setMockInitialValues({});
+      final auth = AuthService(
+        client: MockClient((_) async => http.Response('{}', 500)),
+      );
+
+      await auth.restore();
+
+      expect(auth.isSignedIn, isTrue);
+      expect(
+        await const FlutterSecureStorage().read(key: 'rsl.session'),
+        isNotNull,
+      );
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('rsl.session'), isNull);
     });
@@ -160,9 +194,13 @@ void main() {
 
   group('ApiClient writes', () {
     test('refuse to send without a session', () async {
-      final api = ApiClient(auth: AuthService(client: MockClient((_) async {
-        fail('No request should reach the network without a token.');
-      })));
+      final api = ApiClient(
+        auth: AuthService(
+          client: MockClient((_) async {
+            fail('No request should reach the network without a token.');
+          }),
+        ),
+      );
 
       await expectLater(
         api.createIncident(
@@ -172,7 +210,13 @@ void main() {
           latitude: 6.9271,
           longitude: 79.8612,
         ),
-        throwsA(isA<ApiException>().having((e) => e.isUnauthorized, 'isUnauthorized', isTrue)),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.isUnauthorized,
+            'isUnauthorized',
+            isTrue,
+          ),
+        ),
       );
     });
 

@@ -33,6 +33,7 @@ class _Tab {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  late bool _wasSignedIn = widget.auth.isSignedIn;
 
   List<_Tab> _tabsFor(bool signedIn) {
     return [
@@ -94,7 +95,16 @@ class _HomeShellState extends State<HomeShell> {
     return AnimatedBuilder(
       animation: widget.auth,
       builder: (context, _) {
-        final tabs = _tabsFor(widget.auth.isSignedIn);
+        final signedIn = widget.auth.isSignedIn;
+        // Signing in adds tabs before the current one, so the same index
+        // would land on a different tab (e.g. Report instead of Map/Profile).
+        // Jump back to Map on that transition; sign-out keeps the clamp
+        // fallback below since the bar only shrinks there.
+        if (signedIn && !_wasSignedIn) {
+          _index = 0;
+        }
+        _wasSignedIn = signedIn;
+        final tabs = _tabsFor(signedIn);
         // Signing out shortens the bar, so a tab that no longer exists falls
         // back to the last one rather than crashing.
         final index = _index.clamp(0, tabs.length - 1);

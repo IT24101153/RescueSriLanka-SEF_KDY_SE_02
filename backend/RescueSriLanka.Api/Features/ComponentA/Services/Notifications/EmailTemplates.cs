@@ -230,6 +230,60 @@ public static class EmailTemplates
     }
 
     /// <summary>
+    /// The one-time code for a forgot-password request. Deliberately plain —
+    /// this is a code to type into a phone, not something to read for reassurance.
+    /// </summary>
+    public static EmailMessage PasswordResetCode(User user, string code, TimeSpan validFor)
+    {
+        const string subject = "Your RescueSriLanka password reset code";
+
+        var minutes = (int)Math.Round(validFor.TotalMinutes);
+
+        var html = Wrap(
+            heading: "Reset your password",
+            accent: Brand,
+            bodyHtml: $"""
+                <p style="margin:0 0 16px">Hello {Escape(user.ShortName())},</p>
+                <p style="margin:0 0 16px">
+                  Use this code to reset your RescueSriLanka password. It expires in
+                  {minutes} minutes and can only be used once.
+                </p>
+                <p style="margin:0 0 20px;text-align:center">
+                  <span style="display:inline-block;padding:14px 28px;font-size:28px;
+                               font-weight:700;letter-spacing:0.35em;color:{Ink};
+                               background:{Border}33;border-radius:10px">{Escape(code)}</span>
+                </p>
+                <p style="margin:0;color:{Body}">
+                  If you did not ask to reset your password, you can safely ignore this
+                  email — your password will not change unless this code is used.
+                </p>
+                """);
+
+        var text = new StringBuilder()
+            .AppendLine($"Hello {user.ShortName()},")
+            .AppendLine()
+            .AppendLine("Use this code to reset your RescueSriLanka password. It expires in")
+            .AppendLine($"{minutes} minutes and can only be used once.")
+            .AppendLine()
+            .AppendLine($"    {code}")
+            .AppendLine()
+            .AppendLine("If you did not ask to reset your password, you can safely ignore this")
+            .AppendLine("email — your password will not change unless this code is used.")
+            .AppendLine()
+            .AppendLine("— RescueSriLanka")
+            .ToString();
+
+        return new EmailMessage
+        {
+            ToAddress = user.Email,
+            ToName = user.FullName,
+            Subject = subject,
+            HtmlBody = html,
+            TextBody = text
+        };
+    }
+
+    /// <summary>
     /// First email a new citizen gets. Tells them what they signed up for and,
     /// if their district is already under warning, says so up front — someone
     /// registering during a flood is probably registering because of it.

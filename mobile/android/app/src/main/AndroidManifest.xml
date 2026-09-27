@@ -7,7 +7,7 @@
 
     <application
         android:usesCleartextTraffic="true"
-        android:label="mobile"
+        android:label="RescueSL"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

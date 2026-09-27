@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../shared/core/theme.dart';
+import '../../../shared/services/auth_service.dart';
 import '../../../shared/widgets/app_ui.dart';
 import '../help_style.dart';
 import '../services/help_request_service.dart';
@@ -13,7 +14,9 @@ import '../services/help_request_service.dart';
 /// A pin's colour is its status and its icon is what was asked for — the same
 /// two cues the request list shows.
 class MyRequestsMapScreen extends StatefulWidget {
-  const MyRequestsMapScreen({super.key});
+  const MyRequestsMapScreen({super.key, required this.auth});
+
+  final AuthService auth;
 
   @override
   State<MyRequestsMapScreen> createState() => _MyRequestsMapScreenState();
@@ -25,6 +28,10 @@ class _MyRequestsMapScreenState extends State<MyRequestsMapScreen> {
   bool _loading = true;
   String? _error;
 
+  bool get _canViewAll =>
+      widget.auth.user?.role == 'HelpRequestManager' ||
+      widget.auth.user?.role == 'EmergencyCoordinator';
+
   @override
   void initState() {
     super.initState();
@@ -33,7 +40,9 @@ class _MyRequestsMapScreenState extends State<MyRequestsMapScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final result = await HelpRequestService.getMineWithStatus();
+    final result = _canViewAll
+        ? await HelpRequestService.getAllWithStatus()
+        : await HelpRequestService.getMineWithStatus();
     if (!mounted) return;
     setState(() {
       _requests = result.requests;
@@ -76,8 +85,8 @@ class _MyRequestsMapScreenState extends State<MyRequestsMapScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: const Text(
-          'My request map',
+        title: Text(
+          _canViewAll ? 'All help requests' : 'My request map',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
         actions: [
@@ -142,12 +151,14 @@ class _MyRequestsMapScreenState extends State<MyRequestsMapScreen> {
                     ),
                   )
                 else if (_requests.isEmpty)
-                  const Center(
+                  Center(
                     child: _MapMessage(
                       icon: Icons.location_off_outlined,
                       tone: AppColors.body,
                       title: 'No submitted requests yet',
-                      message: 'Your request locations will appear here.',
+                      message: _canViewAll
+                          ? 'Submitted request locations will appear here.'
+                          : 'Your request locations will appear here.',
                     ),
                   ),
                 Positioned(

@@ -61,6 +61,9 @@ function pagesFor(role: Role): Page[] {
 export default function ConsoleShell({ session, onSignOut }: ConsoleShellProps) {
   const { user } = session
   const pages = pagesFor(user.role)
+  // The disaster dashboard is the only page its role sees, so a tab bar with
+  // one tab is just dead chrome — every other role still gets its nav.
+  const showNav = pages !== DISASTER_PAGES
 
   return (
     <div className="shell">
@@ -81,20 +84,22 @@ export default function ConsoleShell({ session, onSignOut }: ConsoleShellProps) 
         </div>
       </header>
 
-      <nav className="shell__nav" aria-label="Console pages">
-        {pages.map((page) => (
-          <NavLink
-            key={page.path}
-            to={page.path}
-            end={page.end}
-            className={({ isActive }) =>
-              `shell__nav-link${isActive ? ' is-active' : ''}`
-            }
-          >
-            {page.label}
-          </NavLink>
-        ))}
-      </nav>
+      {showNav && (
+        <nav className="shell__nav" aria-label="Console pages">
+          {pages.map((page) => (
+            <NavLink
+              key={page.path}
+              to={page.path}
+              end={page.end}
+              className={({ isActive }) =>
+                `shell__nav-link${isActive ? ' is-active' : ''}`
+              }
+            >
+              {page.label}
+            </NavLink>
+          ))}
+        </nav>
+      )}
 
       <main className="shell__body">
         <Routes>

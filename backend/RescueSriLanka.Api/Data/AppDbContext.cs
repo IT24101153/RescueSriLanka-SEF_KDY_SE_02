@@ -17,6 +17,7 @@ namespace RescueSriLanka.Api.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<PasswordResetCode> PasswordResetCodes => Set<PasswordResetCode>();
 
     // ---- Component A — Incident & Disaster Map ----
     public DbSet<Incident> Incidents => Set<Incident>();
@@ -64,6 +65,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(user => user.Role)
                 .HasConversion<string>()
                 .HasMaxLength(40);
+        });
+
+        modelBuilder.Entity<PasswordResetCode>(entity =>
+        {
+            entity.ToTable("password_reset_codes");
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(code => code.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // A citizen may have several rows over time (old, expired
+            // requests); this is what "find the live one" runs on.
+            entity.HasIndex(code => new { code.UserId, code.ConsumedAt });
         });
 
         modelBuilder.Entity<Incident>(entity =>
@@ -128,6 +143,52 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(h => h.HelpRequestId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<HelpRequest>(entity =>
+        {
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(request => request.CitizenId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Incident>()
+                .WithMany()
+                .HasForeignKey(request => request.RelatedIncidentId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.Property(request => request.Type).HasConversion<string>().HasMaxLength(24);
+            entity.Property(request => request.VerificationStatus).HasConversion<string>().HasMaxLength(32);
+            entity.Property(request => request.Description).HasMaxLength(2000).IsRequired();
+            entity.Property(request => request.VerificationNotes).HasMaxLength(1000);
+            entity.Property(request => request.ImageUrl).HasMaxLength(2048);
+            entity.HasIndex(request => new { request.CitizenId, request.CreatedAt });
+            entity.HasIndex(request => new { request.Status, request.UrgencyScore });
+            entity.HasIndex(request => request.VerificationStatus);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_HelpRequests_UrgencyScore", "\"UrgencyScore\" >= 0 AND \"UrgencyScore\" <= 100");
+                table.HasCheckConstraint("CK_HelpRequests_Latitude", "\"Latitude\" >= -90 AND \"Latitude\" <= 90");
+                table.HasCheckConstraint("CK_HelpRequests_Longitude", "\"Longitude\" >= -180 AND \"Longitude\" <= 180");
+            });
+        });
+
+        modelBuilder.Entity<RequestStatusHistory>(entity =>
+        {
+            entity.Property(history => history.Notes).HasMaxLength(1000);
+            entity.HasIndex(history => new { history.HelpRequestId, history.ChangedAt });
+        });
+
+        modelBuilder.Entity<TravelAdvisory>(entity =>
+        {
+            entity.Property(advisory => advisory.AreaName).HasMaxLength(200).IsRequired();
+            entity.Property(advisory => advisory.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(advisory => advisory.SafetyLevel).HasConversion<string>().HasMaxLength(16);
+            entity.HasIndex(advisory => advisory.ExpiresAt);
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_TravelAdvisories_RadiusMeters", "\"RadiusMeters\" > 0 AND \"RadiusMeters\" <= 100000");
+                table.HasCheckConstraint("CK_TravelAdvisories_Latitude", "\"Latitude\" >= -90 AND \"Latitude\" <= 90");
+                table.HasCheckConstraint("CK_TravelAdvisories_Longitude", "\"Longitude\" >= -180 AND \"Longitude\" <= 180");
+            });
+        });
+
         // The shared PostgreSQL schema stores request statuses as their readable
         // enum names (for example, "Pending"), rather than integer values.
         // Keeping that representation avoids a read failure in Npgsql and makes
@@ -161,6 +222,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasColumnType("jsonb")
             .HasColumnName("FinalOutcome");
 
+        modelBuilder.Entity<AgentWorkflow>()
+            .HasIndex(workflow => new { workflow.ObjectiveType, workflow.ObjectiveId, workflow.Status });
+
         modelBuilder.Entity<AgentStep>()
             .Property(s => s.InputParamsJson)
             .HasColumnType("jsonb")
@@ -175,6 +239,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .Property(s => s.ValidationResultJson)
             .HasColumnType("jsonb")
             .HasColumnName("ValidationResult");
+
+        modelBuilder.Entity<AgentStep>()
+            .HasIndex(step => new { step.AgentWorkflowId, step.StepNumber })
+            .IsUnique();
 
         // ---- Component C ----
 

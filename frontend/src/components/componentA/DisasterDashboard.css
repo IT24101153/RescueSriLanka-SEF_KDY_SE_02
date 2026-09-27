@@ -550,29 +550,63 @@
 
 /* ---------- detail drawer ---------- */
 
-.drawer {
+/* A report used to open as a right-hand sliver, leaving the rest of the
+   dashboard visible (dimmed) beside it — then, over-corrected, as a full
+   screen takeover. Both read as broken. This is the middle ground: a card
+   centred over a dimmed backdrop, sized to its content rather than the
+   screen, with the photo and triage/analysis side by side so the usual
+   report fits without scrolling. Closing it (× or clicking the backdrop)
+   returns to the full dashboard. */
+.drawer-overlay {
   position: fixed;
-  top: 0;
-  right: 0;
+  inset: 0;
   z-index: 1000;
-  width: min(420px, 100vw);
-  height: 100svh;
-  overflow-y: auto;
-  padding: 20px 22px 40px;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  animation: slide-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
 }
 
-@keyframes slide-in {
+.drawer__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: rgba(11, 14, 19, 0.5);
+  animation: fade-in 0.2s ease both;
+}
+
+.drawer {
+  position: relative;
+  z-index: 1;
+  width: min(980px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 18px 24px 20px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  column-gap: 28px;
+  grid-template-areas:
+    'head   head'
+    'title  photos'
+    'meta   photos'
+    'body   photos'
+    'facts  photos'
+    'review agent';
+  animation: card-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes card-in {
   from {
-    transform: translateX(16px);
     opacity: 0;
+    transform: scale(0.96);
   }
 }
 
 .drawer__head {
+  grid-area: head;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -597,23 +631,28 @@
 }
 
 .drawer__title {
+  grid-area: title;
   font-size: 18px;
   margin-bottom: 6px;
 }
 
 .drawer__meta {
+  grid-area: meta;
   font-size: 12.5px;
   color: var(--text);
   margin-bottom: 14px;
 }
 
 .drawer__body {
+  grid-area: body;
   font-size: 13.5px;
   line-height: 1.6;
   margin-bottom: 20px;
 }
 
 .facts {
+  grid-area: facts;
+  align-self: start;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
@@ -929,16 +968,6 @@
   min-width: 260px;
 }
 
-/* ---------- drawer scrim ---------- */
-
-.drawer__scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  background: rgba(11, 14, 19, 0.28);
-  animation: fade-in 0.2s ease both;
-}
-
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -1035,23 +1064,30 @@
     min-width: 160px;
   }
 
-  /* The drawer becomes a bottom sheet on a phone. */
-  .drawer {
-    top: auto;
-    bottom: 0;
-    width: 100%;
-    height: min(86svh, 720px);
-    border-left: 0;
-    border-top: 1px solid var(--border);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    animation: slide-up 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* One column on a phone: the photo moves up right after the header so it's
+     the first thing seen, ahead of the narrative and the triage actions. */
+  .drawer-overlay {
+    padding: 0;
   }
 
-  @keyframes slide-up {
-    from {
-      transform: translateY(24px);
-      opacity: 0;
-    }
+  .drawer {
+    width: 100%;
+    max-height: 100svh;
+    border-radius: 0;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'head'
+      'photos'
+      'title'
+      'meta'
+      'body'
+      'facts'
+      'review'
+      'agent';
+  }
+
+  .photos__strip {
+    max-height: none;
   }
 }
 
@@ -1066,6 +1102,8 @@
    ============================================================ */
 
 .agent {
+  grid-area: agent;
+  align-self: start;
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1319,6 +1357,8 @@
 /* Sits above the agent panel in the drawer: the human decision about whether
    the report itself is real, kept visually distinct from the AI proposal. */
 .review {
+  grid-area: review;
+  align-self: start;
   margin-bottom: 14px;
   padding: 16px;
   border: 1px solid var(--border);
@@ -1364,8 +1404,22 @@
   color: var(--text);
 }
 
+/* Set apart from ordinary triage — coordinator-only and irreversible. */
+.review__danger {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.review__delete {
+  color: var(--danger);
+}
+
 /* ---------- incident photos ---------- */
+/* Large and up front — the photo is the evidence behind the agent's severity
+   call, so a row of postage-stamp thumbnails undersold it. */
 .photos {
+  grid-area: photos;
   margin-bottom: 14px;
 }
 
@@ -1390,22 +1444,25 @@
 
 .photos__strip {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
   margin: 0;
-  padding: 0 0 4px;
-  overflow-x: auto;
+  padding: 0 2px 2px 0;
+  max-height: 360px;
+  overflow-y: auto;
   list-style: none;
 }
 
 .photos__thumb {
-  width: 84px;
-  height: 84px;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 210px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--surface-alt);
   overflow: hidden;
-  cursor: pointer;
+  cursor: zoom-in;
   transition: border-color 0.15s ease;
 }
 

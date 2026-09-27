@@ -37,6 +37,9 @@ public interface IIncidentService
         Guid id, IncidentSeverity severity, Guid actingUserId, CancellationToken ct = default);
 
     Task<DashboardStatisticsDto> GetStatisticsAsync(CancellationToken ct = default);
+
+    /// <returns>False when no such incident exists.</returns>
+    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
 }
 
 public class IncidentService(
@@ -206,18 +209,18 @@ public class IncidentService(
         incident.Status = status;
         incident.UpdatedAt = DateTime.UtcNow;
 
-        switch (status)
-        {
-            case IncidentStatus.Verified:
-                incident.VerifiedByUserId = actingUserId;
-                incident.VerifiedAt = DateTime.UtcNow;
-                break;
+        // Resolved/Rejected close an incident: off the live map, zone dropped.
+        // Every other status reopens it — a coordinator can revisit a Rejected
+        // report and mark it Verified later, and that has to bring it back to
+        // life rather than leave it stranded inactive with a stale ResolvedAt.
+        var closing = status is IncidentStatus.Resolved or IncidentStatus.Rejected;
+        incident.IsActive = !closing;
+        incident.ResolvedAt = closing ? DateTime.UtcNow : null;
 
-            // Closing an incident takes it off the live map and drops its zone.
-            case IncidentStatus.Resolved or IncidentStatus.Rejected:
-                incident.IsActive = false;
-                incident.ResolvedAt = DateTime.UtcNow;
-                break;
+        if (status == IncidentStatus.Verified)
+        {
+            incident.VerifiedByUserId = actingUserId;
+            incident.VerifiedAt = DateTime.UtcNow;
         }
 
         await db.SaveChangesAsync(ct);
@@ -291,5 +294,34 @@ public class IncidentService(
                 .GroupBy(incident => incident.District!)
                 .ToDictionary(group => group.Key, group => group.Count())
         };
+    }
+
+    /// <summary>
+    /// Permanently removes a report — a coordinator's call for a duplicate,
+    /// spam, or test report, distinct from Rejected (which keeps it on record
+    /// as reviewed and false). Its images and any derived safety zone cascade
+    /// at the database level; a help request that referenced it keeps existing
+    /// with the link cleared.
+    /// </summary>
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var incident = await db.Incidents.FirstOrDefaultAsync(entity => entity.Id == id, ct);
+        if (incident is null) return false;
+
+        // AgentRun is a table shared across every component's agents and has no
+        // foreign key to Incident (see its model comment), so nothing cascades
+        // into it — left alone, its rows for this incident would dangle.
+        var runs = await db.AgentRuns.Where(run => run.IncidentId == id).ToListAsync(ct);
+        db.AgentRuns.RemoveRange(runs);
+
+        db.Incidents.Remove(incident);
+        await db.SaveChangesAsync(ct);
+
+        // The incident behind a derived safety zone is gone; recompute so the
+        // map stops showing a zone with nothing underneath it.
+        await zoneService.RecomputeAsync(ct);
+
+        logger.LogInformation("Incident {Id} deleted", id);
+        return true;
     }
 }

@@ -130,7 +130,7 @@ public class ReportWithPhotoTests : IClassFixture<ReportWithPhotoTests.Factory>
         public string Name => "fake";
 
         public Task<StoredImage> SaveAsync(
-            Guid incidentId, IFormFile file, CancellationToken ct = default)
+            Guid ownerId, string category, IFormFile file, CancellationToken ct = default)
         {
             if (Fail)
             {

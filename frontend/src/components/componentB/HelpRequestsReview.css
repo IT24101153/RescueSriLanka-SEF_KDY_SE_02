@@ -100,6 +100,13 @@
   font-weight: 500;
 }
 
+.hr-filters { display: flex; flex-wrap: wrap; gap: .65rem; padding: 1rem 2.25rem 0; }
+.hr-filters input, .hr-filters select { min-height: 2.4rem; border: 1px solid var(--line); border-radius: 8px; padding: 0 .7rem; color: var(--ink); background: white; font: inherit; font-size: .84rem; }
+.hr-filters input { min-width: 220px; flex: 1 1 220px; }
+.hr-pagination { display: flex; align-items: center; justify-content: center; gap: .7rem; padding: .8rem; color: var(--muted); font-size: .8rem; }
+.hr-pagination button { border: 1px solid var(--line); background: white; border-radius: 7px; padding: .35rem .6rem; cursor: pointer; color: var(--ink); }
+.hr-pagination button:disabled { cursor: default; opacity: .5; }
+
 /* ---------- Body ---------- */
 
 .hr-body {
@@ -479,3 +486,12 @@
 
 .hr-request-image-link { display: block; width: fit-content; max-width: 100%; margin: 0 0 1.4rem; color: #a35e00; font-size: .78rem; font-weight: 600; text-decoration: none; }
 .hr-request-image { display: block; width: min(100%, 520px); max-height: 300px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); margin-bottom: .45rem; }
+
+.hr-ai-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 1rem; background: rgba(18, 24, 32, .48); }
+.hr-ai-dialog { width: min(100%, 560px); max-height: min(80vh, 680px); overflow: auto; padding: 1.4rem; border-radius: 14px; background: white; box-shadow: 0 20px 60px rgba(0, 0, 0, .26); }
+.hr-ai-dialog-head { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 1.1rem; }
+.hr-ai-dialog-head p { margin: .35rem 0 0; color: var(--muted); font-size: .84rem; line-height: 1.4; }
+.hr-ai-close { width: 2rem; height: 2rem; border: 0; border-radius: 50%; background: var(--line); color: var(--ink); font-size: 1.35rem; cursor: pointer; }
+.hr-ai-result { padding: .85rem 0; border-top: 1px solid var(--line); }
+.hr-ai-result span { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.hr-ai-result p { margin: .35rem 0 0; color: var(--ink); font-size: .91rem; line-height: 1.45; }

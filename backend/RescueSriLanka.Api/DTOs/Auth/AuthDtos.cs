@@ -61,6 +61,47 @@ public record UpdatePreferencesRequest
     public JsonElement District { get; init; }
 
     public bool? EmailNotificationsEnabled { get; init; }
+
+    /// <summary>
+    /// Same three-state shape as <see cref="District"/> and for the same reason:
+    /// omitted leaves the phone number as it is, null clears it, a string sets it.
+    /// </summary>
+    public JsonElement PhoneNumber { get; init; }
+}
+
+public record ForgotPasswordRequest
+{
+    [Required, EmailAddress, MaxLength(256)]
+    public required string Email { get; init; }
+}
+
+public record VerifyResetCodeRequest
+{
+    [Required, EmailAddress, MaxLength(256)]
+    public required string Email { get; init; }
+
+    [Required, StringLength(6, MinimumLength = 6)]
+    public required string Code { get; init; }
+}
+
+/// <summary>Handed back once the emailed code checks out. The app spends this,
+/// not the code itself, to actually change the password.</summary>
+public record VerifyResetCodeResponse
+{
+    public required string ResetToken { get; init; }
+    public required DateTime ExpiresAt { get; init; }
+}
+
+public record ResetPasswordRequest
+{
+    [Required, EmailAddress, MaxLength(256)]
+    public required string Email { get; init; }
+
+    [Required]
+    public required string ResetToken { get; init; }
+
+    [Required, MinLength(8), MaxLength(128)]
+    public required string NewPassword { get; init; }
 }
 
 /// <summary>The user as the clients see it — never exposes the password hash.</summary>
@@ -75,6 +116,9 @@ public record UserDto
     /// <summary>Home district for disaster warnings. Null when none is set.</summary>
     public string? District { get; init; }
 
+    /// <summary>Absolute or site-relative URL of the profile photo. Null until one is uploaded.</summary>
+    public string? PhotoUrl { get; init; }
+
     public required bool EmailNotificationsEnabled { get; init; }
 
     public static UserDto FromUser(User user) => new()
@@ -85,6 +129,7 @@ public record UserDto
         Role = user.Role.ToString(),
         PhoneNumber = user.PhoneNumber,
         District = user.District,
+        PhotoUrl = user.PhotoUrl,
         EmailNotificationsEnabled = user.EmailNotificationsEnabled
     };
 }

@@ -2,7 +2,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
 {
     // Which type of thing triggered the workflow.
     // Source: Proposal Section 9 — "a new incident or help request" triggers the plan.
-    public enum WorkflowObjectiveType
+    public enum PlannerWorkflowObjectiveType
     {
         Incident,
         HelpRequest
@@ -11,7 +11,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
     // Overall workflow status.
     // Source: Proposal Section 6 — plan pauses for approval before high-impact action;
     // outcome is "an auditable success or a safe, clearly recorded failure."
-    public enum WorkflowStatus
+    public enum PlannerWorkflowStatus
     {
         Planning,           // Planner Agent is building the plan
         AwaitingApproval,   // Plan built, validated, waiting on Coordinator
@@ -23,7 +23,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
     }
 
     // Source: Proposal Section 6 — four named agents.
-    public enum AgentType
+    public enum PlannerAgentType
     {
         IncidentAnalysisAgent,
         CoordinatorPlannerAgent,
@@ -32,7 +32,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
     }
 
     // ASSUMPTION (not specified in documents): per-step execution status.
-    public enum StepStatus
+    public enum PlannerStepStatus
     {
         Pending,
         Running,
