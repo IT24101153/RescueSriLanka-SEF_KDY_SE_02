@@ -50,6 +50,9 @@ function ResourceDashboard() {
   const [page, setPage] = useState<Page>('overview')
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null)
   const [fulfillmentRequest, setFulfillmentRequest] = useState<FulfillmentRequest | null>(null)
+  const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null)
+  const [sendingRequestId, setSendingRequestId] = useState<string | null>(null)
+  const [requestActionError, setRequestActionError] = useState<{ id: string; message: string } | null>(null)
 
   const loadResources = async () => {
     setIsLoading(true)
@@ -162,6 +165,8 @@ function ResourceDashboard() {
 
   const updateRequestStatus = async (id: string, status: 'Accepted' | 'Rejected') => {
     setError('')
+    setRequestActionError(null)
+    setUpdatingRequestId(id)
     try {
       const response = await fetch(`/api/resources/help-requests/${id}/status`, {
         method: 'PATCH',
@@ -170,11 +175,16 @@ function ResourceDashboard() {
       })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string } | null
-        throw new Error(result?.error ?? 'Unable to update the request.')
+        throw new Error(result?.error ?? `Unable to update the request (HTTP ${response.status}).`)
       }
       await loadResources()
     } catch (statusError) {
-      setError(statusError instanceof Error ? statusError.message : 'Unable to update the request.')
+      setRequestActionError({
+        id,
+        message: statusError instanceof Error ? statusError.message : 'Unable to update the request.',
+      })
+    } finally {
+      setUpdatingRequestId(null)
     }
   }
 
@@ -199,10 +209,12 @@ function ResourceDashboard() {
   const fulfillRequest = async () => {
     if (!fulfillmentRequest || Number(fulfillmentRequest.quantity) <= 0) return
     if (fulfillmentRequest.resourceType === 'Other' && !fulfillmentRequest.customItem?.trim()) {
-      setError('Please specify what resource is being sent.')
+      setRequestActionError({ id: fulfillmentRequest.id, message: 'Please specify what resource is being sent.' })
       return
     }
     setError('')
+    setRequestActionError(null)
+    setSendingRequestId(fulfillmentRequest.id)
     const resolvedType = fulfillmentRequest.resourceType === 'Other'
       ? (fulfillmentRequest.customItem?.trim() || 'Other')
       : fulfillmentRequest.resourceType
@@ -219,12 +231,17 @@ function ResourceDashboard() {
       })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string } | null
-        throw new Error(result?.error ?? 'Unable to send resources.')
+        throw new Error(result?.error ?? `Unable to send resources (HTTP ${response.status}).`)
       }
       setFulfillmentRequest(null)
       await loadResources()
     } catch (fulfillmentError) {
-      setError(fulfillmentError instanceof Error ? fulfillmentError.message : 'Unable to send resources.')
+      setRequestActionError({
+        id: fulfillmentRequest.id,
+        message: fulfillmentError instanceof Error ? fulfillmentError.message : 'Unable to send resources.',
+      })
+    } finally {
+      setSendingRequestId(null)
     }
   }
 
@@ -525,8 +542,8 @@ function ResourceDashboard() {
                   <div className="request-actions">
                     {request.status === 'Pending' && (
                       <>
-                        <button className="primary-button compact-button" type="button" onClick={() => void updateRequestStatus(request.id, 'Accepted')}>Accept</button>
-                        <button className="danger-button compact-button" type="button" onClick={() => void updateRequestStatus(request.id, 'Rejected')}>Reject</button>
+                        <button className="primary-button compact-button" type="button" disabled={updatingRequestId === request.id} onClick={() => void updateRequestStatus(request.id, 'Accepted')}>{updatingRequestId === request.id ? 'Accepting…' : 'Accept'}</button>
+                        <button className="danger-button compact-button" type="button" disabled={updatingRequestId === request.id} onClick={() => void updateRequestStatus(request.id, 'Rejected')}>{updatingRequestId === request.id ? 'Updating…' : 'Reject'}</button>
                       </>
                     )}
                     {request.status === 'Accepted' && !fulfillmentRequest && (
@@ -542,8 +559,8 @@ function ResourceDashboard() {
                               ? 'Clothes'
                               : request.needType.toLowerCase().includes('food')
                               ? 'FoodWaterStock'
-                              : 'FoodWaterStock',
-                            customItem: '',
+                              : 'Other',
+                            customItem: request.needType,
                             quantity: '1',
                           })
                         }
@@ -614,11 +631,15 @@ function ResourceDashboard() {
                       <button
                         className="primary-button"
                         type="button"
+                        disabled={sendingRequestId === request.id}
                         onClick={() => void fulfillRequest()}
                       >
-                        Send now
+                        {sendingRequestId === request.id ? 'Sending…' : 'Send now'}
                       </button>
                     </div>
+                  )}
+                  {requestActionError?.id === request.id && (
+                    <p className="request-row-error" role="alert">{requestActionError.message}</p>
                   )}
                 </div>
               ))}

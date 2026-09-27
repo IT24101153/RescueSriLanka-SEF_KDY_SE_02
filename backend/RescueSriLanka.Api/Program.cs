@@ -183,6 +183,12 @@ builder.Services.AddHttpClient<ITestmailClient, TestmailClient>(client =>
 
 builder.Services.AddScoped<INotificationService, NotificationService>();
 
+builder.Services.AddSingleton<ResourceEmailQueue>();
+builder.Services.AddSingleton<IResourceEmailQueue>(
+    provider => provider.GetRequiredService<ResourceEmailQueue>());
+builder.Services.AddHostedService(
+    provider => provider.GetRequiredService<ResourceEmailQueue>());
+
 // Mail goes out on a background worker: nobody filing a report or approving an
 // assessment should wait on a mail server, or fail because one is down.
 builder.Services.AddSingleton<NotificationQueue>();

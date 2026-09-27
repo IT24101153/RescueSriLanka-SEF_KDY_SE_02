@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/core/theme.dart';
+import '../../../shared/models/auth.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/widgets/app_ui.dart';
 import '../services/resource_api.dart';
@@ -101,12 +102,17 @@ class _ResourceHomePageState extends State<ResourceHomePage> {
                 children: [
                   RequestHelpPage(
                     api: _api,
+                    user: widget.auth?.user,
                     requests: _requests,
                     loadingRequests: _loading,
                     onSubmitted: _loadRequests,
                     onRefresh: _loadRequests,
                   ),
-                  DonatePage(api: _api, onRefresh: _loadRequests),
+                  DonatePage(
+                    api: _api,
+                    user: widget.auth?.user,
+                    onRefresh: _loadRequests,
+                  ),
                 ],
               ),
             ),
@@ -133,6 +139,7 @@ Color _statusTone(String status) {
 class RequestHelpPage extends StatefulWidget {
   const RequestHelpPage({
     required this.api,
+    this.user,
     required this.requests,
     required this.loadingRequests,
     required this.onSubmitted,
@@ -141,6 +148,7 @@ class RequestHelpPage extends StatefulWidget {
   });
 
   final ResourceApi api;
+  final AuthUser? user;
   final List<HelpRequest> requests;
   final bool loadingRequests;
   final Future<void> Function() onSubmitted;
@@ -154,8 +162,6 @@ class RequestHelpPage extends StatefulWidget {
 
 class _RequestHelpPageState extends State<RequestHelpPage> {
   final _formKey = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _phone = TextEditingController();
   final _description = TextEditingController();
 
   String _needType = 'Food and water';
@@ -163,20 +169,23 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
 
   @override
   void dispose() {
-    for (final controller in [_name, _phone, _description]) {
-      controller.dispose();
-    }
+    _description.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    final user = widget.user;
+    if (user == null || (user.phoneNumber?.trim().isEmpty ?? true)) {
+      _toast('Add your phone number in your profile before sending a request.', isError: true);
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _submitting = true);
     try {
       await widget.api.createHelpRequest(
-        name: _name.text,
-        phone: _phone.text,
+        name: user.fullName,
+        phone: user.phoneNumber!.trim(),
         needType: _needType,
         description: _description.text,
       );
@@ -225,24 +234,13 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
               'is reviewed by a resource manager.',
         ),
         const SizedBox(height: AppSpacing.gap),
+        _AccountDetails(user: widget.user),
+        const SizedBox(height: AppSpacing.gap),
         Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _RequiredField(
-                controller: _name,
-                label: 'Your name',
-                icon: Icons.person_outline,
-              ),
-              const SizedBox(height: AppSpacing.gap),
-              _RequiredField(
-                controller: _phone,
-                label: 'Contact number',
-                icon: Icons.phone_outlined,
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: AppSpacing.gap),
               DropdownButtonFormField<String>(
                 initialValue: _needType,
                 decoration: const InputDecoration(
@@ -254,8 +252,6 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
                     const [
                           'Food and water',
                           'Medical aid',
-                          'Rescue',
-                          'Shelter',
                           'Other',
                         ]
                         .map(
@@ -346,9 +342,10 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
 }
 
 class DonatePage extends StatefulWidget {
-  const DonatePage({required this.api, required this.onRefresh, super.key});
+  const DonatePage({required this.api, this.user, required this.onRefresh, super.key});
 
   final ResourceApi api;
+  final AuthUser? user;
 
   /// Pull-to-refresh reloads the section, as it does on the request tab.
   final Future<void> Function() onRefresh;
@@ -359,8 +356,6 @@ class DonatePage extends StatefulWidget {
 
 class _DonatePageState extends State<DonatePage> {
   final _formKey = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _phone = TextEditingController();
   final _quantity = TextEditingController();
   final _unit = TextEditingController();
   final _notes = TextEditingController();
@@ -370,20 +365,30 @@ class _DonatePageState extends State<DonatePage> {
 
   @override
   void dispose() {
-    for (final controller in [_name, _phone, _quantity, _unit, _notes]) {
+    for (final controller in [_quantity, _unit, _notes]) {
       controller.dispose();
     }
     super.dispose();
   }
 
   Future<void> _submit() async {
+    final user = widget.user;
+    if (user == null || (user.phoneNumber?.trim().isEmpty ?? true)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add your phone number in your profile before donating.'),
+          backgroundColor: AppColors.critical,
+        ),
+      );
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _submitting = true);
     try {
       await widget.api.createDonation(
-        name: _name.text,
-        phone: _phone.text,
+        name: user.fullName,
+        phone: user.phoneNumber!.trim(),
         donationType: _donationType,
         quantity: double.parse(_quantity.text),
         unit: _unit.text,
@@ -437,24 +442,13 @@ class _DonatePageState extends State<DonatePage> {
               'resource manager reviews every offer and contacts you.',
         ),
         const SizedBox(height: AppSpacing.gap),
+        _AccountDetails(user: widget.user),
+        const SizedBox(height: AppSpacing.gap),
         Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _RequiredField(
-                controller: _name,
-                label: 'Your name',
-                icon: Icons.person_outline,
-              ),
-              const SizedBox(height: AppSpacing.gap),
-              _RequiredField(
-                controller: _phone,
-                label: 'Contact number',
-                icon: Icons.phone_outlined,
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: AppSpacing.gap),
               DropdownButtonFormField<String>(
                 initialValue: _donationType,
                 decoration: const InputDecoration(
@@ -540,6 +534,53 @@ class _DonatePageState extends State<DonatePage> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _AccountDetails extends StatelessWidget {
+  const _AccountDetails({required this.user});
+
+  final AuthUser? user;
+
+  @override
+  Widget build(BuildContext context) {
+    final account = user;
+    final phone = account?.phoneNumber?.trim();
+
+    return AppCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.account_circle_outlined, color: AppColors.brandInk),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  account?.fullName ?? 'Account details unavailable',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  phone?.isNotEmpty == true
+                      ? phone!
+                      : 'Add a phone number in Profile',
+                  style: const TextStyle(fontSize: 13, color: AppColors.body),
+                ),
+                Text(
+                  'District: ${account?.district ?? 'Not set'}',
+                  style: const TextStyle(fontSize: 13, color: AppColors.body),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

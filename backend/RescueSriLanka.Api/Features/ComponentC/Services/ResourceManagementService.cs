@@ -66,7 +66,7 @@ public interface IResourceManagementService
 
 public class ResourceManagementService(
     AppDbContext dbContext,
-    IEmailSender? emailSender = null,
+    IResourceEmailQueue? emailQueue = null,
     IOptions<EmailOptions>? emailOptions = null,
     ILogger<ResourceManagementService>? logger = null) : IResourceManagementService
 {
@@ -285,8 +285,24 @@ public class ResourceManagementService(
         Guid? userId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.RequesterName) ||
-            string.IsNullOrWhiteSpace(request.ContactNumber) ||
+        var requesterName = request.RequesterName.Trim();
+        var contactNumber = request.ContactNumber.Trim();
+        var district = (string?)null;
+        if (userId is Guid linkedUserId)
+        {
+            var user = await dbContext.Users.AsNoTracking().SingleOrDefaultAsync(
+                candidate => candidate.Id == linkedUserId && candidate.IsActive,
+                cancellationToken);
+            if (user is not null)
+            {
+                requesterName = user.FullName;
+                contactNumber = user.PhoneNumber?.Trim() ?? string.Empty;
+                district = user.District;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(requesterName) ||
+            string.IsNullOrWhiteSpace(contactNumber) ||
             string.IsNullOrWhiteSpace(request.NeedType) ||
             string.IsNullOrWhiteSpace(request.Description))
         {
@@ -297,8 +313,8 @@ public class ResourceManagementService(
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            RequesterName = request.RequesterName.Trim(),
-            ContactNumber = request.ContactNumber.Trim(),
+            RequesterName = requesterName,
+            ContactNumber = contactNumber,
             NeedType = request.NeedType.Trim(),
             Description = request.Description.Trim(),
             Latitude = request.Latitude is null ? null : (double?)request.Latitude,
@@ -307,7 +323,7 @@ public class ResourceManagementService(
 
         dbContext.ResourceHelpRequests.Add(helpRequest);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return ToResponse(helpRequest, null);
+        return ToResponse(helpRequest, district);
     }
 
     public async Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken)
@@ -347,7 +363,7 @@ public class ResourceManagementService(
             var user = await FindUserForHelpRequestAsync(helpRequest, cancellationToken);
             if (user is not null)
             {
-                await SendAcceptedEmailAsync(user, "help request", helpRequest.NeedType, helpRequest.Description, cancellationToken);
+                QueueAcceptedEmail(user, "help request", helpRequest.NeedType, helpRequest.Description);
             }
         }
         var district = helpRequest.UserId is Guid userId
@@ -361,8 +377,24 @@ public class ResourceManagementService(
         Guid? userId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.DonorName) ||
-            string.IsNullOrWhiteSpace(request.ContactNumber) ||
+        var donorName = request.DonorName.Trim();
+        var contactNumber = request.ContactNumber.Trim();
+        var district = (string?)null;
+        if (userId is Guid linkedUserId)
+        {
+            var user = await dbContext.Users.AsNoTracking().SingleOrDefaultAsync(
+                candidate => candidate.Id == linkedUserId && candidate.IsActive,
+                cancellationToken);
+            if (user is not null)
+            {
+                donorName = user.FullName;
+                contactNumber = user.PhoneNumber?.Trim() ?? string.Empty;
+                district = user.District;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(donorName) ||
+            string.IsNullOrWhiteSpace(contactNumber) ||
             string.IsNullOrWhiteSpace(request.DonationType) ||
             string.IsNullOrWhiteSpace(request.Unit) ||
             request.Quantity <= 0)
@@ -374,8 +406,8 @@ public class ResourceManagementService(
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            DonorName = request.DonorName.Trim(),
-            ContactNumber = request.ContactNumber.Trim(),
+            DonorName = donorName,
+            ContactNumber = contactNumber,
             DonationType = request.DonationType.Trim(),
             Quantity = request.Quantity,
             Unit = request.Unit.Trim(),
@@ -384,7 +416,7 @@ public class ResourceManagementService(
 
         dbContext.Donations.Add(donation);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return ToResponse(donation, null);
+        return ToResponse(donation, district);
     }
 
     public async Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken)
@@ -424,7 +456,7 @@ public class ResourceManagementService(
             var user = await FindUserForDonationAsync(donation, cancellationToken);
             if (user is not null)
             {
-                await SendAcceptedEmailAsync(user, "donation", donation.DonationType, $"{donation.Quantity} {donation.Unit}", cancellationToken);
+                QueueAcceptedEmail(user, "donation", donation.DonationType, $"{donation.Quantity} {donation.Unit}");
             }
         }
         var district = donation.UserId is Guid userId
@@ -521,44 +553,30 @@ public class ResourceManagementService(
         return null;
     }
 
-    private async Task SendAcceptedEmailAsync(
+    private void QueueAcceptedEmail(
         User user,
         string itemType,
         string itemName,
-        string details,
-        CancellationToken cancellationToken)
+        string details)
     {
-        if (emailSender is null || emailOptions?.Value.Enabled != true) return;
-
-        try
+        if (emailQueue is null || emailOptions?.Value.Enabled != true) return;
+        if (!emailQueue.TryQueue(EmailTemplates.ResourceAccepted(
+                user, itemType, itemName, details, user.District)))
         {
-            await emailSender.SendAsync(
-                EmailTemplates.ResourceAccepted(user, itemType, itemName, details, user.District),
-                cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            logger?.LogError(exception, "Failed to send accepted {ItemType} email to {Email}.", itemType, user.Email);
+            logger?.LogWarning("Could not queue accepted {ItemType} email to {Email}.", itemType, user.Email);
         }
     }
 
-    private async Task SendDispatchedEmailAsync(
+    private void QueueDispatchedEmail(
         User user,
         string resourceType,
-        decimal quantity,
-        CancellationToken cancellationToken)
+        decimal quantity)
     {
-        if (emailSender is null || emailOptions?.Value.Enabled != true) return;
-
-        try
+        if (emailQueue is null || emailOptions?.Value.Enabled != true) return;
+        if (!emailQueue.TryQueue(EmailTemplates.ResourcesDispatched(
+                user, resourceType, quantity, user.District)))
         {
-            await emailSender.SendAsync(
-                EmailTemplates.ResourcesDispatched(user, resourceType, quantity, user.District),
-                cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            logger?.LogError(exception, "Failed to send resources dispatched email to {Email}.", user.Email);
+            logger?.LogWarning("Could not queue dispatched-resources email to {Email}.", user.Email);
         }
     }
 
@@ -599,6 +617,7 @@ public class ResourceManagementService(
         }
 
         dbContext.ResourceAllocations.Add(allocation);
+        User? dispatchRecipient = null;
         if (request.HelpRequestId is Guid helpRequestId)
         {
             var helpRequest = await dbContext.ResourceHelpRequests
@@ -606,13 +625,13 @@ public class ResourceManagementService(
                 ?? throw new KeyNotFoundException("Help request was not found.");
             helpRequest.Status = "Fulfilled";
 
-            var user = await FindUserForHelpRequestAsync(helpRequest, cancellationToken);
-            if (user is not null)
-            {
-                await SendDispatchedEmailAsync(user, resourceType, request.Quantity, cancellationToken);
-            }
+            dispatchRecipient = await FindUserForHelpRequestAsync(helpRequest, cancellationToken);
         }
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (dispatchRecipient is not null)
+        {
+            QueueDispatchedEmail(dispatchRecipient, resourceType, request.Quantity);
+        }
         return ToResponse(allocation);
     }
 

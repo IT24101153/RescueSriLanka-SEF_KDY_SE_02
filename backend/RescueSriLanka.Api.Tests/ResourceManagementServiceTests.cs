@@ -3,12 +3,47 @@ using RescueSriLanka.Api.Features.ComponentC.DTOs;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentC.Models;
 using RescueSriLanka.Api.Features.ComponentC.Services;
+using RescueSriLanka.Api.Models;
 using Xunit;
 
 namespace RescueSriLanka.Api.Tests;
 
 public class ResourceManagementServiceTests
 {
+    [Fact]
+    public async Task CreateResourceSubmissions_UseRegisteredProfileDetails()
+    {
+        await using var context = CreateContext();
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            FullName = "Nimal Perera",
+            Email = "nimal@example.com",
+            PasswordHash = "test-hash",
+            PhoneNumber = "0712345678",
+            District = "Kandy"
+        };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        var service = new ResourceManagementService(context);
+        var helpRequest = await service.CreateHelpRequestAsync(
+            new CreateHelpRequestRequest("Typed Name", "0000000000", "Food and water", "Need water", null, null),
+            user.Id,
+            CancellationToken.None);
+        var donation = await service.CreateDonationAsync(
+            new CreateDonationRequest("Typed Name", "0000000000", "Clothing", 2, "bags", null),
+            user.Id,
+            CancellationToken.None);
+
+        Assert.Equal(user.FullName, helpRequest.RequesterName);
+        Assert.Equal(user.PhoneNumber, helpRequest.ContactNumber);
+        Assert.Equal(user.District, helpRequest.District);
+        Assert.Equal(user.FullName, donation.DonorName);
+        Assert.Equal(user.PhoneNumber, donation.ContactNumber);
+        Assert.Equal(user.District, donation.District);
+    }
+
     [Fact]
     public async Task UpdateHelpRequestStatusAsync_AcceptsRequestAndAllocationFulfillsIt()
     {

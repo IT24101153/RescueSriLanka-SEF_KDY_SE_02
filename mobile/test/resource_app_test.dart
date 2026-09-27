@@ -32,4 +32,25 @@ void main() {
     expect(find.text('Give what you can'), findsOneWidget);
     expect(find.text('Offer donation'), findsOneWidget);
   });
+
+  testWidgets('request form omits profile fields and shelter category', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(theme: buildAppTheme(), home: const ResourceHomePage()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your name'), findsNothing);
+    expect(find.text('Contact number'), findsNothing);
+
+    final requestTypeDropdown = find.byType(DropdownButtonFormField<String>);
+    await tester.ensureVisible(requestTypeDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(requestTypeDropdown);
+    await tester.pumpAndSettle();
+    expect(find.text('Shelter'), findsNothing);
+    expect(find.text('Rescue'), findsNothing);
+    expect(find.text('Food and water'), findsWidgets);
+  });
 }
