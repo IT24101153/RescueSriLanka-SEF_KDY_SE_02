@@ -22,7 +22,15 @@ public class IncidentsController(
 {
     private const string Coordinator = nameof(UserRole.EmergencyCoordinator);
 
-    /// <summary>Filtered incident list for the admin table.</summary>
+    /// <summary>
+    /// Filtered incident list for the admin table. Sorting and paging are
+    /// opt-in: <paramref name="sortBy"/>/<paramref name="sortDir"/> reorder the
+    /// results, and passing both <paramref name="page"/> and
+    /// <paramref name="pageSize"/> slices them, with the total match count
+    /// returned in the <c>X-Total-Count</c> header. Leaving all four out
+    /// returns every match in the original order, unchanged — the disaster
+    /// map and other components rely on that.
+    /// </summary>
     [HttpGet]
     [AllowAnonymous]
     public async Task<ActionResult<IReadOnlyList<IncidentDto>>> List(
@@ -31,8 +39,28 @@ public class IncidentsController(
         [FromQuery] IncidentType? type,
         [FromQuery] string? district,
         [FromQuery] bool activeOnly = true,
-        CancellationToken ct = default) =>
-        Ok(await incidentService.QueryAsync(status, severity, type, district, activeOnly, ct));
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDir = null,
+        [FromQuery] int? page = null,
+        [FromQuery] int? pageSize = null,
+        CancellationToken ct = default)
+    {
+        if (page is <= 0)
+        {
+            return BadRequest(new { message = "page must be at least 1." });
+        }
+
+        if (pageSize is <= 0 or > 100)
+        {
+            return BadRequest(new { message = "pageSize must be between 1 and 100." });
+        }
+
+        var result = await incidentService.QueryAsync(
+            status, severity, type, district, activeOnly, sortBy, sortDir, page, pageSize, ct);
+
+        Response.Headers.Append("X-Total-Count", result.TotalCount.ToString());
+        return Ok(result.Items);
+    }
 
     [HttpGet("{id:guid}")]
     [AllowAnonymous]

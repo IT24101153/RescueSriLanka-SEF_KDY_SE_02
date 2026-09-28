@@ -458,6 +458,42 @@
   font-weight: 500;
 }
 
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.th-sort:hover,
+.th-sort.is-active {
+  color: var(--accent-strong);
+}
+
+/* ---------- pagination ---------- */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.pagination__status {
+  white-space: nowrap;
+}
+
 .muted {
   color: var(--text);
 }
