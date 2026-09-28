@@ -24,6 +24,7 @@ type Page = 'overview' | 'supplies' | 'allocations' | 'donate' | 'history'
 type SupplySource = { id: string; type: ResourceType }
 type DeleteRequest = { type: ResourceType; id: string; label: string; duplicates: SupplySource[] }
 type FulfillmentRequest = { id: string; supplyKey: string; quantity: string }
+type AllocationRecommendation = { decision: string; resourceId: string | null; resourceType: string | null; quantity: number; confidence: number; reason: string; warnings: string[]; requiresApproval: boolean }
 
 const MANAGED_SUPPLY_ITEMS: Record<string, string[]> = {
   Food: ['Dry foods', 'Rice', 'Other'],
@@ -38,12 +39,25 @@ const HISTORY_RETENTION_DAYS = 7
 const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000
 
 async function getResources<T>(path: string): Promise<T> {
-  const response = await fetch(`/api/resources/${path}`)
-  if (!response.ok) {
-    const result = await response.json().catch(() => null) as { error?: string } | null
-    throw new Error(result?.error ?? `Unable to load ${path}.`)
+  let lastError: unknown
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      const response = await fetch(`/api/resources/${path}`, { headers: authHeaders() })
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(result?.error ?? `Unable to load ${path}.`)
+      }
+      return response.json() as Promise<T>
+    } catch (resourceError) {
+      lastError = resourceError
+      if (attempt < 7 && resourceError instanceof TypeError) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500 * (attempt + 1)))
+        continue
+      }
+      throw resourceError
+    }
   }
-  return response.json() as Promise<T>
+  throw lastError instanceof Error ? lastError : new Error(`Unable to load ${path}.`)
 }
 
 function clearedHistoryStorageKey(): string {
@@ -114,6 +128,8 @@ function ResourceDashboard() {
   const [sendingRequestId, setSendingRequestId] = useState<string | null>(null)
   const [requestActionError, setRequestActionError] = useState<{ id: string; message: string } | null>(null)
   const [updatingDonationKey, setUpdatingDonationKey] = useState<string | null>(null)
+  const [recommendation, setRecommendation] = useState<{ id: string; result: AllocationRecommendation } | null>(null)
+  const [loadingRecommendationId, setLoadingRecommendationId] = useState<string | null>(null)
 
   const loadResources = async () => {
     setIsLoading(true)
@@ -425,6 +441,21 @@ function ResourceDashboard() {
       })
     } finally {
       setUpdatingRequestId(null)
+    }
+  }
+
+  const getAllocationRecommendation = async (id: string) => {
+    setRequestActionError(null)
+    setLoadingRecommendationId(id)
+    try {
+      const response = await fetch(`/api/resources/help-requests/${id}/allocation-recommendation`, { method: 'POST', headers: authHeaders() })
+      const result = await response.json().catch(() => null) as AllocationRecommendation | { error?: string } | null
+      if (!response.ok) throw new Error((result && 'error' in result ? result.error : undefined) ?? `Unable to get an allocation recommendation (HTTP ${response.status}).`)
+      setRecommendation({ id, result: result as AllocationRecommendation })
+    } catch (recommendationError) {
+      setRequestActionError({ id, message: recommendationError instanceof Error ? recommendationError.message : 'Unable to get an allocation recommendation.' })
+    } finally {
+      setLoadingRecommendationId(null)
     }
   }
 
@@ -837,6 +868,14 @@ function ResourceDashboard() {
                   <div className="request-actions">
                     {request.status === 'Pending' && (
                       <>
+                        <button
+                          className="secondary-button compact-button"
+                          type="button"
+                          disabled={loadingRecommendationId === request.id}
+                          onClick={() => void getAllocationRecommendation(request.id)}
+                        >
+                          {loadingRecommendationId === request.id ? 'Thinking...' : 'AI recommendation'}
+                        </button>
                         <button className="primary-button compact-button" type="button" disabled={updatingRequestId === request.id} onClick={() => void updateRequestStatus(request.id, 'Accepted')}>{updatingRequestId === request.id ? 'Accepting…' : 'Accept'}</button>
                         <button className="danger-button compact-button" type="button" disabled={updatingRequestId === request.id} onClick={() => void updateRequestStatus(request.id, 'Rejected')}>{updatingRequestId === request.id ? 'Updating…' : 'Reject'}</button>
                       </>
@@ -859,6 +898,13 @@ function ResourceDashboard() {
                       </button>
                       {availableSupplies.length === 0 && <span>No supplies in stock</span>}
                       </>
+                    )}
+                    {recommendation?.id === request.id && (
+                      <div className="recommendation-result">
+                        <strong>{recommendation.result.decision === 'Recommend' ? `Recommend ${recommendation.result.quantity} units` : 'No safe match'}</strong>
+                        <span>{recommendation.result.reason}</span>
+                        {recommendation.result.warnings.map((warning) => <span key={warning}>{warning}</span>)}
+                      </div>
                     )}
                     {request.status === 'Fulfilled' && <span className="fulfilled-label">Sent</span>}
                   </div>

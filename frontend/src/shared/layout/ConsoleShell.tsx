@@ -33,7 +33,7 @@ const HELP_REQUEST_PAGES: Page[] = [
   { path: '/dashboard/help-requests', label: 'Request review', Component: HelpRequestsReview },
 ]
 
-// Component C — shelters, supplies, stock and allocations
+// Component C — supplies, stock and allocations
 const RESOURCE_PAGES: Page[] = [
   { path: '/resources', label: 'Resource dashboard', Component: ResourceDashboard, end: true },
 ]

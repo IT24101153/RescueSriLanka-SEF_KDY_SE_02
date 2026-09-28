@@ -34,8 +34,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
         private readonly IHelpRequestServiceForAgent _helpRequestLookup = helpRequestLookup;
         private readonly IAiAnalysisService _aiAnalysis = aiAnalysis;
 
-        // PLACEHOLDER reference dataset for the Resource & Logistics step, standing in for
-        // Student C's real Shelter/MedicalSupply table until it exists.
+        // PLACEHOLDER reference dataset for the Resource & Logistics step.
         private static readonly (string Name, double Lat, double Lng)[] KnownFacilities =
         [
             ("Colombo National Hospital", 6.9214, 79.8621),
@@ -156,7 +155,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                 step1.Status = PlannerStepStatus.Failed;
             }
 
-            // ---- Step 2: Resource & Logistics — PLACEHOLDER dataset until Student C's Shelter table exists ----
+            // ---- Step 2: Resource & Logistics — PLACEHOLDER facility dataset ----
             if (request is not null)
             {
                 var nearest = KnownFacilities
@@ -175,7 +174,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                     nearestFacility = nearest.Name,
                     distanceKm = Math.Round(nearest.DistanceKm, 1),
                     estimatedEtaMinutes = Math.Round(etaMinutes, 0),
-                    note = "PLACEHOLDER dataset — replace with Student C's real Shelter/Resource table once available."
+                    note = "PLACEHOLDER facility dataset."
                 });
                 step2.Status = PlannerStepStatus.Completed;
                 step2.CompletedAt = DateTime.UtcNow;

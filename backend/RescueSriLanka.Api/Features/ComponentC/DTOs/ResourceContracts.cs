@@ -1,12 +1,5 @@
 namespace RescueSriLanka.Api.Features.ComponentC.DTOs;
 
-public record CreateShelterRequest(
-    string Name,
-    string Address,
-    decimal Latitude,
-    decimal Longitude,
-    int Capacity);
-
 public record CreateMedicalSupplyRequest(
     string Name,
     string Unit,
@@ -18,13 +11,6 @@ public record CreateFoodWaterStockRequest(
     string Unit,
     decimal QuantityOnHand,
     decimal LowStockThreshold);
-
-public record UpdateShelterRequest(
-    string Name,
-    string Address,
-    decimal Latitude,
-    decimal Longitude,
-    int Capacity);
 
 public record UpdateMedicalSupplyRequest(
     string Name,

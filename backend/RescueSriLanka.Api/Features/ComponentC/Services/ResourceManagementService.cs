@@ -11,14 +11,6 @@ namespace RescueSriLanka.Api.Features.ComponentC.Services;
 
 public interface IResourceManagementService
 {
-    Task<IReadOnlyList<Shelter>> GetSheltersAsync(CancellationToken cancellationToken);
-
-    Task<Shelter> CreateShelterAsync(CreateShelterRequest request, CancellationToken cancellationToken);
-
-    Task<Shelter?> UpdateShelterAsync(Guid id, UpdateShelterRequest request, CancellationToken cancellationToken);
-
-    Task<bool> DeleteShelterAsync(Guid id, CancellationToken cancellationToken);
-
     Task<IReadOnlyList<MedicalSupply>> GetMedicalSuppliesAsync(CancellationToken cancellationToken);
 
     Task<MedicalSupply> CreateMedicalSupplyAsync(CreateMedicalSupplyRequest request, CancellationToken cancellationToken);
@@ -57,7 +49,7 @@ public interface IResourceManagementService
 
     Task<IReadOnlyList<HelpRequestResponse>> CreateHelpRequestsBatchAsync(CreateHelpRequestsBatchRequest request, Guid userId, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(Guid userId, bool includeAll, CancellationToken cancellationToken);
 
     Task<HelpRequestResponse?> UpdateHelpRequestStatusAsync(
         Guid id,
@@ -68,7 +60,7 @@ public interface IResourceManagementService
 
     Task<IReadOnlyList<DonationResponse>> CreateDonationsBatchAsync(CreateDonationsBatchRequest request, Guid userId, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(Guid userId, bool includeAll, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<DonatedSupplyResponse>> GetDonatedSuppliesAsync(CancellationToken cancellationToken);
 
@@ -92,57 +84,6 @@ public class ResourceManagementService(
 {
     private static readonly string[] ResourceCategories =
         ["Food", "Water", "Medical", "Sanitary products", "Hygiene items", "Other"];
-
-    public async Task<IReadOnlyList<Shelter>> GetSheltersAsync(CancellationToken cancellationToken) =>
-        await dbContext.Shelters
-            .AsNoTracking()
-            .Where(shelter => shelter.IsActive)
-            .OrderBy(shelter => shelter.Name)
-            .ToListAsync(cancellationToken);
-
-    public async Task<Shelter> CreateShelterAsync(CreateShelterRequest request, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Address))
-        {
-            throw new ArgumentException("Shelter name and address are required.");
-        }
-
-        if (request.Capacity < 0)
-        {
-            throw new ArgumentException("Shelter capacity cannot be negative.");
-        }
-
-        var shelter = new Shelter
-        {
-            Id = Guid.NewGuid(),
-            Name = request.Name.Trim(),
-            Address = request.Address.Trim(),
-            Latitude = request.Latitude,
-            Longitude = request.Longitude,
-            Capacity = request.Capacity
-        };
-
-        dbContext.Shelters.Add(shelter);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return shelter;
-    }
-
-    public async Task<Shelter?> UpdateShelterAsync(Guid id, UpdateShelterRequest request, CancellationToken cancellationToken)
-    {
-        ValidateShelter(request.Name, request.Address, request.Capacity);
-        var shelter = await dbContext.Shelters.SingleOrDefaultAsync(item => item.Id == id && item.IsActive, cancellationToken);
-        if (shelter is null) return null;
-        shelter.Name = request.Name.Trim();
-        shelter.Address = request.Address.Trim();
-        shelter.Latitude = request.Latitude;
-        shelter.Longitude = request.Longitude;
-        shelter.Capacity = request.Capacity;
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return shelter;
-    }
-
-    public async Task<bool> DeleteShelterAsync(Guid id, CancellationToken cancellationToken) =>
-        await SoftDeleteAsync(dbContext.Shelters, id, cancellationToken);
 
     public async Task<IReadOnlyList<MedicalSupply>> GetMedicalSuppliesAsync(CancellationToken cancellationToken) =>
         await dbContext.MedicalSupplies
@@ -312,13 +253,6 @@ public class ResourceManagementService(
     public Task<bool> DeleteManagedSupplyAsync(Guid id, CancellationToken cancellationToken) =>
         SoftDeleteAsync(dbContext.ManagedSupplies, id, cancellationToken);
 
-    private static void ValidateShelter(string name, string address, int capacity)
-    {
-        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(address))
-            throw new ArgumentException("Shelter name and address are required.");
-        if (capacity < 0) throw new ArgumentException("Shelter capacity cannot be negative.");
-    }
-
     private static void ValidateSupply(string name, string unit, decimal quantity, decimal threshold)
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(unit))
@@ -331,7 +265,7 @@ public class ResourceManagementService(
     {
         var resource = await resources.FindAsync([id], cancellationToken);
         if (resource is null) return false;
-        var activeProperty = typeof(TEntity).GetProperty(nameof(Shelter.IsActive));
+        var activeProperty = typeof(TEntity).GetProperty(nameof(MedicalSupply.IsActive));
         if (activeProperty is null) return false;
         activeProperty.SetValue(resource, false);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -455,10 +389,16 @@ public class ResourceManagementService(
         return [.. requests.Select(resourceRequest => ToResponse(resourceRequest, user.District))];
     }
 
-    public async Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<HelpRequestResponse>> GetHelpRequestsAsync(
+        Guid userId,
+        bool includeAll,
+        CancellationToken cancellationToken)
     {
-        var requests = await dbContext.ResourceHelpRequests
+        var query = dbContext.ResourceHelpRequests
             .AsNoTracking()
+            .AsQueryable();
+        if (!includeAll) query = query.Where(request => request.UserId == userId);
+        var requests = await query
             .OrderByDescending(request => request.CreatedAtUtc)
             .ToListAsync(cancellationToken);
         var userIds = requests.Where(request => request.UserId is not null).Select(request => request.UserId!.Value).ToArray();
@@ -611,10 +551,16 @@ public class ResourceManagementService(
             string.Equals(value, category.Trim(), StringComparison.OrdinalIgnoreCase))
         ?? throw new ArgumentException("Select a valid resource category.");
 
-    public async Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<DonationResponse>> GetDonationsAsync(
+        Guid userId,
+        bool includeAll,
+        CancellationToken cancellationToken)
     {
-        var donations = await dbContext.Donations
+        var query = dbContext.Donations
             .AsNoTracking()
+            .AsQueryable();
+        if (!includeAll) query = query.Where(donation => donation.UserId == userId);
+        var donations = await query
             .OrderByDescending(donation => donation.CreatedAtUtc)
             .ToListAsync(cancellationToken);
         var userIds = donations.Where(donation => donation.UserId is not null).Select(donation => donation.UserId!.Value).ToArray();
@@ -914,9 +860,6 @@ public class ResourceManagementService(
 
         switch (resourceType.ToLowerInvariant())
         {
-            case "shelter":
-                await AllocateShelterAsync(request, cancellationToken);
-                break;
             case "medicalsupply":
                 await AllocateMedicalSupplyAsync(request, cancellationToken);
                 break;
@@ -965,11 +908,6 @@ public class ResourceManagementService(
         var resourceType = NormalizeResourceType(request.ResourceType);
         Guid resourceId = resourceType.ToLowerInvariant() switch
         {
-            "shelter" => await dbContext.Shelters
-                .Where(shelter => shelter.IsActive && shelter.Capacity - shelter.OccupiedCapacity >= request.Quantity)
-                .OrderByDescending(shelter => shelter.Capacity - shelter.OccupiedCapacity)
-                .Select(shelter => (Guid?)shelter.Id)
-                .FirstOrDefaultAsync(cancellationToken) ?? throw new InvalidOperationException("No active shelter has enough availability."),
             "medicalsupply" => await dbContext.MedicalSupplies
                 .Where(supply => supply.IsActive && supply.QuantityOnHand >= request.Quantity)
                 .OrderByDescending(supply => supply.QuantityOnHand)
@@ -1013,7 +951,6 @@ public class ResourceManagementService(
         var trimmed = resourceType.Trim();
         return trimmed.ToLowerInvariant() switch
         {
-            "shelter" => "Shelter",
             "medicalsupply" or "medical" => "MedicalSupply",
             "foodwaterstock" or "food" => "FoodWaterStock",
             "donatedsupply" => "DonatedSupply",
@@ -1037,13 +974,6 @@ public class ResourceManagementService(
 
         switch (allocation.ResourceType.ToLowerInvariant())
         {
-            case "shelter":
-                var shelter = await dbContext.Shelters.SingleOrDefaultAsync(item => item.Id == allocation.ResourceId, cancellationToken);
-                if (shelter is not null)
-                {
-                    shelter.OccupiedCapacity = Math.Max(0, shelter.OccupiedCapacity - (int)allocation.Quantity);
-                }
-                break;
             case "medicalsupply":
                 var supply = await dbContext.MedicalSupplies.SingleOrDefaultAsync(item => item.Id == allocation.ResourceId, cancellationToken);
                 if (supply is not null)
@@ -1065,26 +995,6 @@ public class ResourceManagementService(
         allocation.Status = "Released";
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToResponse(allocation);
-    }
-
-    private async Task AllocateShelterAsync(AllocateResourceRequest request, CancellationToken cancellationToken)
-    {
-        if (request.Quantity != decimal.Truncate(request.Quantity))
-        {
-            throw new ArgumentException("Shelter allocation quantity must be a whole number.");
-        }
-
-        var shelter = await dbContext.Shelters.SingleOrDefaultAsync(
-            item => item.Id == request.ResourceId && item.IsActive,
-            cancellationToken)
-            ?? throw new KeyNotFoundException("Shelter was not found.");
-
-        if (shelter.AvailableCapacity < request.Quantity)
-        {
-            throw new InvalidOperationException("Shelter does not have enough available capacity.");
-        }
-
-        shelter.OccupiedCapacity += (int)request.Quantity;
     }
 
     private async Task AllocateMedicalSupplyAsync(AllocateResourceRequest request, CancellationToken cancellationToken)

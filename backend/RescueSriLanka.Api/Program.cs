@@ -22,6 +22,7 @@ using RescueSriLanka.Api.Features.ComponentB.Data;
 using RescueSriLanka.Api.Features.ComponentB.Services;
 using RescueSriLanka.Api.Features.ComponentC.Services;
 using RescueSriLanka.Api.Features.ComponentC.Data;
+using RescueSriLanka.Api.Features.ComponentC.Agents.ResourceAllocationAgent;
 using RescueSriLanka.Api.Features.ComponentD.Agents.Orchestration;
 using RescueSriLanka.Api.Features.ComponentD.Agents.SafetyValidation;
 using RescueSriLanka.Api.Features.ComponentD.Services;
@@ -77,8 +78,9 @@ builder.Services.AddScoped<IPlannerAgentService, PlannerAgentService>();
 builder.Services.AddScoped<IHelpRequestServiceForAgent, HelpRequestServiceForAgent>();
 builder.Services.AddHttpClient<IAiAnalysisService, GeminiAnalysisService>();
 
-// Component C — shelters, medical supplies, food/water stock and allocations.
+// Component C — medical supplies, food/water stock and allocations.
 builder.Services.AddScoped<IResourceManagementService, ResourceManagementService>();
+builder.Services.AddHttpClient<IResourceAllocationAgent, ResourceAllocationAgent>();
 
 // Component D — rescue teams, assignments, dispatch and its agents.
 builder.Services.AddDbContext<ComponentDDbContext>(options =>
@@ -375,7 +377,7 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
                 services.GetRequiredService<IPasswordHasher<User>>());
         }
 
-        // Component C's shelters, supplies and stock for the resource screens.
+        // Component C supplies and stock for the resource screens.
         await ResourceDataSeeder.SeedAsync(db);
 
         // Sample incidents for the map/dashboard — off via configuration.

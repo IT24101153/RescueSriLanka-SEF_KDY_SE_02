@@ -9,7 +9,7 @@ public enum UserRole
     /// <summary>Manages incidents and approves AI-proposed response plans.</summary>
     EmergencyCoordinator,
 
-    /// <summary>Manages shelters, medical supplies, food/water stock and vehicles.</summary>
+    /// <summary>Manages medical supplies, food/water stock and resource allocations.</summary>
     ResourceManager,
 
     /// <summary>Receives assignments and reports status from the field.</summary>

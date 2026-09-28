@@ -254,30 +254,6 @@ public class ResourceManagementServiceTests
     }
 
     [Fact]
-    public async Task MatchAndAllocateAsync_UsesShelterWithEnoughCapacity()
-    {
-        await using var context = CreateContext();
-        var shelter = new Shelter
-        {
-            Id = Guid.NewGuid(),
-            Name = "Kandy Relief Centre",
-            Address = "Kandy",
-            Capacity = 100,
-            OccupiedCapacity = 80
-        };
-        context.Shelters.Add(shelter);
-        await context.SaveChangesAsync();
-
-        var service = new ResourceManagementService(context);
-        var result = await service.MatchAndAllocateAsync(
-            new MatchResourceRequest("Shelter", 10, null, null),
-            CancellationToken.None);
-
-        Assert.Equal(shelter.Id, result.ResourceId);
-        Assert.Equal(90, (await context.Shelters.SingleAsync()).OccupiedCapacity);
-    }
-
-    [Fact]
     public async Task GetLowStockAlertsAsync_ReturnsMedicalSupplyBelowThreshold()
     {
         await using var context = CreateContext();

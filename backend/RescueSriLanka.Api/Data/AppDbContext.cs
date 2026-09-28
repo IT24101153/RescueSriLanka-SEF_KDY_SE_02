@@ -37,7 +37,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AgentStep> AgentSteps => Set<AgentStep>();
 
     // ---- Component C — Resource Management ----
-    public DbSet<Shelter> Shelters => Set<Shelter>();
     public DbSet<MedicalSupply> MedicalSupplies => Set<MedicalSupply>();
     public DbSet<FoodWaterStock> FoodWaterStocks => Set<FoodWaterStock>();
     public DbSet<ResourceAllocation> ResourceAllocations => Set<ResourceAllocation>();
@@ -247,15 +246,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .IsUnique();
 
         // ---- Component C ----
-
-        modelBuilder.Entity<Shelter>(entity =>
-        {
-            entity.Property(shelter => shelter.Name).HasMaxLength(200).IsRequired();
-            entity.Property(shelter => shelter.Address).HasMaxLength(500).IsRequired();
-            entity.Property(shelter => shelter.Latitude).HasPrecision(9, 6);
-            entity.Property(shelter => shelter.Longitude).HasPrecision(9, 6);
-            entity.Ignore(shelter => shelter.AvailableCapacity);
-        });
 
         modelBuilder.Entity<MedicalSupply>(entity =>
         {
