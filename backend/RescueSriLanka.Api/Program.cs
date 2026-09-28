@@ -239,7 +239,9 @@ builder.Services.AddCors(options =>
                     Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
                     (uri.Host is "localhost" or "127.0.0.1" or "::1"))
                 .AllowAnyHeader()
-                .AllowAnyMethod();
+                .AllowAnyMethod()
+                // So the React dashboard can read the paged incident count.
+                .WithExposedHeaders("X-Total-Count");
             return;
         }
 
@@ -247,7 +249,8 @@ builder.Services.AddCors(options =>
             .GetSection("Cors:AllowedOrigins")
             .Get<string[]>() ?? [];
 
-        policy.WithOrigins(allowed).AllowAnyHeader().AllowAnyMethod();
+        policy.WithOrigins(allowed).AllowAnyHeader().AllowAnyMethod()
+            .WithExposedHeaders("X-Total-Count");
     }));
 
 // ---------------------------------------------------------------- api surface
@@ -256,6 +259,12 @@ builder.Services
     // Enums travel as readable strings ("Critical", not 3) in both directions.
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// Catches anything a controller's own try/catch did not already turn into a
+// response, so a bug never reaches a caller as a raw stack trace.
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database");
 builder.Services.AddEndpointsApiExplorer();
@@ -289,6 +298,9 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+// First in the pipeline, so it can catch whatever happens downstream of it.
+app.UseExceptionHandler();
 
 // Which photo backend is live should never be a guess when a demo misbehaves.
 using (var startupScope = app.Services.CreateScope())

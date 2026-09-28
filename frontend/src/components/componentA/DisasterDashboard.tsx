@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiFetch, queryString } from '../../shared/api/client'
+import { apiFetch, apiFetchPage, queryString } from '../../shared/api/client'
 import type {
   DashboardStatistics,
   Incident,
@@ -11,7 +11,10 @@ import type {
 import OverviewSection from './sections/OverviewSection'
 import MapSection from './sections/MapSection'
 import ZonesSection from './sections/ZonesSection'
-import IncidentTable from './sections/IncidentTable'
+import IncidentTable, {
+  type IncidentSortKey,
+  type SortDirection,
+} from './sections/IncidentTable'
 import AgentPanel from './sections/AgentPanel'
 import AgentActivity from './sections/AgentActivity'
 import ReviewPanel from './sections/ReviewPanel'
@@ -32,6 +35,9 @@ const TYPES: IncidentType[] = [
 ]
 
 type TabId = 'overview' | 'map' | 'zones' | 'queue' | 'agent'
+
+/** Rows per page for the "Incident queue" tab — the only view with paging. */
+const QUEUE_PAGE_SIZE = 20
 
 const TABS: { id: TabId; label: string; hint: string }[] = [
   { id: 'overview', label: 'Overview', hint: 'Figures and breakdowns' },
@@ -58,6 +64,17 @@ export default function DisasterDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
+
+  // The "Incident queue" tab is the only view with server-side sorting and
+  // paging — the map, zones and overview keep showing every active incident,
+  // as they need the whole set rather than one page of it.
+  const [queueIncidents, setQueueIncidents] = useState<Incident[]>([])
+  const [queueTotalCount, setQueueTotalCount] = useState<number | null>(null)
+  const [queuePage, setQueuePage] = useState(1)
+  const [queueSortBy, setQueueSortBy] = useState<IncidentSortKey>('severity')
+  const [queueSortDir, setQueueSortDir] = useState<SortDirection>('desc')
+  const [queueLoading, setQueueLoading] = useState(false)
+  const [queueError, setQueueError] = useState<string | null>(null)
 
   useEffect(() => {
     // Aborting on change means a slow response for old filters can never
@@ -94,11 +111,65 @@ export default function DisasterDashboard() {
     return () => controller.abort()
   }, [severity, status, type, reloadToken])
 
+  useEffect(() => {
+    if (tab !== 'queue') return
+
+    const controller = new AbortController()
+
+    async function run() {
+      setQueueLoading(true)
+      try {
+        const query = queryString({
+          severity,
+          status,
+          type,
+          activeOnly: true,
+          sortBy: queueSortBy,
+          sortDir: queueSortDir,
+          page: queuePage,
+          pageSize: QUEUE_PAGE_SIZE,
+        })
+
+        const { data, totalCount } = await apiFetchPage<Incident[]>(
+          `/api/incidents${query}`,
+          { signal: controller.signal },
+        )
+
+        if (controller.signal.aborted) return
+        setQueueIncidents(data)
+        setQueueTotalCount(totalCount)
+        setQueueError(null)
+      } catch (cause) {
+        if (controller.signal.aborted) return
+        setQueueError(cause instanceof Error ? cause.message : 'Failed to load the incident queue.')
+      } finally {
+        if (!controller.signal.aborted) setQueueLoading(false)
+      }
+    }
+
+    void run()
+    return () => controller.abort()
+  }, [tab, severity, status, type, queueSortBy, queueSortDir, queuePage, reloadToken])
+
   /** Filter changes and the refresh button own the loading flag. */
   function reload() {
     setLoading(true)
     setReloadToken((token) => token + 1)
   }
+
+  function handleQueueSort(key: IncidentSortKey) {
+    setQueuePage(1)
+    if (key === queueSortBy) {
+      setQueueSortDir((dir) => (dir === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setQueueSortBy(key)
+      setQueueSortDir('desc')
+    }
+  }
+
+  const queueTotalPages = queueTotalCount === null
+    ? null
+    : Math.max(1, Math.ceil(queueTotalCount / QUEUE_PAGE_SIZE))
 
   /**
    * After a coordinator decides something: refresh the list, and re-fetch the
@@ -117,6 +188,7 @@ export default function DisasterDashboard() {
   function changeFilter<T>(setter: (value: T) => void) {
     return (value: T) => {
       setLoading(true)
+      setQueuePage(1)
       setter(value)
     }
   }
@@ -271,13 +343,51 @@ export default function DisasterDashboard() {
         <section className="panel" aria-label="Incident queue">
           <header className="panel__head">
             <h2 className="panel__title">Incident queue</h2>
-            <span className="panel__meta">{incidents.length} shown</span>
+            <span className="panel__meta">
+              {queueLoading
+                ? 'Loading…'
+                : `${queueTotalCount ?? queueIncidents.length} match${queueTotalCount === 1 ? '' : 'es'}`}
+            </span>
           </header>
+
+          {queueError && (
+            <div className="alert" role="alert">
+              {queueError}
+            </div>
+          )}
+
           <IncidentTable
-            incidents={incidents}
+            incidents={queueIncidents}
             selectedId={selected?.id ?? null}
             onSelect={setSelected}
+            sortBy={queueSortBy}
+            sortDir={queueSortDir}
+            onSort={handleQueueSort}
           />
+
+          {queueTotalPages !== null && queueTotalPages > 1 && (
+            <nav className="pagination" aria-label="Incident queue pages">
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setQueuePage((page) => page - 1)}
+                disabled={queuePage <= 1 || queueLoading}
+              >
+                Previous
+              </button>
+              <span className="pagination__status">
+                Page {queuePage} of {queueTotalPages}
+              </span>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setQueuePage((page) => page + 1)}
+                disabled={queuePage >= queueTotalPages || queueLoading}
+              >
+                Next
+              </button>
+            </nav>
+          )}
         </section>
       )}
 
