@@ -8,7 +8,10 @@ public record ResourceAllocationRecommendation(
     decimal Confidence,
     string Reason,
     IReadOnlyList<string> Warnings,
-    bool RequiresApproval);
+    bool RequiresApproval,
+    string? ResourceName = null,
+    string? Unit = null,
+    decimal? AvailableQuantity = null);
 
 public record ResourceAllocationCandidate(
     Guid Id,

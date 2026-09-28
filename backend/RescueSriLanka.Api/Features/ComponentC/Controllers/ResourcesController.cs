@@ -12,7 +12,8 @@ namespace RescueSriLanka.Api.Features.ComponentC.Controllers;
 [Route("api/resources")]
 public class ResourcesController(
     IResourceManagementService resourceService,
-    IResourceAllocationAgent allocationAgent) : ControllerBase
+    IResourceAllocationAgent allocationAgent,
+    IResourceForecastAgent forecastAgent) : ControllerBase
 {
     // Changing stock and allocations is staff work. Inventory reads are open,
     // while request and donation history requires an account and is ownership-scoped.
@@ -174,6 +175,11 @@ public class ResourcesController(
     [HttpPost("help-requests/{id:guid}/allocation-recommendation")]
     public async Task<IActionResult> RecommendAllocation(Guid id, CancellationToken cancellationToken) =>
         Ok(await allocationAgent.RecommendAsync(id, cancellationToken));
+
+    [Authorize(Roles = Managers)]
+    [HttpGet("stock-forecast")]
+    public async Task<IActionResult> GetStockForecast(CancellationToken cancellationToken) =>
+        Ok(await forecastAgent.ForecastAsync(cancellationToken));
 
     [Authorize(Roles = Managers)]
     [HttpPost("allocations/match")]

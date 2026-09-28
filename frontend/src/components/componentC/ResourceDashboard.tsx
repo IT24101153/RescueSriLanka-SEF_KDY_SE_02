@@ -24,7 +24,9 @@ type Page = 'overview' | 'supplies' | 'allocations' | 'donate' | 'history'
 type SupplySource = { id: string; type: ResourceType }
 type DeleteRequest = { type: ResourceType; id: string; label: string; duplicates: SupplySource[] }
 type FulfillmentRequest = { id: string; supplyKey: string; quantity: string }
-type AllocationRecommendation = { decision: string; resourceId: string | null; resourceType: string | null; quantity: number; confidence: number; reason: string; warnings: string[]; requiresApproval: boolean }
+type AllocationRecommendation = { decision: string; resourceId: string | null; resourceType: string | null; quantity: number; confidence: number; reason: string; warnings: string[]; requiresApproval: boolean; resourceName: string | null; unit: string | null; availableQuantity: number | null }
+type StockForecastItem = { resourceType: string; resourceId: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number | null; usedInLast30Days: number; averageDailyUse: number; estimatedDaysRemaining: number | null; riskLevel: 'Critical' | 'Watch' | 'Stable'; suggestedAction: string }
+type StockForecast = { windowDays: number; generatedAtUtc: string; summary: string; items: StockForecastItem[] }
 
 const MANAGED_SUPPLY_ITEMS: Record<string, string[]> = {
   Food: ['Dry foods', 'Rice', 'Other'],
@@ -130,6 +132,9 @@ function ResourceDashboard() {
   const [updatingDonationKey, setUpdatingDonationKey] = useState<string | null>(null)
   const [recommendation, setRecommendation] = useState<{ id: string; result: AllocationRecommendation } | null>(null)
   const [loadingRecommendationId, setLoadingRecommendationId] = useState<string | null>(null)
+  const [stockForecast, setStockForecast] = useState<StockForecast | null>(null)
+  const [loadingStockForecast, setLoadingStockForecast] = useState(false)
+  const [stockForecastError, setStockForecastError] = useState('')
 
   const loadResources = async () => {
     setIsLoading(true)
@@ -459,6 +464,19 @@ function ResourceDashboard() {
     }
   }
 
+  const getStockForecast = async () => {
+    setLoadingStockForecast(true)
+    setStockForecastError('')
+    try {
+      const result = await getResources<StockForecast>('stock-forecast')
+      setStockForecast(result)
+    } catch (forecastError) {
+      setStockForecastError(forecastError instanceof Error ? forecastError.message : 'Unable to load the stock forecast.')
+    } finally {
+      setLoadingStockForecast(false)
+    }
+  }
+
   const updateDonationStatus = async (submission: Donation[], status: 'Accepted' | 'Rejected') => {
     setError('')
     const first = submission[0]
@@ -572,6 +590,9 @@ function ResourceDashboard() {
             </div>
             <button className="primary-button" type="button" onClick={() => openResourceForm('medical')}>
               Add supply <span aria-hidden="true">+</span>
+            </button>
+            <button className="secondary-button" type="button" disabled={loadingStockForecast} onClick={() => void getStockForecast()}>
+              {loadingStockForecast ? 'Forecasting...' : 'AI stock forecast'}
             </button>
           </section>
         )}
@@ -688,6 +709,31 @@ function ResourceDashboard() {
             </article>
           </section>
         )}
+
+        {page === 'overview' && stockForecast && (
+          <section className="stock-forecast" aria-labelledby="stock-forecast-title">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">30-day allocation history</p>
+                <h2 id="stock-forecast-title">Stock forecast</h2>
+              </div>
+              <span>{stockForecast.summary}</span>
+            </div>
+            {stockForecastError && <p className="request-row-error" role="alert">{stockForecastError}</p>}
+            <div className="stock-forecast-list">
+              {stockForecast.items.map((item) => (
+                <div className="stock-forecast-row" key={`${item.resourceType}:${item.resourceId}`}>
+                  <div><strong>{item.name}</strong><span>{item.resourceType} · {item.quantityOnHand} {item.unit} on hand</span></div>
+                  <div><strong>{item.estimatedDaysRemaining === null ? 'No recent use' : `${item.estimatedDaysRemaining} days`}</strong><span>{item.averageDailyUse} {item.unit}/day average</span></div>
+                  <span className={`forecast-risk forecast-${item.riskLevel.toLowerCase()}`}>{item.riskLevel}</span>
+                  <p>{item.suggestedAction}</p>
+                </div>
+              ))}
+              {stockForecast.items.length === 0 && <p className="empty-state">No active stock to forecast.</p>}
+            </div>
+          </section>
+        )}
+        {page === 'overview' && stockForecastError && !stockForecast && <p className="request-row-error" role="alert">{stockForecastError}</p>}
 
         {page === 'overview' && (
           <section className="content-grid">
@@ -901,9 +947,11 @@ function ResourceDashboard() {
                     )}
                     {recommendation?.id === request.id && (
                       <div className="recommendation-result">
-                        <strong>{recommendation.result.decision === 'Recommend' ? `Recommend ${recommendation.result.quantity} units` : 'No safe match'}</strong>
+                        <strong>{recommendation.result.decision === 'Recommend' ? `Recommend ${recommendation.result.resourceName ?? recommendation.result.resourceType} · ${recommendation.result.quantity} ${recommendation.result.unit ?? 'units'}` : 'No safe match'}</strong>
+                        {recommendation.result.decision === 'Recommend' && <span>{recommendation.result.availableQuantity} {recommendation.result.unit} currently available</span>}
                         <span>{recommendation.result.reason}</span>
                         {recommendation.result.warnings.map((warning) => <span key={warning}>{warning}</span>)}
+                        <span>Manager approval required before allocation.</span>
                       </div>
                     )}
                     {request.status === 'Fulfilled' && <span className="fulfilled-label">Sent</span>}

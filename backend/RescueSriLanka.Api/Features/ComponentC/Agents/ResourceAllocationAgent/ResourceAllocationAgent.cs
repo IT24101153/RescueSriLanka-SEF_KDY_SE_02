@@ -42,6 +42,8 @@ public sealed class ResourceAllocationAgent(
         var configuredModel = configuration["Gemini:Model"] ?? configuration["GoogleAi:Model"] ?? "gemini-3-flash-preview";
         var models = new[] { configuredModel, "gemini-2.5-flash", "gemini-1.5-flash" }
             .Distinct(StringComparer.OrdinalIgnoreCase);
+        var attemptedModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string? lastUnavailableResponse = null;
         var prompt = $$"""
             You are a resource allocation assistant for an emergency response manager.
             Recommend an available resource for the request. Never invent an ID, resource,
@@ -67,48 +69,156 @@ public sealed class ResourceAllocationAgent(
         {
             httpClient.BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/");
             httpClient.Timeout = TimeSpan.FromSeconds(30);
+            var discoveredModels = new List<string>();
             foreach (var model in models)
             {
-                var response = await httpClient.PostAsJsonAsync(
-                    $"models/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}",
-                    new
-                    {
-                        contents = new[] { new { parts = new[] { new { text = prompt } } } },
-                        generationConfig = new { temperature = 0.1, maxOutputTokens = 512 }
-                    },
-                    cancellationToken);
-                if ((int)response.StatusCode is 429 or >= 500)
+                attemptedModels.Add(model);
+                var attempt = await TryModelAsync(model, apiKey, prompt, cancellationToken);
+                if (attempt.IsUnavailable)
                 {
-                    logger.LogWarning("Gemini allocation recommendation returned HTTP {StatusCode} for {Model}; trying the next model.", response.StatusCode, model);
+                    lastUnavailableResponse = attempt.Error;
+                    logger.LogWarning("Gemini allocation recommendation unavailable for {Model}: {ProviderError}", model, attempt.Error);
                     continue;
                 }
-                if (!response.IsSuccessStatusCode)
+                if (attempt.Error is not null)
                 {
-                    logger.LogWarning("Gemini allocation recommendation returned HTTP {StatusCode}.", response.StatusCode);
-                    return NoMatch("Gemini rejected the recommendation request; review it manually.", "AI provider rejected the request.");
+                    logger.LogWarning("Gemini allocation recommendation failed for {Model}: {ProviderError}", model, attempt.Error);
+                    return NoMatch("Gemini rejected the recommendation request; review it manually.", attempt.Error);
                 }
 
-                using var document = await JsonDocument.ParseAsync(
-                    await response.Content.ReadAsStreamAsync(cancellationToken),
-                    cancellationToken: cancellationToken);
-                var text = document.RootElement
-                    .GetProperty("candidates")[0]
-                    .GetProperty("content")
-                    .GetProperty("parts")[0]
-                    .GetProperty("text")
-                    .GetString();
-                var recommendation = JsonSerializer.Deserialize<ResourceAllocationRecommendation>(
-                    CleanJson(text), JsonOptions);
-                return ValidateRecommendation(recommendation, candidates);
+                return ValidateRecommendation(attempt.Recommendation, candidates);
             }
 
-            return NoMatch("Gemini models are temporarily unavailable; review the request manually.", "AI provider unavailable after fallback attempts.");
+            discoveredModels = await DiscoverGenerationModelsAsync(apiKey, cancellationToken);
+            foreach (var model in discoveredModels.Where(model => !attemptedModels.Contains(model)))
+            {
+                attemptedModels.Add(model);
+                var attempt = await TryModelAsync(model, apiKey, prompt, cancellationToken);
+                if (attempt.IsUnavailable)
+                {
+                    lastUnavailableResponse = attempt.Error;
+                    logger.LogWarning("Gemini allocation recommendation unavailable for discovered model {Model}: {ProviderError}", model, attempt.Error);
+                    continue;
+                }
+                if (attempt.Error is not null)
+                {
+                    logger.LogWarning("Gemini allocation recommendation failed for discovered model {Model}: {ProviderError}", model, attempt.Error);
+                    return NoMatch("Gemini rejected the recommendation request; review it manually.", attempt.Error);
+                }
+
+                return ValidateRecommendation(attempt.Recommendation, candidates);
+            }
+
+            var warning = lastUnavailableResponse is null
+                ? "No accessible Gemini model supports generateContent. Check the API key and enabled API."
+                : $"Gemini models were unavailable ({lastUnavailableResponse}). Check API key model access and quota.";
+            return NoMatch("Gemini could not reach an available model; review the request manually.", warning);
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException)
         {
             logger.LogWarning(exception, "Gemini allocation recommendation failed for request {RequestId}.", helpRequestId);
             return NoMatch("The AI recommendation could not be completed; review the request manually.", "AI recommendation failed.");
         }
+    }
+
+    private async Task<ModelAttempt> TryModelAsync(
+        string model,
+        string apiKey,
+        string prompt,
+        CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.PostAsJsonAsync(
+            $"models/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}",
+            new
+            {
+                contents = new[] { new { parts = new[] { new { text = prompt } } } },
+                generationConfig = new { temperature = 0.1, maxOutputTokens = 512 }
+            },
+            cancellationToken);
+        if ((int)response.StatusCode is 404 or 429 or >= 500)
+        {
+            var providerError = await ReadProviderErrorAsync(response, cancellationToken);
+            return new ModelAttempt(null, true, providerError);
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            return new ModelAttempt(null, false, $"Gemini returned HTTP {(int)response.StatusCode} ({response.StatusCode}).");
+        }
+
+        using var document = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(cancellationToken),
+            cancellationToken: cancellationToken);
+        var text = document.RootElement
+            .GetProperty("candidates")[0]
+            .GetProperty("content")
+            .GetProperty("parts")[0]
+            .GetProperty("text")
+            .GetString();
+        var recommendation = JsonSerializer.Deserialize<ResourceAllocationRecommendation>(CleanJson(text), JsonOptions);
+        return new ModelAttempt(recommendation, false, null);
+    }
+
+    private async Task<List<string>> DiscoverGenerationModelsAsync(string apiKey, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await httpClient.GetAsync(
+                $"models?key={Uri.EscapeDataString(apiKey)}",
+                cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Gemini model discovery returned HTTP {StatusCode}.", response.StatusCode);
+                return [];
+            }
+
+            using var document = await JsonDocument.ParseAsync(
+                await response.Content.ReadAsStreamAsync(cancellationToken),
+                cancellationToken: cancellationToken);
+            if (!document.RootElement.TryGetProperty("models", out var modelsElement) || modelsElement.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            return modelsElement.EnumerateArray()
+                .Where(model => model.TryGetProperty("supportedGenerationMethods", out var methods) &&
+                    methods.ValueKind == JsonValueKind.Array &&
+                    methods.EnumerateArray().Any(method => method.GetString() == "generateContent"))
+                .Select(model => model.TryGetProperty("name", out var name) ? name.GetString() : null)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!.StartsWith("models/", StringComparison.Ordinal) ? name["models/".Length..] : name)
+                .Where(name => name.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(name => name.Contains("flash", StringComparison.OrdinalIgnoreCase))
+                .ThenBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .Take(5)
+                .ToList();
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            logger.LogWarning(exception, "Gemini model discovery failed.");
+            return [];
+        }
+    }
+
+    private static async Task<string> ReadProviderErrorAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        string? message = null;
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.TryGetProperty("error", out var error) && error.TryGetProperty("message", out var messageElement))
+            {
+                message = messageElement.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            // The HTTP status remains useful when the provider body is not JSON.
+        }
+
+        var detail = string.IsNullOrWhiteSpace(message) ? string.Empty : $": {message}";
+        if (detail.Length > 220) detail = $"{detail[..220]}...";
+        return $"HTTP {(int)response.StatusCode} ({response.StatusCode}){detail}";
     }
 
     private async Task<List<ResourceAllocationCandidate>> GetCandidatesAsync(CancellationToken cancellationToken)
@@ -146,6 +256,9 @@ public sealed class ResourceAllocationAgent(
         return recommendation with
         {
             ResourceType = candidate.ResourceType,
+            ResourceName = candidate.Name,
+            Unit = candidate.Unit,
+            AvailableQuantity = candidate.QuantityOnHand,
             Confidence = Math.Clamp(recommendation.Confidence, 0, 1),
             RequiresApproval = true,
             Warnings = recommendation.Warnings ?? []
@@ -166,4 +279,9 @@ public sealed class ResourceAllocationAgent(
         }
         return cleaned;
     }
+
+    private sealed record ModelAttempt(
+        ResourceAllocationRecommendation? Recommendation,
+        bool IsUnavailable,
+        string? Error);
 }
