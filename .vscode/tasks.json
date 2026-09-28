@@ -4,16 +4,9 @@
     {
       "label": "1. Run Backend",
       "type": "shell",
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/tools/ensure-backend.ps1\"",
-      "isBackground": true,
-      "problemMatcher": {
-        "owner": "backend-ready",
-        "pattern": { "regexp": "^$" },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "^Starting Component C backend$",
-          "endsPattern": "^API READY: http://localhost:5093$"
-        }
+      "command": "dotnet run",
+      "options": {
+        "cwd": "${workspaceFolder}/backend/RescueSriLanka.Api"
       },
       "presentation": {
         "group": "rescue-project"
@@ -23,7 +16,6 @@
       "label": "2. Run Frontend",
       "type": "shell",
       "command": "npm run dev",
-      "dependsOn": "1. Run Backend",
       "options": {
         "cwd": "${workspaceFolder}/frontend"
       },
@@ -34,8 +26,7 @@
     {
       "label": "3. Run Mobile",
       "type": "shell",
-      "command": "flutter run -d emulator-5554 --disable-dds",
-      "dependsOn": "1. Run Backend",
+      "command": "flutter run -d emulator",
       "options": {
         "cwd": "${workspaceFolder}/mobile"
       },
@@ -46,6 +37,7 @@
     {
       "label": "Start Full Project",
       "dependsOn": [
+        "1. Run Backend",
         "2. Run Frontend",
         "3. Run Mobile"
       ],
