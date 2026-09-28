@@ -157,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     _HomeCard(
                       icon: Icons.sos_outlined,
                       title: 'Request help',
-                      subtitle: 'Water, food, medical aid, rescue, or shelter',
+                      subtitle: 'Water, food, medical aid, or rescue',
                       onTap: () async {
                         await Navigator.of(context).push(
                           MaterialPageRoute(

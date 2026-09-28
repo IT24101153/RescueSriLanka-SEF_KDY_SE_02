@@ -83,12 +83,22 @@ class ResourceApi {
     return _decodeList(response, path, HelpRequest.fromJson);
   }
 
+  Future<List<Donation>> getDonations() async {
+    const path = '/api/resources/donations';
+    final response = await _get(path);
+    return _decodeList(response, path, Donation.fromJson);
+  }
+
   void dispose() => _client.close();
 
   static const Duration _timeout = Duration(seconds: 15);
 
-  Future<http.Response> _get(String path) =>
-      _send(() => _client.get(Uri.parse('$_baseUrl$path')));
+  Future<http.Response> _get(String path) => _send(
+    () => _client.get(
+      Uri.parse('$_baseUrl$path'),
+      headers: {if (_token != null) 'Authorization': 'Bearer $_token'},
+    ),
+  );
 
   Future<http.Response> _post(String path, Map<String, dynamic> body) => _send(
     () => _client.post(
@@ -223,21 +233,30 @@ class HelpRequest {
 
 class Donation {
   const Donation({
+    required this.id,
+    required this.userId,
     required this.donationType,
     required this.quantity,
     required this.unit,
     required this.status,
+    required this.createdAt,
   });
 
+  final String id;
+  final String? userId;
   final String donationType;
   final double quantity;
   final String unit;
   final String status;
+  final DateTime createdAt;
 
   factory Donation.fromJson(Map<String, dynamic> json) => Donation(
+    id: json['id'] as String,
+    userId: json['userId'] as String?,
     donationType: json['donationType'] as String,
     quantity: (json['quantity'] as num).toDouble(),
     unit: json['unit'] as String,
     status: json['status'] as String,
+    createdAt: DateTime.parse(json['createdAtUtc'] as String),
   );
 }

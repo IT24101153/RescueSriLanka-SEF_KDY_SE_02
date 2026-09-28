@@ -33,6 +33,10 @@ public interface IResourceManagementService
 
     Task<ManagedSupply> CreateManagedSupplyAsync(CreateManagedSupplyRequest request, CancellationToken cancellationToken);
 
+    Task<ManagedSupply?> UpdateManagedSupplyAsync(Guid id, CreateManagedSupplyRequest request, CancellationToken cancellationToken);
+
+    Task<bool> DeleteManagedSupplyAsync(Guid id, CancellationToken cancellationToken);
+
     Task<FoodWaterStock> CreateFoodWaterStockAsync(CreateFoodWaterStockRequest request, CancellationToken cancellationToken);
 
     Task<FoodWaterStock?> UpdateFoodWaterStockAsync(Guid id, UpdateFoodWaterStockRequest request, CancellationToken cancellationToken);
@@ -77,6 +81,7 @@ public interface IResourceManagementService
         Guid submissionId,
         UpdateHelpRequestStatusRequest request,
         CancellationToken cancellationToken);
+
 }
 
 public class ResourceManagementService(
@@ -278,6 +283,34 @@ public class ResourceManagementService(
         await dbContext.SaveChangesAsync(cancellationToken);
         return supply;
     }
+
+    public async Task<ManagedSupply?> UpdateManagedSupplyAsync(
+        Guid id,
+        CreateManagedSupplyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var allowedCategories = new[] { "Food", "Water", "Medical", "Sanitary products", "Hygiene items", "Other" };
+        var category = allowedCategories.FirstOrDefault(value =>
+            string.Equals(value, request.Category.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (category is null) throw new ArgumentException("Select a valid supply category.");
+
+        ValidateSupply(request.Name, request.Unit, request.QuantityOnHand, request.LowStockThreshold);
+        var supply = await dbContext.ManagedSupplies.SingleOrDefaultAsync(
+            item => item.Id == id && item.IsActive, cancellationToken);
+        if (supply is null) return null;
+
+        supply.Category = category;
+        supply.Name = request.Name.Trim();
+        supply.Unit = request.Unit.Trim();
+        supply.QuantityOnHand = request.QuantityOnHand;
+        supply.LowStockThreshold = request.LowStockThreshold;
+        supply.UpdatedAtUtc = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return supply;
+    }
+
+    public Task<bool> DeleteManagedSupplyAsync(Guid id, CancellationToken cancellationToken) =>
+        SoftDeleteAsync(dbContext.ManagedSupplies, id, cancellationToken);
 
     private static void ValidateShelter(string name, string address, int capacity)
     {

@@ -119,6 +119,31 @@ public class ResourcesController(IResourceManagementService resourceService) : C
     }
 
     [Authorize(Roles = Managers)]
+    [HttpPut("managed-supplies/{id:guid}")]
+    public async Task<IActionResult> UpdateManagedSupply(
+        Guid id,
+        CreateManagedSupplyRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var supply = await resourceService.UpdateManagedSupplyAsync(id, request, cancellationToken);
+            return supply is null ? NotFound(new { error = "Supply was not found." }) : Ok(supply);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { error = exception.Message });
+        }
+    }
+
+    [Authorize(Roles = Managers)]
+    [HttpDelete("managed-supplies/{id:guid}")]
+    public async Task<IActionResult> DeleteManagedSupply(Guid id, CancellationToken cancellationToken) =>
+        await resourceService.DeleteManagedSupplyAsync(id, cancellationToken)
+            ? NoContent()
+            : NotFound(new { error = "Supply was not found." });
+
+    [Authorize(Roles = Managers)]
     [HttpPost("food-water-stock")]
     public async Task<IActionResult> CreateFoodWaterStock(
         CreateFoodWaterStockRequest request,
@@ -362,4 +387,5 @@ public class ResourcesController(IResourceManagementService resourceService) : C
         catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
         catch (InvalidOperationException exception) { return Conflict(new { error = exception.Message }); }
     }
+
 }

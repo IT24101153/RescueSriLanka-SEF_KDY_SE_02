@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../shared/core/theme.dart';
@@ -558,6 +560,51 @@ class _DonatePageState extends State<DonatePage> {
   final _notes = TextEditingController();
   final List<_ResourceItemDraft> _items = [_ResourceItemDraft()];
   bool _submitting = false;
+  bool _loadingDonations = true;
+  String? _donationError;
+  List<Donation> _donations = [];
+  Timer? _donationRefreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDonations();
+    _donationRefreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _loadDonations(showLoading: false),
+    );
+  }
+
+  Future<void> _loadDonations({bool showLoading = true}) async {
+    if (showLoading && mounted) {
+      setState(() {
+        _loadingDonations = true;
+        _donationError = null;
+      });
+    }
+    try {
+      final donations = await widget.api.getDonations();
+      if (!mounted) return;
+      setState(() {
+        _donations = donations
+            .where((donation) => donation.userId == widget.user?.id)
+            .toList();
+        _donationError = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _donationError = error.toString().replaceFirst('Exception: ', ''),
+        );
+      }
+    } finally {
+      if (mounted && showLoading) setState(() => _loadingDonations = false);
+    }
+  }
+
+  Future<void> _refreshDonations() async {
+    await Future.wait([widget.onRefresh(), _loadDonations()]);
+  }
 
   void _addItem() => setState(() => _items.add(_ResourceItemDraft()));
 
@@ -571,6 +618,7 @@ class _DonatePageState extends State<DonatePage> {
 
   @override
   void dispose() {
+    _donationRefreshTimer?.cancel();
     for (final item in _items) {
       item.dispose();
     }
@@ -599,6 +647,8 @@ class _DonatePageState extends State<DonatePage> {
         items: _items.map((item) => item.toSubmissionItem()).toList(),
         notes: _notes.text,
       );
+      if (!mounted) return;
+      await _loadDonations();
       if (!mounted) return;
       _notes.clear();
       for (final item in _items) {
@@ -630,7 +680,7 @@ class _DonatePageState extends State<DonatePage> {
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
-      onRefresh: widget.onRefresh,
+      onRefresh: _refreshDonations,
       child: _buildList(context),
     );
   }
@@ -712,10 +762,73 @@ class _DonatePageState extends State<DonatePage> {
             ],
           ),
         ),
+        const SizedBox(height: AppSpacing.gap),
+        const AppSectionTitle('Your donations'),
+        if (_loadingDonations)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_donationError != null)
+          AppErrorBanner(
+            message: _donationError!,
+            onRetry: _loadDonations,
+          )
+        else if (_donations.isEmpty)
+          const AppEmptyState(
+            icon: Icons.volunteer_activism_outlined,
+            title: 'No donations yet',
+            message: 'Donations you offer appear here with their latest status.',
+          )
+        else
+          for (final donation in _donations)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.gap),
+              child: AppCard(
+                accent: _statusTone(donation.status),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            donation.donationType,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            '${donation.quantity} ${donation.unit} · ${MaterialLocalizations.of(context).formatShortDate(donation.createdAt.toLocal())}',
+                            style: const TextStyle(fontSize: 12.5, color: AppColors.body),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    AppPill(
+                      _donationStatusLabel(donation.status),
+                      tone: _statusTone(donation.status),
+                    ),
+                  ],
+                ),
+              ),
+            ),
       ],
     );
   }
 }
+
+String _donationStatusLabel(String status) => switch (status.toLowerCase()) {
+  'pendingreview' || 'pending' => 'Pending',
+  'accepted' => 'Accepted',
+  'rejected' => 'Rejected',
+  _ => status,
+};
 
 class _AccountDetails extends StatelessWidget {
   const _AccountDetails({required this.user});

@@ -20,8 +20,9 @@ type Donation = { id: string; userId?: string | null; submissionId?: string | nu
 type SupplyForm = { name: string; unit: string; quantityOnHand: string; lowStockThreshold: string }
 type StockForm = { itemName: string; unit: string; quantityOnHand: string; lowStockThreshold: string }
 type ResourceType = 'medical' | 'food' | 'managed'
-type Page = 'overview' | 'supplies' | 'allocations' | 'donate'
-type DeleteRequest = { type: ResourceType; id: string; label: string }
+type Page = 'overview' | 'supplies' | 'allocations' | 'donate' | 'history'
+type SupplySource = { id: string; type: ResourceType }
+type DeleteRequest = { type: ResourceType; id: string; label: string; duplicates: SupplySource[] }
 type FulfillmentRequest = { id: string; supplyKey: string; quantity: string }
 
 const MANAGED_SUPPLY_ITEMS: Record<string, string[]> = {
@@ -33,6 +34,8 @@ const MANAGED_SUPPLY_ITEMS: Record<string, string[]> = {
   Other: ['Other'],
 }
 const SUPPLY_CATEGORIES = ['Food', 'Water', 'Medical', 'Sanitary products', 'Hygiene items', 'Other'] as const
+const HISTORY_RETENTION_DAYS = 7
+const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000
 
 async function getResources<T>(path: string): Promise<T> {
   const response = await fetch(`/api/resources/${path}`)
@@ -43,6 +46,44 @@ async function getResources<T>(path: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
+function clearedHistoryStorageKey(): string {
+  return `rsl.resources.clearedHistory.${getSession()?.user.id ?? 'anonymous'}`
+}
+
+function readHistoryDates(): Record<string, string> {
+  try {
+    const stored = localStorage.getItem(clearedHistoryStorageKey())
+    if (!stored) return {}
+    const parsed = JSON.parse(stored) as unknown
+    // Older builds kept only the hidden item IDs. Give those entries a fresh
+    // retention window when upgrading to the countdown history view.
+    if (Array.isArray(parsed)) {
+      const upgraded: Record<string, string> = {}
+      for (const id of parsed) {
+        if (typeof id === 'string') upgraded[id] = new Date().toISOString()
+      }
+      return upgraded
+    }
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : {}
+  } catch {
+    return {}
+  }
+}
+
+function rememberHistoryDates(entries: Record<string, string>): void {
+  try {
+    localStorage.setItem(clearedHistoryStorageKey(), JSON.stringify({ ...readHistoryDates(), ...entries }))
+  } catch {
+    // The active screen still clears the records if browser storage is unavailable.
+  }
+}
+
+function daysUntilHistoryDeletion(processedAt: string | undefined, now = Date.now()): number {
+  if (!processedAt) return 0
+  const remaining = new Date(processedAt).getTime() + HISTORY_RETENTION_MS - now
+  return Math.max(0, Math.ceil(remaining / (24 * 60 * 60 * 1000)))
+}
+
 function ResourceDashboard() {
   const [medicalSupplies, setMedicalSupplies] = useState<Supply[]>([])
   const [foodWaterStock, setFoodWaterStock] = useState<FoodWaterStock[]>([])
@@ -50,6 +91,8 @@ function ResourceDashboard() {
   const [alerts, setAlerts] = useState<ResourceAlert[]>([])
   const [helpRequests, setHelpRequests] = useState<ResourceHelpRequest[]>([])
   const [donations, setDonations] = useState<Donation[]>([])
+  const [requestHistory, setRequestHistory] = useState<ResourceHelpRequest[]>([])
+  const [donationHistory, setDonationHistory] = useState<Donation[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -57,12 +100,14 @@ function ResourceDashboard() {
   const [formError, setFormError] = useState('')
   const [resourceType, setResourceType] = useState<ResourceType>('medical')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [duplicateSupplies, setDuplicateSupplies] = useState<SupplySource[]>([])
   const [supplyForm, setSupplyForm] = useState<SupplyForm>({ name: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
   const [stockForm, setStockForm] = useState<StockForm>({ itemName: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
   const [managedCategory, setManagedCategory] = useState('Medical')
   const [managedItem, setManagedItem] = useState('Bandages')
   const [managedCustomName, setManagedCustomName] = useState('')
   const [page, setPage] = useState<Page>('overview')
+  const [historyClock, setHistoryClock] = useState(Date.now())
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null)
   const [fulfillmentRequest, setFulfillmentRequest] = useState<FulfillmentRequest | null>(null)
   const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null)
@@ -86,8 +131,48 @@ function ResourceDashboard() {
       setFoodWaterStock(foodData)
       setManagedSupplies(managedData)
       setAlerts(alertData)
-      setHelpRequests(helpRequestData)
-      setDonations(donationData)
+      const historyDates = readHistoryDates()
+      const now = Date.now()
+      const requestKeys = new Set<string>()
+      const donationKeys = new Set<string>()
+      const processedRequests = helpRequestData.filter((request) => request.status !== 'Pending')
+      const processedDonations = donationData.filter((donation) => donation.status !== 'PendingReview')
+      for (const request of processedRequests) {
+        const key = `request:${request.id}`
+        requestKeys.add(key)
+        historyDates[key] ??= new Date(now).toISOString()
+      }
+      for (const donation of processedDonations) {
+        const key = `donation:${donation.id}`
+        donationKeys.add(key)
+        historyDates[key] ??= new Date(now).toISOString()
+      }
+      const retainedRequests = processedRequests.filter((request) => {
+        const processedAt = historyDates[`request:${request.id}`]
+        return processedAt && daysUntilHistoryDeletion(processedAt) > 0
+      })
+      const retainedDonations = processedDonations.filter((donation) => {
+        const processedAt = historyDates[`donation:${donation.id}`]
+        return processedAt && daysUntilHistoryDeletion(processedAt) > 0
+      })
+      for (const key of Object.keys(historyDates)) {
+        if (key.startsWith('request:') && !requestKeys.has(key)) delete historyDates[key]
+        if (key.startsWith('donation:') && !donationKeys.has(key)) delete historyDates[key]
+      }
+      for (const item of processedRequests) {
+        if (daysUntilHistoryDeletion(historyDates[`request:${item.id}`]) <= 0) delete historyDates[`request:${item.id}`]
+      }
+      for (const item of processedDonations) {
+        if (daysUntilHistoryDeletion(historyDates[`donation:${item.id}`]) <= 0) delete historyDates[`donation:${item.id}`]
+      }
+      for (const [key, processedAt] of Object.entries(historyDates)) {
+        if (new Date(processedAt).getTime() > now) historyDates[key] = new Date(now).toISOString()
+      }
+      rememberHistoryDates(historyDates)
+      setHelpRequests(helpRequestData.filter((request) => request.status === 'Pending'))
+      setDonations(donationData.filter((donation) => donation.status === 'PendingReview'))
+      setRequestHistory(retainedRequests)
+      setDonationHistory(retainedDonations)
     } catch (resourceError) {
       setError(resourceError instanceof Error ? resourceError.message : 'Unable to load resources.')
     } finally {
@@ -123,12 +208,25 @@ function ResourceDashboard() {
         const result = await response.json().catch(() => null) as { error?: string; title?: string } | null
         throw new Error(result?.error ?? result?.title ?? `Unable to create ${isMedical ? 'the medical supply' : 'the food or water stock'}.`)
       }
+      for (const duplicate of duplicateSupplies) {
+        const duplicatePath = duplicate.type === 'managed'
+          ? 'managed-supplies'
+          : duplicate.type === 'medical' ? 'medical-supplies' : 'food-water-stock'
+        const duplicateResponse = await fetch(`/api/resources/${duplicatePath}/${duplicate.id}`, {
+          method: 'DELETE',
+          headers: authHeaders(),
+        })
+        if (!duplicateResponse.ok) {
+          throw new Error('The supply was updated, but duplicate inventory rows could not be merged. Refresh and try again.')
+        }
+      }
       if (isMedical) setSupplyForm({ name: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
       else if (isManaged) {
         setStockForm({ itemName: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
         setManagedCustomName('')
       } else setStockForm({ itemName: '', unit: '', quantityOnHand: '', lowStockThreshold: '' })
       setEditingId(null)
+      setDuplicateSupplies([])
       setIsFormOpen(false)
       await loadResources()
     } catch (submitError) {
@@ -139,6 +237,17 @@ function ResourceDashboard() {
   }
 
   useEffect(() => { void loadResources() }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = Date.now()
+      setHistoryClock(now)
+      const dates = readHistoryDates()
+      setRequestHistory((current) => current.filter((request) => daysUntilHistoryDeletion(dates[`request:${request.id}`], now) > 0))
+      setDonationHistory((current) => current.filter((donation) => daysUntilHistoryDeletion(dates[`donation:${donation.id}`], now) > 0))
+    }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const totalSupplyValue = [...medicalSupplies, ...foodWaterStock, ...managedSupplies]
   const totalAvailable = totalSupplyValue.reduce((sum, item) => sum + Number(item.quantityOnHand), 0)
@@ -182,20 +291,29 @@ function ResourceDashboard() {
         detail: supply.category,
       })),
   ]
-  type InventoryTableRow = { id: string; name: string; unit: string; quantity: number; type: ResourceType }
+  type InventoryTableRow = { id: string; name: string; unit: string; quantity: number; type: ResourceType; sources: SupplySource[] }
   const categoryInventory: Record<string, InventoryTableRow[]> = Object.fromEntries(
     SUPPLY_CATEGORIES.map((category) => [category, []]),
   )
+  const addInventoryRow = (category: string, source: SupplySource, name: string, unit: string, quantity: number) => {
+    const existing = categoryInventory[category].find((row) => row.name.trim().toLowerCase() === name.trim().toLowerCase() && row.unit.trim().toLowerCase() === unit.trim().toLowerCase())
+    if (existing) {
+      existing.quantity += quantity
+      existing.sources.push(source)
+    } else {
+      categoryInventory[category].push({ id: source.id, name, unit, quantity, type: source.type, sources: [source] })
+    }
+  }
   for (const supply of medicalSupplies) {
-    categoryInventory.Medical.push({ id: supply.id, name: supply.name, unit: supply.unit, quantity: supply.quantityOnHand, type: 'medical' })
+    addInventoryRow('Medical', { id: supply.id, type: 'medical' }, supply.name, supply.unit, supply.quantityOnHand)
   }
   for (const stock of foodWaterStock) {
     const category = /water/i.test(stock.itemName) ? 'Water' : 'Food'
-    categoryInventory[category].push({ id: stock.id, name: stock.itemName, unit: stock.unit, quantity: stock.quantityOnHand, type: 'food' })
+    addInventoryRow(category, { id: stock.id, type: 'food' }, stock.itemName, stock.unit, stock.quantityOnHand)
   }
   for (const supply of managedSupplies) {
     const category = SUPPLY_CATEGORIES.find((value) => value.toLowerCase() === supply.category.toLowerCase()) ?? 'Other'
-    categoryInventory[category].push({ id: supply.id, name: supply.name, unit: supply.unit, quantity: supply.quantityOnHand, type: 'managed' })
+    addInventoryRow(category, { id: supply.id, type: 'managed' }, supply.name, supply.unit, supply.quantityOnHand)
   }
   const preferredSupplyKey = (needType: string) => {
     const need = needType.toLowerCase()
@@ -212,9 +330,11 @@ function ResourceDashboard() {
     groups[key].push(donation)
     return groups
   }, {})).map(([key, items]) => ({ key, items }))
+  const historyDates = readHistoryDates()
 
   const openResourceForm = (type: ResourceType) => {
     setFormError('')
+    setDuplicateSupplies([])
     setResourceType('managed')
     const category = type === 'food' ? 'Food' : 'Medical'
     setManagedCategory(category)
@@ -224,18 +344,34 @@ function ResourceDashboard() {
     setIsFormOpen(true)
   }
 
-  const editSupply = (supply: Supply) => {
+  const editSupply = (supply: Supply, quantity = supply.quantityOnHand, duplicates: SupplySource[] = []) => {
     setResourceType('medical')
     setEditingId(supply.id)
-    setSupplyForm({ name: supply.name, unit: supply.unit, quantityOnHand: String(supply.quantityOnHand), lowStockThreshold: String(supply.lowStockThreshold) })
+    setDuplicateSupplies(duplicates)
+    setSupplyForm({ name: supply.name, unit: supply.unit, quantityOnHand: String(quantity), lowStockThreshold: String(supply.lowStockThreshold) })
     setFormError('')
     setIsFormOpen(true)
   }
 
-  const editStock = (stock: FoodWaterStock) => {
+  const editStock = (stock: FoodWaterStock, quantity = stock.quantityOnHand, duplicates: SupplySource[] = []) => {
     setResourceType('food')
     setEditingId(stock.id)
-    setStockForm({ itemName: stock.itemName, unit: stock.unit, quantityOnHand: String(stock.quantityOnHand), lowStockThreshold: String(stock.lowStockThreshold) })
+    setDuplicateSupplies(duplicates)
+    setStockForm({ itemName: stock.itemName, unit: stock.unit, quantityOnHand: String(quantity), lowStockThreshold: String(stock.lowStockThreshold) })
+    setFormError('')
+    setIsFormOpen(true)
+  }
+
+  const editManagedSupply = (supply: ManagedSupply, quantity: number, duplicates: SupplySource[]) => {
+    const options = MANAGED_SUPPLY_ITEMS[supply.category] ?? ['Other']
+    const isListedItem = options.includes(supply.name)
+    setResourceType('managed')
+    setEditingId(supply.id)
+    setDuplicateSupplies(duplicates)
+    setManagedCategory(supply.category)
+    setManagedItem(isListedItem ? supply.name : 'Other')
+    setManagedCustomName(isListedItem ? '' : supply.name)
+    setStockForm({ itemName: supply.name, unit: supply.unit, quantityOnHand: String(quantity), lowStockThreshold: String(supply.lowStockThreshold) })
     setFormError('')
     setIsFormOpen(true)
   }
@@ -243,7 +379,7 @@ function ResourceDashboard() {
   const removeResource = async (type: ResourceType, id: string, label: string) => {
     setError('')
     try {
-      const path = type === 'medical' ? 'medical-supplies' : 'food-water-stock'
+      const path = type === 'medical' ? 'medical-supplies' : type === 'managed' ? 'managed-supplies' : 'food-water-stock'
       const response = await fetch(`/api/resources/${path}/${id}`, { method: 'DELETE', headers: authHeaders() })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string } | null
@@ -260,6 +396,9 @@ function ResourceDashboard() {
     const request = deleteRequest
     setDeleteRequest(null)
     await removeResource(request.type, request.id, request.label)
+    for (const duplicate of request.duplicates) {
+      await removeResource(duplicate.type, duplicate.id, request.label)
+    }
   }
 
   const updateRequestStatus = async (id: string, status: 'Accepted' | 'Rejected') => {
@@ -276,6 +415,8 @@ function ResourceDashboard() {
         const result = await response.json().catch(() => null) as { error?: string } | null
         throw new Error(result?.error ?? `Unable to update the request (HTTP ${response.status}).`)
       }
+      rememberHistoryDates({ [`request:${id}`]: new Date().toISOString() })
+      setHelpRequests((current) => current.filter((request) => request.id !== id))
       await loadResources()
     } catch (statusError) {
       setRequestActionError({
@@ -305,6 +446,15 @@ function ResourceDashboard() {
         const result = await response.json().catch(() => null) as { error?: string } | null
         throw new Error(result?.error ?? 'Unable to update the donation.')
       }
+      const processedAt = new Date().toISOString()
+      rememberHistoryDates(Object.fromEntries(
+        submission.map((donation) => [`donation:${donation.id}`, processedAt]),
+      ))
+      setDonations((current) => current.filter((donation) =>
+        first.submissionId
+          ? donation.submissionId !== first.submissionId
+          : donation.id !== first.id,
+      ))
       await loadResources()
     } catch (statusError) {
       setError(statusError instanceof Error ? statusError.message : 'Unable to update the donation.')
@@ -365,6 +515,7 @@ function ResourceDashboard() {
           <button className={`nav-link ${page === 'supplies' ? 'active' : ''}`} type="button" onClick={() => navigate('supplies')}>Supplies</button>
           <button className={`nav-link ${page === 'allocations' ? 'active' : ''}`} type="button" onClick={() => navigate('allocations')}>Requests</button>
           <button className={`nav-link ${page === 'donate' ? 'active' : ''}`} type="button" onClick={() => navigate('donate')}>Donate</button>
+          <button className={`nav-link ${page === 'history' ? 'active' : ''}`} type="button" onClick={() => navigate('history')}>History</button>
         </nav>
         <div className="sidebar-footer">
           <span className="status-dot" />
@@ -588,9 +739,10 @@ function ResourceDashboard() {
                                 <td>{item.quantity} {item.unit}</td>
                                 <td><span className={`inventory-status ${item.quantity > 0 ? 'is-available' : 'is-empty'}`}>{item.quantity > 0 ? 'Available' : 'Out of stock'}</span></td>
                                 <td className="inventory-actions">
-                                  {item.type === 'medical' && <button className="edit-action" type="button" onClick={() => { const supply = medicalSupplies.find((value) => value.id === item.id); if (supply) editSupply(supply) }}>Edit</button>}
-                                  {item.type === 'food' && <button className="edit-action" type="button" onClick={() => { const stock = foodWaterStock.find((value) => value.id === item.id); if (stock) editStock(stock) }}>Edit</button>}
-                                  {item.type !== 'managed' && <button className="remove-action" type="button" onClick={() => setDeleteRequest({ type: item.type, id: item.id, label: item.name })}>Remove</button>}
+                                  {item.type === 'medical' && <button className="edit-action" type="button" onClick={() => { const supply = medicalSupplies.find((value) => value.id === item.id); if (supply) editSupply(supply, item.quantity, item.sources.slice(1)) }}>Edit</button>}
+                                  {item.type === 'food' && <button className="edit-action" type="button" onClick={() => { const stock = foodWaterStock.find((value) => value.id === item.id); if (stock) editStock(stock, item.quantity, item.sources.slice(1)) }}>Edit</button>}
+                                  {item.type === 'managed' && <button className="edit-action" type="button" onClick={() => { const supply = managedSupplies.find((value) => value.id === item.id); if (supply) editManagedSupply(supply, item.quantity, item.sources.slice(1)) }}>Edit</button>}
+                                  <button className="remove-action" type="button" onClick={() => setDeleteRequest({ type: item.type, id: item.id, label: item.name, duplicates: item.sources.slice(1) })}>Remove</button>
                                 </td>
                               </tr>
                             ))}
@@ -768,6 +920,54 @@ function ResourceDashboard() {
                   )}
                 </div>
               ))}
+            </div>
+          </section>
+        )}
+
+        {page === 'history' && (
+          <section className="page-section history-page">
+            <div className="page-heading">
+              <div>
+                <p className="eyebrow">Processed items</p>
+                <h2>Request history</h2>
+                <p className="muted">Processed requests stay here for up to {HISTORY_RETENTION_DAYS} days.</p>
+              </div>
+            </div>
+            <div className="data-table">
+              {requestHistory.length === 0 && !isLoading && <p className="empty-state">No processed requests in history.</p>}
+              {requestHistory.map((request) => {
+                const days = daysUntilHistoryDeletion(historyDates[`request:${request.id}`], historyClock)
+                return (
+                  <div className="data-row request-row history-row" key={request.id}>
+                    <div><strong>{request.needType}</strong><span>{request.description}</span></div>
+                    <div><strong>{request.requesterName}</strong><span>{request.contactNumber}</span><span>{request.district || 'District not set'}</span></div>
+                    <div><strong>{request.status}</strong><span>Request status</span></div>
+                    <span className="history-countdown">Auto-delete in {days} {days === 1 ? 'day' : 'days'}</span>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="page-heading history-section-heading">
+              <div>
+                <p className="eyebrow">Processed items</p>
+                <h2>Donation history</h2>
+                <p className="muted">Processed donations stay here for up to {HISTORY_RETENTION_DAYS} days.</p>
+              </div>
+            </div>
+            <div className="data-table">
+              {donationHistory.length === 0 && !isLoading && <p className="empty-state">No processed donations in history.</p>}
+              {donationHistory.map((donation) => {
+                const days = daysUntilHistoryDeletion(historyDates[`donation:${donation.id}`], historyClock)
+                return (
+                  <div className="data-row request-row history-row" key={donation.id}>
+                    <div><strong>{donation.donationType}</strong><span>{donation.quantity} {donation.unit}</span></div>
+                    <div><strong>{donation.donorName}</strong><span>{donation.contactNumber}</span><span>{donation.district || 'District not set'}</span></div>
+                    <div><strong>{donation.status}</strong><span>Donation status</span></div>
+                    <span className="history-countdown">Auto-delete in {days} {days === 1 ? 'day' : 'days'}</span>
+                  </div>
+                )
+              })}
             </div>
           </section>
         )}
