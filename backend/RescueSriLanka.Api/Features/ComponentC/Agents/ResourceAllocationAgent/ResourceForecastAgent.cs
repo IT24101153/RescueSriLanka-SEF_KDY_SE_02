@@ -1,14 +1,13 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
+using RescueSriLanka.Api.Services.Llm;
 
 namespace RescueSriLanka.Api.Features.ComponentC.Agents.ResourceAllocationAgent;
 
 public sealed class ResourceForecastAgent(
     AppDbContext dbContext,
-    HttpClient httpClient,
-    IConfiguration configuration,
+    ILlmClient llm,
     ILogger<ResourceForecastAgent> logger) : IResourceForecastAgent
 {
     private const int ForecastWindowDays = 30;
@@ -82,47 +81,30 @@ public sealed class ResourceForecastAgent(
         return forecast with { Summary = aiSummary };
     }
 
+    private const string SummarySystemInstruction =
+        "You summarize deterministic inventory forecasts for an emergency resource " +
+        "manager in plain prose. Do not change or recalculate any quantities, risks, " +
+        "or recommendations, and do not approve allocations.";
+
     private async Task<string> TrySummarizeAsync(ResourceStockForecast forecast, CancellationToken cancellationToken)
     {
-        var apiKey = configuration["Gemini:ApiKey"] ?? configuration["GoogleAi:ApiKey"];
-        if (string.IsNullOrWhiteSpace(apiKey)) return forecast.Summary;
+        if (!llm.IsConfigured) return forecast.Summary;
 
-        var configuredModel = configuration["Gemini:Model"] ?? configuration["GoogleAi:Model"] ?? "gemini-3-flash-preview";
-        var models = new[] { configuredModel, "gemini-2.5-flash", "gemini-1.5-flash" }
-            .Distinct(StringComparer.OrdinalIgnoreCase);
         var prompt = $$"""
-            Summarize these deterministic inventory forecasts for a resource manager in two concise sentences.
-            Do not change or recalculate any quantities, risks, or recommendations. Do not approve allocations.
+            Summarize this forecast for a resource manager in two concise sentences.
             Forecast data: {{JsonSerializer.Serialize(forecast)}}
             """;
 
         try
         {
-            httpClient.BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/");
-            httpClient.Timeout = TimeSpan.FromSeconds(30);
-            foreach (var model in models)
-            {
-                using var response = await httpClient.PostAsJsonAsync(
-                    $"models/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}",
-                    new { contents = new[] { new { parts = new[] { new { text = prompt } } } } },
-                    cancellationToken);
-                if ((int)response.StatusCode is 404 or 429 or >= 500) continue;
-                if (!response.IsSuccessStatusCode) return forecast.Summary;
-
-                using var document = await JsonDocument.ParseAsync(
-                    await response.Content.ReadAsStreamAsync(cancellationToken),
-                    cancellationToken: cancellationToken);
-                var summary = document.RootElement.GetProperty("candidates")[0]
-                    .GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
-                return string.IsNullOrWhiteSpace(summary) ? forecast.Summary : summary.Trim();
-            }
+            var summary = await llm.GenerateAsync(SummarySystemInstruction, prompt, ct: cancellationToken);
+            return string.IsNullOrWhiteSpace(summary) ? forecast.Summary : summary.Trim();
         }
-        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        catch (LlmUnavailableException exception)
         {
             logger.LogWarning(exception, "Gemini stock forecast summary failed; returning deterministic forecast.");
+            return forecast.Summary;
         }
-
-        return forecast.Summary;
     }
 
     private static string NormalizeType(string resourceType) => resourceType.Trim().ToLowerInvariant();

@@ -27,6 +27,8 @@ type FulfillmentRequest = { id: string; supplyKey: string; quantity: string }
 type AllocationRecommendation = { decision: string; resourceId: string | null; resourceType: string | null; quantity: number; confidence: number; reason: string; warnings: string[]; requiresApproval: boolean; resourceName: string | null; unit: string | null; availableQuantity: number | null }
 type StockForecastItem = { resourceType: string; resourceId: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number | null; usedInLast30Days: number; averageDailyUse: number; estimatedDaysRemaining: number | null; riskLevel: 'Critical' | 'Watch' | 'Stable'; suggestedAction: string }
 type StockForecast = { windowDays: number; generatedAtUtc: string; summary: string; items: StockForecastItem[] }
+type AllocationPlanItem = { helpRequestId: string; needType: string; requesterName: string; priority: number; decision: string; resourceId: string | null; resourceType: string | null; resourceName: string | null; unit: string | null; quantity: number; availableQuantity: number | null; confidence: number; reason: string; warnings: string[]; requiresApproval: boolean }
+type AllocationPlan = { generatedAtUtc: string; summary: string; items: AllocationPlanItem[] }
 
 const MANAGED_SUPPLY_ITEMS: Record<string, string[]> = {
   Food: ['Dry foods', 'Rice', 'Other'],
@@ -135,6 +137,9 @@ function ResourceDashboard() {
   const [stockForecast, setStockForecast] = useState<StockForecast | null>(null)
   const [loadingStockForecast, setLoadingStockForecast] = useState(false)
   const [stockForecastError, setStockForecastError] = useState('')
+  const [allocationPlan, setAllocationPlan] = useState<AllocationPlan | null>(null)
+  const [loadingAllocationPlan, setLoadingAllocationPlan] = useState(false)
+  const [allocationPlanError, setAllocationPlanError] = useState('')
 
   const loadResources = async () => {
     setIsLoading(true)
@@ -474,6 +479,21 @@ function ResourceDashboard() {
       setStockForecastError(forecastError instanceof Error ? forecastError.message : 'Unable to load the stock forecast.')
     } finally {
       setLoadingStockForecast(false)
+    }
+  }
+
+  const getAllocationPlan = async () => {
+    setLoadingAllocationPlan(true)
+    setAllocationPlanError('')
+    try {
+      const response = await fetch('/api/resources/help-requests/allocation-plan', { method: 'POST', headers: authHeaders() })
+      const result = await response.json().catch(() => null) as AllocationPlan | { error?: string } | null
+      if (!response.ok) throw new Error((result && 'error' in result ? result.error : undefined) ?? `Unable to plan allocations (HTTP ${response.status}).`)
+      setAllocationPlan(result as AllocationPlan)
+    } catch (planError) {
+      setAllocationPlanError(planError instanceof Error ? planError.message : 'Unable to plan allocations.')
+    } finally {
+      setLoadingAllocationPlan(false)
     }
   }
 
@@ -892,7 +912,37 @@ function ResourceDashboard() {
                 <h2>Resource requests</h2>
                 <p className="muted">Review support requests, accept or reject them, and send available resources.</p>
               </div>
+              <button className="secondary-button" type="button" disabled={loadingAllocationPlan} onClick={() => void getAllocationPlan()}>
+                {loadingAllocationPlan ? 'Planning...' : 'Plan all requests'}
+              </button>
             </div>
+            {allocationPlan && (
+              <section className="stock-forecast" aria-labelledby="allocation-plan-title">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Priority order across pending requests</p>
+                    <h2 id="allocation-plan-title">Allocation plan</h2>
+                  </div>
+                  <span>{allocationPlan.summary}</span>
+                </div>
+                <div className="stock-forecast-list">
+                  {allocationPlan.items.map((item) => (
+                    <div className="stock-forecast-row" key={item.helpRequestId}>
+                      <div><strong>#{item.priority} · {item.needType}</strong><span>{item.requesterName}</span></div>
+                      <div>
+                        <strong>{item.decision === 'Recommend' ? `${item.resourceName ?? item.resourceType} · ${item.quantity} ${item.unit ?? 'units'}` : 'No safe match'}</strong>
+                        {item.decision === 'Recommend' && <span>{item.availableQuantity} {item.unit} available before this request</span>}
+                      </div>
+                      <span className={`forecast-risk forecast-${item.decision === 'Recommend' ? 'stable' : 'critical'}`}>{item.decision}</span>
+                      <p>{item.reason}{item.warnings.length > 0 ? ` — ${item.warnings.join(' ')}` : ''}</p>
+                    </div>
+                  ))}
+                  {allocationPlan.items.length === 0 && <p className="empty-state">No pending requests to plan for.</p>}
+                </div>
+                <p className="muted">Manager approval is still required — use Accept and Send resources below to act on a request.</p>
+              </section>
+            )}
+            {allocationPlanError && <p className="request-row-error" role="alert">{allocationPlanError}</p>}
             <div className="data-table">
               {isLoading && <p className="empty-state">Loading requests...</p>}
               {!isLoading && helpRequests.length === 0 && <p className="empty-state">No resource requests yet.</p>}

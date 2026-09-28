@@ -80,8 +80,8 @@ builder.Services.AddHttpClient<IAiAnalysisService, GeminiAnalysisService>();
 
 // Component C — medical supplies, food/water stock and allocations.
 builder.Services.AddScoped<IResourceManagementService, ResourceManagementService>();
-builder.Services.AddHttpClient<IResourceAllocationAgent, ResourceAllocationAgent>();
-builder.Services.AddHttpClient<IResourceForecastAgent, ResourceForecastAgent>();
+builder.Services.AddScoped<IResourceAllocationAgent, ResourceAllocationAgent>();
+builder.Services.AddScoped<IResourceForecastAgent, ResourceForecastAgent>();
 
 // Component D — rescue teams, assignments, dispatch and its agents.
 builder.Services.AddDbContext<ComponentDDbContext>(options =>

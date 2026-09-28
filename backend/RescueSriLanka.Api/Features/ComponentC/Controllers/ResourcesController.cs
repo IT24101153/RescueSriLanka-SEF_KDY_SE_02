@@ -177,6 +177,11 @@ public class ResourcesController(
         Ok(await allocationAgent.RecommendAsync(id, cancellationToken));
 
     [Authorize(Roles = Managers)]
+    [HttpPost("help-requests/allocation-plan")]
+    public async Task<IActionResult> PlanAllocations(CancellationToken cancellationToken) =>
+        Ok(await allocationAgent.PlanAsync(cancellationToken));
+
+    [Authorize(Roles = Managers)]
     [HttpGet("stock-forecast")]
     public async Task<IActionResult> GetStockForecast(CancellationToken cancellationToken) =>
         Ok(await forecastAgent.ForecastAsync(cancellationToken));
