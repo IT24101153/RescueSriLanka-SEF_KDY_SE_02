@@ -55,6 +55,10 @@ class RescueCoordinationService {
   Future<List<dynamic>> getDispatches(AuthSession session) =>
       _getList('/api/dispatches', session);
 
+  /// Read-only summary for the citizen view of the Rescue tab.
+  Future<Map<String, dynamic>> getRescueOverview(AuthSession session) =>
+      _object('GET', '/api/rescue/overview', session);
+
   String _id(String id) => Uri.encodeComponent(id);
   Future<Map<String, dynamic>> createTeam(AuthSession s, TeamInput data) =>
       _object('POST', '/api/rescueteams', s, data.toJson(editing: false));

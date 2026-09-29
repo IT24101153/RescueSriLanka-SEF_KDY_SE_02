@@ -263,7 +263,7 @@ public sealed class GeminiSafetyValidationClient : IGeminiSafetyValidationClient
         AssignmentValidationContextDto context, IReadOnlyList<object> priorToolResults,
         string? previousInteractionId, CancellationToken cancellationToken)
     {
-        const string instruction = "You are a safety-validation agent. Use only supplied read-only tools. Operational facts come only from tool results; never assume missing facts. You cannot dispatch or mutate anything. A human EmergencyCoordinator must approve any recommendation. After tool use, return only a JSON object matching the required decision schema; do not return prose or Markdown.";
+        const string instruction = "You are a safety-validation agent. Use only supplied read-only tools. Operational facts come only from tool results; never assume missing facts. You cannot dispatch or mutate anything. A human rescue administrator must approve any recommendation. After tool use, return only a JSON object matching the required decision schema; do not return prose or Markdown.";
         var payload = new Dictionary<string, object?>
         {
             ["model"] = _model,

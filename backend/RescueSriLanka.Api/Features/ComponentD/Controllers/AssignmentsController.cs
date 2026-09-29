@@ -11,7 +11,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize(Roles = "RescueTeam")]
     public class AssignmentsController : ControllerBase
     {
         private readonly IAssignmentService _assignmentService;
@@ -42,12 +42,12 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
         // Business-specific operation: skill/availability-based team matching.
         // Called by the Coordinator/Planner Agent (or directly from React)
         // to get ranked candidate teams before creating an Assignment.
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPost("match")]
         public async Task<ActionResult<List<TeamMatchResultDto>>> Match(MatchRequestDto request)
             => Ok(await _matchingService.FindMatchesAsync(request));
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPost]
         public async Task<ActionResult<AssignmentDto>> Create(CreateAssignmentDto dto)
         {
@@ -57,7 +57,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
                 : CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPost("{id:guid}/revise")]
         public async Task<ActionResult<AssignmentDto>> Revise(Guid id, ReviseAssignmentDto dto)
         {
@@ -67,13 +67,13 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
         }
 
         // Produces a safety recommendation only. It never approves or
-        // dispatches the assignment; an EmergencyCoordinator remains required.
-        [Authorize(Roles = "EmergencyCoordinator")]
+        // dispatches the assignment; a RescueTeam account remains required.
+        [Authorize(Roles = "RescueTeam")]
         [HttpPost("{id:guid}/validate")]
         public async Task<ActionResult<SafetyValidationWorkflowResultDto>> Validate(Guid id, CancellationToken cancellationToken)
             => Ok(await _safetyValidationAgent.ValidateAsync(id, cancellationToken));
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPost("{id:guid}/decision")]
         public async Task<IActionResult> Decide(Guid id, CoordinatorDecisionDto dto, [FromServices] IDispatchService dispatchService)
         {
