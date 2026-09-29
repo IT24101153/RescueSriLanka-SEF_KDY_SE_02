@@ -17,3 +17,10 @@
 .rescue-dashboard .rescue-member-phone { display: grid; gap: 4px; }
 .rescue-dashboard .rescue-member-phone__error { color: var(--danger); font-size: 13px; }
 .rescue-dashboard .rescue-member-phone input[aria-invalid="true"] { border-color: var(--danger); }
+.rescue-dashboard .rescue-team-controls { display: flex; flex-wrap: wrap; gap: 12px; }
+.rescue-dashboard .rescue-team-controls label { display: grid; gap: 5px; flex: 1 1 180px; min-width: 0; font-size: 13px; color: var(--text-strong); }
+.rescue-dashboard .rescue-team-controls label:first-child { flex-grow: 2; }
+.rescue-dashboard .rescue-team-controls input, .rescue-dashboard .rescue-team-controls select { width: 100%; min-width: 0; box-sizing: border-box; min-height: 39px; padding: 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-strong); }
+.rescue-dashboard .rescue-team-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 13px; }
+.rescue-dashboard .rescue-team-pagination .btn-ghost { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; }
+.rescue-dashboard .rescue-team-pagination .btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
