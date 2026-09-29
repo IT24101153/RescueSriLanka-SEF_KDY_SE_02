@@ -67,4 +67,27 @@ class Incident {
         imageCount: (json['imageCount'] as num?)?.toInt() ?? 0,
         distanceKm: (json['distanceKm'] as num?)?.toDouble(),
       );
+
+  /// The same shape [Incident.fromJson] reads, so a report can be kept on
+  /// the device and read back.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'description': description,
+        'type': type,
+        'severity': severity,
+        'status': status,
+        'latitude': latitude,
+        'longitude': longitude,
+        'affectedRadiusMeters': affectedRadiusMeters,
+        'reportedAt': reportedAt.toUtc().toIso8601String(),
+        'district': district,
+        'addressText': addressText,
+        'estimatedAffectedPeople': estimatedAffectedPeople,
+        'aiSeverity': aiSeverity,
+        'aiSeverityScore': aiSeverityScore,
+        'aiConfidence': aiConfidence,
+        'aiRationale': aiRationale,
+        'imageCount': imageCount,
+      };
 }

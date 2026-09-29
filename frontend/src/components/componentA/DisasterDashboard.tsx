@@ -15,15 +15,16 @@ import IncidentTable, {
   type IncidentSortKey,
   type SortDirection,
 } from './sections/IncidentTable'
-import AgentPanel from './sections/AgentPanel'
 import AgentActivity from './sections/AgentActivity'
-import ReviewPanel from './sections/ReviewPanel'
+import ReportDecision from './sections/ReportDecision'
 import IncidentPhotos from './sections/IncidentPhotos'
 import { SEVERITY_TOKEN, STATUS_LABEL, timeAgo } from './severity'
 import './DisasterDashboard.css'
 
 const SEVERITIES: IncidentSeverity[] = ['Low', 'Moderate', 'High', 'Critical']
-const STATUSES: IncidentStatus[] = ['Reported', 'Verified', 'InProgress']
+// Rejected reports are off the live lists; picking this filter brings them
+// back into view so a mistaken rejection can be found and undone.
+const STATUSES: IncidentStatus[] = ['Reported', 'Verified', 'Rejected']
 const TYPES: IncidentType[] = [
   'Flood',
   'Landslide',
@@ -83,7 +84,7 @@ export default function DisasterDashboard() {
 
     async function run() {
       try {
-        const query = queryString({ severity, status, type, activeOnly: true })
+        const query = queryString({ severity, status, type, activeOnly: status !== 'Rejected' })
         const options = { signal: controller.signal }
 
         const [nextStats, nextIncidents, nextZones] = await Promise.all([
@@ -123,7 +124,7 @@ export default function DisasterDashboard() {
           severity,
           status,
           type,
-          activeOnly: true,
+          activeOnly: status !== 'Rejected',
           sortBy: queueSortBy,
           sortDir: queueSortDir,
           page: queuePage,
@@ -443,12 +444,7 @@ export default function DisasterDashboard() {
 
             <IncidentPhotos images={selected.images ?? []} />
 
-            <ReviewPanel
-              incident={selected}
-              onChanged={() => void refreshAfterDecision(selected.id)}
-            />
-
-            <AgentPanel
+            <ReportDecision
               incident={selected}
               onChanged={() => void refreshAfterDecision(selected.id)}
             />

@@ -80,6 +80,12 @@ class ApiClient {
     return (data as List).map((item) => item as String).toList();
   }
 
+  /// One incident by id — how "My reports" follows a report through review.
+  Future<Incident> fetchIncident(String id) async {
+    final data = await _getJson('/api/incidents/${Uri.encodeComponent(id)}');
+    return Incident.fromJson(data as Map<String, dynamic>);
+  }
+
   Future<ZoneCheck> checkZone({
     required double latitude,
     required double longitude,
@@ -204,7 +210,14 @@ class ApiClient {
   Future<dynamic> _getJson(String path) async {
     http.Response response;
     try {
-      response = await _client.get(_uri(path)).timeout(_timeout);
+      // Reads work anonymously; a signed-in client still identifies itself.
+      final token = auth?.token;
+      response = await _client
+          .get(
+            _uri(path),
+            headers: token == null ? null : {'Authorization': 'Bearer $token'},
+          )
+          .timeout(_timeout);
     } catch (_) {
       throw ApiException(_unreachable);
     }

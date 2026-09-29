@@ -52,6 +52,7 @@ public class SafetyZoneService(AppDbContext db, ILogger<SafetyZoneService> logge
             .AsNoTracking()
             .CountAsync(incident =>
                 incident.IsActive &&
+                incident.Status != IncidentStatus.Reported &&
                 incident.Latitude >= minLat && incident.Latitude <= maxLat &&
                 incident.Longitude >= minLon && incident.Longitude <= maxLon, ct);
 
@@ -76,8 +77,10 @@ public class SafetyZoneService(AppDbContext db, ILogger<SafetyZoneService> logge
     /// <summary>Rebuilds every incident-derived zone. Returns how many are active afterwards.</summary>
     public async Task<int> RecomputeAsync(CancellationToken ct = default)
     {
+        // Only approved reports draw a zone — an unchecked report must not
+        // put a danger area on the public map.
         var activeIncidents = await db.Incidents
-            .Where(incident => incident.IsActive)
+            .Where(incident => incident.IsActive && incident.Status != IncidentStatus.Reported)
             .ToListAsync(ct);
 
         var derivedZones = await db.SafetyZones

@@ -56,7 +56,8 @@ public class IncidentsController(
         }
 
         var result = await incidentService.QueryAsync(
-            status, severity, type, district, activeOnly, sortBy, sortDir, page, pageSize, ct);
+            status, severity, type, district, activeOnly, sortBy, sortDir, page, pageSize,
+            approvedOnly: !IsStaff(), ct);
 
         Response.Headers.Append("X-Total-Count", result.TotalCount.ToString());
         return Ok(result.Items);
@@ -89,7 +90,7 @@ public class IncidentsController(
             return BadRequest(new { message = "radiusKm must be between 0 and 500." });
         }
 
-        return Ok(await incidentService.NearbyAsync(lat, lng, radiusKm, ct));
+        return Ok(await incidentService.NearbyAsync(lat, lng, radiusKm, approvedOnly: !IsStaff(), ct));
     }
 
     /// <summary>Counts and breakdowns for the dashboard header.</summary>
@@ -222,6 +223,15 @@ public class IncidentsController(
 
         return Ok(await analysisAgent.AnalyseAsync(id, ct));
     }
+
+    /// <summary>
+    /// Staff review every report; the public (signed out, or a citizen) sees
+    /// only the ones a coordinator has approved as true. Reading one report by
+    /// id stays open, so a reporter can still follow their own under review.
+    /// </summary>
+    private bool IsStaff() =>
+        User.Identity?.IsAuthenticated == true &&
+        !User.IsInRole(nameof(UserRole.Citizen));
 
     private Guid? CurrentUserId() =>
         Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
