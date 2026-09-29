@@ -411,6 +411,18 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
     }
 }
 
+// Explicitly opted-in development fixtures do not depend on automatic migrations.
+if (app.Environment.IsDevelopment() && app.Configuration.GetValue("ComponentD:SeedDemoData", false))
+{
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+    await ComponentDDataSeeder.SeedAsync(
+        services.GetRequiredService<ComponentDDbContext>(),
+        services.GetRequiredService<AppDbContext>(),
+        app.Environment, app.Configuration,
+        services.GetRequiredService<ILoggerFactory>().CreateLogger("ComponentDDataSeeder"));
+}
+
 // Serves uploaded incident photos from wwwroot/uploads.
 app.UseStaticFiles();
 

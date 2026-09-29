@@ -3,10 +3,13 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace RescueSriLanka.Api.Features.ComponentD.Models
 {
-    public class TeamMember
+    public class TeamMember : IComponentDAuditable
     {
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
 
         [Required, MaxLength(150)]
         public string FullName { get; set; } = string.Empty;
