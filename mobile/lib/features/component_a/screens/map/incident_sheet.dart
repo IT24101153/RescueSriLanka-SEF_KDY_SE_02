@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../shared/core/theme.dart';
 import '../../models/incident.dart';
+import '../../widgets/incident_photos.dart';
 import '../../widgets/severity_chip.dart';
 import '../report/report_visuals.dart';
 
@@ -54,6 +55,12 @@ class IncidentSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
+
+          // The photo leads: it shows the scene faster than any description.
+          if (incident.images.isNotEmpty) ...[
+            IncidentPhotoGallery(photos: incident.images),
+            const SizedBox(height: 18),
+          ],
 
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../../shared/core/theme.dart';
 import '../../../../shared/widgets/app_ui.dart';
 import '../../models/incident.dart';
+import '../../widgets/incident_photos.dart';
 import 'report_visuals.dart';
 
 /// The reports this person has sent, each with where it is in review.
@@ -374,6 +375,11 @@ class _ReportDetail extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         _Pills(report: report),
+
+        if (report.images.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          IncidentPhotoGallery(photos: report.images, height: 200),
+        ],
 
         const SizedBox(height: 24),
         const AppSectionTitle('Progress'),

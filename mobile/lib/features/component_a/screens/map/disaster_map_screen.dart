@@ -14,6 +14,7 @@ import '../../models/incident.dart';
 import '../../models/safety_zone.dart';
 import '../../../../shared/services/place_search_service.dart';
 import '../../services/api_client.dart';
+import '../../widgets/incident_photos.dart';
 import '../../widgets/map_legend.dart';
 import '../../widgets/severity_chip.dart';
 import '../../widgets/zone_banner.dart';
@@ -1036,15 +1037,19 @@ class _DisasterMapScreenState extends State<DisasterMapScreen> {
           ),
           child: Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: tone.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(12),
+              // A photo, when there is one, says more than the type icon.
+              if (incident.images.isNotEmpty)
+                IncidentPhotoThumb(photo: incident.images.first)
+              else
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: tone.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(iconForType(incident.type), size: 23, color: tone),
                 ),
-                child: Icon(iconForType(incident.type), size: 23, color: tone),
-              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
