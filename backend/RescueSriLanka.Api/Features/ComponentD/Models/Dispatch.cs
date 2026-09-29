@@ -19,7 +19,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Models
 
         public DispatchStatus Status { get; set; } = DispatchStatus.Pending;
 
-        // Human-approval gate — set by the Emergency Coordinator after the
+        // Human-approval gate — set by the Rescue Coordinator after the
         // Safety Validation Agent's deterministic checks pass.
         public ApprovalStatus ApprovalStatus { get; set; } = ApprovalStatus.PendingApproval;
         public string? ApprovedByUserId { get; set; }

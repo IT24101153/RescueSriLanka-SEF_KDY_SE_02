@@ -192,8 +192,8 @@ export default function RescueCoordinatorDashboard({ user, onLogout }: { user: U
 
   return <main className="rescue-dashboard">
     <header className="rescue-dashboard__header">
-      <div><p className="rescue-dashboard__brand">RescueSriLanka</p><h1>Rescue Coordination Center</h1><p>Manage rescue teams, validate response plans, approve deployments, and track active emergency missions.</p></div>
-      <div className="rescue-dashboard__identity"><div><strong>{user.fullName}</strong><span>{user.email}</span></div><span className="role-badge">Emergency Coordinator</span><button type="button" className="btn-ghost" onClick={() => void refresh()} disabled={loading || busy}>{loading ? 'Refreshing…' : 'Refresh'}</button><button type="button" className="btn-ghost" onClick={onLogout}>Logout</button></div>
+      <div><p className="rescue-dashboard__brand">RescueSriLanka</p><h1>Rescue Coordination Center</h1><p>Manage rescue teams, validate response plans, approve deployments, and track active rescue missions.</p></div>
+      <div className="rescue-dashboard__identity"><div><strong>{user.fullName}</strong><span>{user.email}</span></div><span className="role-badge">Rescue Coordinator</span><button type="button" className="btn-ghost" onClick={() => void refresh()} disabled={loading || busy}>{loading ? 'Refreshing…' : 'Refresh'}</button><button type="button" className="btn-ghost" onClick={onLogout}>Logout</button></div>
     </header>
 
     <nav className="rescue-dashboard__nav" aria-label="Rescue coordination sections">{views.map((item) => <button key={item.id} type="button" className={view === item.id ? 'is-active' : ''} onClick={() => { setActionError(null); setView(item.id) }}><strong>{item.label}</strong><span>{item.hint}</span></button>)}</nav>

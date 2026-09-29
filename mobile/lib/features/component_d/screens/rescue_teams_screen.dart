@@ -296,13 +296,6 @@ class _RescueTeamsScreenState extends State<RescueTeamsScreen> {
           ),
           actions: [
             IconButton(
-              onPressed: _busy || _isLoading
-                  ? null
-                  : () => _edit(ResourceKind.team),
-              tooltip: 'Add team',
-              icon: const Icon(Icons.add),
-            ),
-            IconButton(
               onPressed: _isLoading || _busy ? null : _loadTeams,
               tooltip: 'Refresh teams',
               icon: const Icon(Icons.refresh),
