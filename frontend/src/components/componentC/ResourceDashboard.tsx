@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSession } from '../../shared/auth/session'
+import { API_BASE } from '../../shared/api/client'
 import './ResourceDashboard.css'
 
 /**
@@ -46,7 +47,7 @@ async function getResources<T>(path: string): Promise<T> {
   let lastError: unknown
   for (let attempt = 0; attempt < 8; attempt += 1) {
     try {
-      const response = await fetch(`/api/resources/${path}`, { headers: authHeaders() })
+      const response = await fetch(`${API_BASE}/api/resources/${path}`, { headers: authHeaders() })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string } | null
         throw new Error(result?.error ?? `Unable to load ${path}.`)
@@ -228,7 +229,7 @@ function ResourceDashboard() {
       ? { name: supplyForm.name, unit: supplyForm.unit, quantityOnHand: Number(supplyForm.quantityOnHand), lowStockThreshold: 0 }
       : { itemName: stockForm.itemName, unit: stockForm.unit, quantityOnHand: Number(stockForm.quantityOnHand), lowStockThreshold: 0 }
     try {
-      const endpoint = isManaged ? '/api/resources/managed-supplies' : `/api/resources/${path}`
+      const endpoint = isManaged ? `${API_BASE}/api/resources/managed-supplies` : `${API_BASE}/api/resources/${path}`
       const response = await fetch(editingId ? `${endpoint}/${editingId}` : endpoint, { method: editingId ? 'PUT' : 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string; title?: string } | null
@@ -238,7 +239,7 @@ function ResourceDashboard() {
         const duplicatePath = duplicate.type === 'managed'
           ? 'managed-supplies'
           : duplicate.type === 'medical' ? 'medical-supplies' : 'food-water-stock'
-        const duplicateResponse = await fetch(`/api/resources/${duplicatePath}/${duplicate.id}`, {
+        const duplicateResponse = await fetch(`${API_BASE}/api/resources/${duplicatePath}/${duplicate.id}`, {
           method: 'DELETE',
           headers: authHeaders(),
         })
@@ -406,7 +407,7 @@ function ResourceDashboard() {
     setError('')
     try {
       const path = type === 'medical' ? 'medical-supplies' : type === 'managed' ? 'managed-supplies' : 'food-water-stock'
-      const response = await fetch(`/api/resources/${path}/${id}`, { method: 'DELETE', headers: authHeaders() })
+      const response = await fetch(`${API_BASE}/api/resources/${path}/${id}`, { method: 'DELETE', headers: authHeaders() })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string } | null
         throw new Error(result?.error ?? `Unable to remove ${label}.`)
@@ -432,7 +433,7 @@ function ResourceDashboard() {
     setRequestActionError(null)
     setUpdatingRequestId(id)
     try {
-      const response = await fetch(`/api/resources/help-requests/${id}/status`, {
+      const response = await fetch(`${API_BASE}/api/resources/help-requests/${id}/status`, {
         method: 'PATCH',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ status }),
@@ -458,7 +459,7 @@ function ResourceDashboard() {
     setRequestActionError(null)
     setLoadingRecommendationId(id)
     try {
-      const response = await fetch(`/api/resources/help-requests/${id}/allocation-recommendation`, { method: 'POST', headers: authHeaders() })
+      const response = await fetch(`${API_BASE}/api/resources/help-requests/${id}/allocation-recommendation`, { method: 'POST', headers: authHeaders() })
       const result = await response.json().catch(() => null) as AllocationRecommendation | { error?: string } | null
       if (!response.ok) throw new Error((result && 'error' in result ? result.error : undefined) ?? `Unable to get an allocation recommendation (HTTP ${response.status}).`)
       setRecommendation({ id, result: result as AllocationRecommendation })
@@ -486,7 +487,7 @@ function ResourceDashboard() {
     setLoadingAllocationPlan(true)
     setAllocationPlanError('')
     try {
-      const response = await fetch('/api/resources/help-requests/allocation-plan', { method: 'POST', headers: authHeaders() })
+      const response = await fetch(`${API_BASE}/api/resources/help-requests/allocation-plan`, { method: 'POST', headers: authHeaders() })
       const result = await response.json().catch(() => null) as AllocationPlan | { error?: string } | null
       if (!response.ok) throw new Error((result && 'error' in result ? result.error : undefined) ?? `Unable to plan allocations (HTTP ${response.status}).`)
       setAllocationPlan(result as AllocationPlan)
@@ -504,8 +505,8 @@ function ResourceDashboard() {
     setUpdatingDonationKey(key)
     try {
       const endpoint = first.submissionId
-        ? `/api/resources/donations/batch/${first.submissionId}/status`
-        : `/api/resources/donations/${first.id}/status`
+        ? `${API_BASE}/api/resources/donations/batch/${first.submissionId}/status`
+        : `${API_BASE}/api/resources/donations/${first.id}/status`
       const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -543,7 +544,7 @@ function ResourceDashboard() {
     setRequestActionError(null)
     setSendingRequestId(fulfillmentRequest.id)
     try {
-      const response = await fetch('/api/resources/allocations', {
+      const response = await fetch(`${API_BASE}/api/resources/allocations`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
