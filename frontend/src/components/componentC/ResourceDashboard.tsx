@@ -203,12 +203,34 @@ function ResourceDashboard() {
 
   const submitInventory = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setIsSubmitting(true)
     setFormError('')
     const isMedical = resourceType === 'medical'
     const isManaged = resourceType === 'managed'
     const path = isMedical ? 'medical-supplies' : 'food-water-stock'
     const form = isMedical ? supplyForm : stockForm
+    const itemName = isManaged
+      ? managedItem === 'Other' || managedCategory === 'Other' ? managedCustomName : managedItem
+      : isMedical ? supplyForm.name : stockForm.itemName
+    const unit = isMedical ? supplyForm.unit : stockForm.unit
+    const quantityText = isMedical ? supplyForm.quantityOnHand : stockForm.quantityOnHand
+    const quantity = Number(quantityText)
+    if (!itemName.trim()) {
+      setFormError('Enter an item name.')
+      return
+    }
+    if (!unit.trim()) {
+      setFormError('Enter a unit.')
+      return
+    }
+    if (!quantityText.trim() || !Number.isFinite(quantity) || quantity <= 0) {
+      setFormError('Enter a quantity greater than zero.')
+      return
+    }
+    if (isMedical && !Number.isInteger(quantity)) {
+      setFormError('Medical supply quantity must be a whole number.')
+      return
+    }
+    setIsSubmitting(true)
     const body = isManaged
       ? {
           category: managedCategory,
@@ -513,10 +535,29 @@ function ResourceDashboard() {
   }
 
   const fulfillRequest = async () => {
-    if (!fulfillmentRequest || Number(fulfillmentRequest.quantity) <= 0 || !fulfillmentRequest.supplyKey) return
+    if (!fulfillmentRequest) return
+    const quantityText = fulfillmentRequest.quantity.trim()
+    const quantity = Number(quantityText)
+    if (!fulfillmentRequest.supplyKey) {
+      setRequestActionError({ id: fulfillmentRequest.id, message: 'Select an available supply.' })
+      return
+    }
+    if (!quantityText || !Number.isFinite(quantity) || quantity <= 0) {
+      setRequestActionError({ id: fulfillmentRequest.id, message: 'Enter a quantity greater than zero.' })
+      return
+    }
     const [resourceType, resourceId] = fulfillmentRequest.supplyKey.split(':')
     if (!resourceType || !resourceId) {
       setRequestActionError({ id: fulfillmentRequest.id, message: 'Select an available supply first.' })
+      return
+    }
+    const selectedSupply = availableSupplies.find((supply) => supply.key === fulfillmentRequest.supplyKey)
+    if (!selectedSupply || quantity > selectedSupply.quantityOnHand) {
+      setRequestActionError({ id: fulfillmentRequest.id, message: 'Quantity exceeds the selected supply available.' })
+      return
+    }
+    if (resourceType === 'MedicalSupply' && !Number.isInteger(quantity)) {
+      setRequestActionError({ id: fulfillmentRequest.id, message: 'Medical supply quantity must be a whole number.' })
       return
     }
     setError('')
@@ -529,7 +570,7 @@ function ResourceDashboard() {
         body: JSON.stringify({
           resourceType,
           resourceId,
-          quantity: Number(fulfillmentRequest.quantity),
+          quantity,
           helpRequestId: fulfillmentRequest.id,
           incidentId: null,
         }),
@@ -551,50 +592,54 @@ function ResourceDashboard() {
   }
 
   const navigate = (nextPage: Page) => setPage(nextPage)
+  const pageTitles: Record<Page, string> = {
+    overview: 'Resource overview',
+    supplies: 'Supplies and stock',
+    allocations: 'Resource requests',
+    donate: 'Donation offers',
+    history: 'Resource history',
+  }
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">RS</span>
-          <span>Rescue Sri Lanka</span>
-        </div>
-        <nav aria-label="Main navigation">
-          <button className={`nav-link ${page === 'overview' ? 'active' : ''}`} type="button" onClick={() => navigate('overview')}>Overview</button>
-          <button className={`nav-link ${page === 'supplies' ? 'active' : ''}`} type="button" onClick={() => navigate('supplies')}>Supplies</button>
-          <button className={`nav-link ${page === 'allocations' ? 'active' : ''}`} type="button" onClick={() => navigate('allocations')}>Requests</button>
-          <button className={`nav-link ${page === 'donate' ? 'active' : ''}`} type="button" onClick={() => navigate('donate')}>Donate</button>
-          <button className={`nav-link ${page === 'history' ? 'active' : ''}`} type="button" onClick={() => navigate('history')}>History</button>
+      <div className="main-content" id="overview">
+        <nav className="resource-page-tabs" aria-label="Resource manager sections" role="tablist">
+          {([
+            ['overview', 'Overview'],
+            ['supplies', 'Supplies'],
+            ['allocations', 'Requests'],
+            ['donate', 'Donations'],
+            ['history', 'History'],
+          ] as const).map(([tab, label]) => (
+            <button
+              key={tab}
+              className={`resource-page-tab ${page === tab ? 'is-active' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={page === tab}
+              onClick={() => navigate(tab)}
+            >
+              {label}
+              {tab === 'allocations' && helpRequests.length > 0 && <span>{helpRequests.length}</span>}
+            </button>
+          ))}
         </nav>
-        <div className="sidebar-footer">
-          <span className="status-dot" />
-          <span>Response network online</span>
-        </div>
-      </aside>
-
-      <main className="main-content" id="overview">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">Emergency response operations</p>
-            <h1>{page === 'overview' ? 'Resource overview' : page === 'allocations' ? 'Requests' : page === 'donate' ? 'Donate' : page[0].toUpperCase() + page.slice(1)}</h1>
-          </div>
-          <button className="profile-button" type="button" aria-label="Open user profile">DR</button>
-        </header>
 
         {page === 'overview' && (
-          <section className="welcome-panel" aria-labelledby="welcome-title">
+          <header className="dashboard-heading">
             <div>
-              <p className="eyebrow">Relief operations</p>
-              <h2 id="welcome-title">Ready to coordinate relief.</h2>
-              <p className="resource-muted">Track essential resources and dispatch support where it is needed most.</p>
+              <p className="eyebrow">Operations overview</p>
+              <h1>{pageTitles[page]}</h1>
+              <p className="resource-muted">Monitor available resources and coordinate support requests.</p>
             </div>
-            <button className="primary-button" type="button" onClick={() => openResourceForm('medical')}>
-              Add supply <span aria-hidden="true">+</span>
-            </button>
-            <button className="secondary-button" type="button" disabled={loadingStockForecast} onClick={() => void getStockForecast()}>
-              {loadingStockForecast ? 'Forecasting...' : 'AI stock forecast'}
-            </button>
-          </section>
+            <div className="dashboard-actions">
+              <button className="dashboard-action" type="button" onClick={() => navigate('supplies')}>Manage inventory</button>
+              <button className="dashboard-action" type="button" disabled={isLoading} onClick={() => void loadResources()}>{isLoading ? 'Refreshing...' : 'Refresh data'}</button>
+              <button className="dashboard-action is-primary" type="button" disabled={loadingStockForecast} onClick={() => void getStockForecast()}>
+                {loadingStockForecast ? 'Forecasting...' : 'AI stock forecast'}
+              </button>
+            </div>
+          </header>
         )}
 
         {error && (
@@ -629,7 +674,7 @@ function ResourceDashboard() {
                 </div>
                 <button className="close-button" type="button" aria-label="Close form" onClick={() => { setEditingId(null); setIsFormOpen(false) }}>x</button>
               </div>
-              <form onSubmit={submitInventory}>
+              <form noValidate onSubmit={submitInventory}>
                 {resourceType === 'managed' ? (
                   <>
                     <label>
@@ -672,7 +717,7 @@ function ResourceDashboard() {
                 <div className="form-row">
                   <label>
                     Quantity on hand
-                    <input required min="0" type="number" step="any" value={resourceType === 'medical' ? supplyForm.quantityOnHand : stockForm.quantityOnHand} onChange={(event) => resourceType === 'medical' ? setSupplyForm({ ...supplyForm, quantityOnHand: event.target.value }) : setStockForm({ ...stockForm, quantityOnHand: event.target.value })} />
+                    <input required min="0.01" type="number" step={resourceType === 'medical' ? '1' : 'any'} value={resourceType === 'medical' ? supplyForm.quantityOnHand : stockForm.quantityOnHand} onChange={(event) => resourceType === 'medical' ? setSupplyForm({ ...supplyForm, quantityOnHand: event.target.value }) : setStockForm({ ...stockForm, quantityOnHand: event.target.value })} />
                   </label>
                 </div>
                 {formError && <p className="form-error" role="alert">{formError}</p>}
@@ -690,22 +735,22 @@ function ResourceDashboard() {
             <article className="metric-card accent-teal">
               <span className="metric-label">Pending requests</span>
               <strong>{isLoading ? '--' : helpRequests.filter(r => r.status === 'Pending').length}</strong>
-              <span className="metric-note">Awaiting review</span>
+              <span className="metric-note">Awaiting manager review</span>
             </article>
             <article className="metric-card accent-amber">
-              <span className="metric-label">Inventory stock</span>
-              <strong>{isLoading ? '--' : `${stockPercentage}%`}</strong>
-              <span className="metric-note">Availability ratio</span>
+              <span className="metric-label">Active stock items</span>
+              <strong>{isLoading ? '--' : totalSupplyValue.filter(item => item.quantityOnHand > 0).length}</strong>
+              <span className="metric-note">{stockPercentage}% availability ratio</span>
             </article>
             <article className="metric-card accent-coral">
               <span className="metric-label">Low-stock alerts</span>
               <strong>{isLoading ? '--' : String(alerts.length).padStart(2, '0')}</strong>
-              <span className="metric-note">Needs replenishment</span>
+              <span className="metric-note">Needs attention</span>
             </article>
             <article className="metric-card accent-blue">
-              <span className="metric-label">Donations received</span>
+              <span className="metric-label">Donation offers</span>
               <strong>{isLoading ? '--' : donations.length}</strong>
-              <span className="metric-note">Community contributions</span>
+              <span className="metric-note">Awaiting review</span>
             </article>
           </section>
         )}
@@ -740,8 +785,8 @@ function ResourceDashboard() {
             <article className="resource-panel" id="supplies">
               <div className="panel-heading">
                 <div>
-                  <p className="eyebrow">Inventory watch</p>
-                  <h2>Supply levels</h2>
+                    <p className="eyebrow">Inventory watch</p>
+                    <h2>Supply levels</h2>
                 </div>
                 <button className="text-button" type="button" onClick={() => navigate('supplies')}>View all</button>
               </div>
@@ -762,7 +807,7 @@ function ResourceDashboard() {
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">Incoming activity</p>
-                  <h2>Latest requests</h2>
+                  <h2>Pending request queue</h2>
                 </div>
                 <button className="text-button" type="button" onClick={() => navigate('allocations')}>View all</button>
               </div>
@@ -961,6 +1006,7 @@ function ResourceDashboard() {
                       <label>
                         Resource
                         <select
+                          required
                           value={fulfillmentRequest.supplyKey}
                           onChange={(event) =>
                             setFulfillmentRequest({
@@ -980,6 +1026,7 @@ function ResourceDashboard() {
                       <label>
                         Quantity
                         <input
+                          required
                           min="1"
                           step={fulfillmentRequest.supplyKey.startsWith('MedicalSupply:') ? '1' : 'any'}
                           type="number"
@@ -1065,7 +1112,7 @@ function ResourceDashboard() {
             </div>
           </section>
         )}
-      </main>
+      </div>
     </div>
   )
 }
