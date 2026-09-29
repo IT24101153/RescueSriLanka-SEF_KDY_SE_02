@@ -63,11 +63,26 @@ public class IncidentsController(
         return Ok(result.Items);
     }
 
+    /// <summary>
+    /// The signed-in user's own reports, from the database — so "My reports"
+    /// shows the same list on the Mac, the APK, or a new phone.
+    /// </summary>
+    [HttpGet("mine")]
+    public async Task<ActionResult<IReadOnlyList<IncidentDto>>> Mine(CancellationToken ct)
+    {
+        var userId = CurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        return Ok(await incidentService.MineAsync(userId.Value, ct: ct));
+    }
+
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     public async Task<ActionResult<IncidentDto>> Get(Guid id, CancellationToken ct)
     {
-        var incident = await incidentService.GetAsync(id, ct);
+        // A report under review or rejected is not public: the same 404 as a
+        // missing one, so nobody can tell it exists.
+        var incident = await incidentService.GetForViewerAsync(id, CurrentUserId(), IsStaff(), ct);
         return incident is null ? NotFound() : Ok(incident);
     }
 

@@ -324,12 +324,12 @@ class _ReportScreenState extends State<ReportScreen> {
     await _refreshMyReports();
   }
 
-  /// Re-reads every report by id for its current status. One that cannot be
-  /// read keeps its last known state rather than vanishing from the list.
+  /// Loads the account's reports from the server — the database is the
+  /// record, so the list is the same on every device. The copy on the phone
+  /// is only for showing something instantly, and when offline.
   Future<void> _refreshMyReports() async {
     final userId = widget.auth.user?.id;
-    final snapshot = _myReports;
-    if (userId == null || snapshot.isEmpty) return;
+    if (userId == null) return;
 
     setState(() {
       _reportsLoading = true;
@@ -337,31 +337,31 @@ class _ReportScreenState extends State<ReportScreen> {
     });
 
     final api = ApiClient(auth: widget.auth);
-    var failures = 0;
     try {
-      final fresh = await Future.wait(
-        snapshot.map((report) async {
-          try {
-            return await api.fetchIncident(report.id);
-          } catch (_) {
-            failures++;
-            return report;
-          }
-        }),
-      );
+      final fromServer = await api.fetchMyReports();
       if (!mounted || widget.auth.user?.id != userId) return;
 
-      // A report sent while this was running is kept, not overwritten.
-      final byId = {for (final report in fresh) report.id: report};
-      final merged = [for (final report in _myReports) byId[report.id] ?? report];
+      // A report sent while this was loading is kept, not dropped.
+      final known = {for (final report in fromServer) report.id};
+      final merged = [
+        ..._myReports.where(
+          (report) =>
+              !known.contains(report.id) &&
+              DateTime.now().difference(report.reportedAt).inMinutes < 5,
+        ),
+        ...fromServer,
+      ];
 
-      setState(() {
-        _myReports = merged;
-        _reportsError = failures == snapshot.length
-            ? 'Could not check for updates. Showing the last known status.'
-            : null;
-      });
+      setState(() => _myReports = merged);
       await MyReportsStore.save(userId, merged);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _reportsError = error is ApiException && error.isUnauthorized
+            ? error.message
+            : 'Could not reach the server. Showing the reports saved on this '
+                  'phone — pull down to try again.';
+      });
     } finally {
       api.dispose();
       if (mounted) setState(() => _reportsLoading = false);
