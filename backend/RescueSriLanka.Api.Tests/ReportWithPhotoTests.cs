@@ -180,6 +180,7 @@ public class ReportWithPhotoTests : IClassFixture<ReportWithPhotoTests.Factory>
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseSetting("Database:MigrateOnStartup", "false");
             builder.UseSetting("Jwt:Issuer", Issuer);
             builder.UseSetting("Jwt:Audience", Audience);
             builder.UseSetting("Jwt:Key", SigningKey);

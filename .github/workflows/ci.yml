@@ -18,6 +18,10 @@ jobs:
   backend:
     name: Backend (ASP.NET Core)
     runs-on: ubuntu-latest
+    env:
+      Database__MigrateOnStartup: 'false'
+      ComponentD__SeedDemoData: 'false'
+      Email__Enabled: 'false'
     steps:
       - uses: actions/checkout@v4
 

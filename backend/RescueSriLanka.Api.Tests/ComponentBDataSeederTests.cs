@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentB.Data;
 using RescueSriLanka.Api.Features.ComponentB.Models;
@@ -36,8 +38,9 @@ public class ComponentBDataSeederTests
     {
         using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-        var request = db.Model.FindEntityType(typeof(HelpRequest))!;
-        var advisory = db.Model.FindEntityType(typeof(TravelAdvisory))!;
+        var model = db.GetService<IDesignTimeModel>().Model;
+        var request = model.FindEntityType(typeof(HelpRequest))!;
+        var advisory = model.FindEntityType(typeof(TravelAdvisory))!;
 
         Assert.Contains(request.GetCheckConstraints(), check => check.Name == "CK_HelpRequests_UrgencyScore");
         Assert.Contains(request.GetIndexes(), index => index.Properties.Select(p => p.Name)
