@@ -27,6 +27,22 @@ public interface IIncidentService
 
     Task<IncidentDto?> GetAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>
+    /// One report as a given viewer may see it: staff and the person who
+    /// filed it see it in any state; everyone else only once a coordinator
+    /// has approved it. Null when it does not exist or is not theirs to see.
+    /// </summary>
+    Task<IncidentDto?> GetForViewerAsync(
+        Guid id, Guid? viewerId, bool viewerIsStaff, CancellationToken ct = default);
+
+    /// <summary>
+    /// Every report one person filed, newest first, whatever its status —
+    /// under review, approved, rejected or resolved. What "My reports" lists,
+    /// so it is the same on every device they sign in on.
+    /// </summary>
+    Task<IReadOnlyList<IncidentDto>> MineAsync(
+        Guid userId, int take = 100, CancellationToken ct = default);
+
     /// <param name="approvedOnly">True for the public: leave out reports a
     /// coordinator has not yet approved as true.</param>
     Task<IReadOnlyList<IncidentDto>> NearbyAsync(
@@ -133,6 +149,36 @@ public class IncidentService(
             .FirstOrDefaultAsync(entity => entity.Id == id, ct);
 
         return incident is null ? null : IncidentDto.FromIncident(incident);
+    }
+
+    public async Task<IncidentDto?> GetForViewerAsync(
+        Guid id, Guid? viewerId, bool viewerIsStaff, CancellationToken ct = default)
+    {
+        var incident = await db.Incidents
+            .AsNoTracking()
+            .Include(entity => entity.Images)
+            .FirstOrDefaultAsync(entity => entity.Id == id, ct);
+
+        if (incident is null) return null;
+
+        var isReporter = viewerId is not null && incident.ReportedByUserId == viewerId;
+        var isPublic = incident.Status is not (IncidentStatus.Reported or IncidentStatus.Rejected);
+
+        return viewerIsStaff || isReporter || isPublic ? IncidentDto.FromIncident(incident) : null;
+    }
+
+    public async Task<IReadOnlyList<IncidentDto>> MineAsync(
+        Guid userId, int take = 100, CancellationToken ct = default)
+    {
+        var incidents = await db.Incidents
+            .AsNoTracking()
+            .Include(incident => incident.Images)
+            .Where(incident => incident.ReportedByUserId == userId)
+            .OrderByDescending(incident => incident.ReportedAt)
+            .Take(Math.Clamp(take, 1, 200))
+            .ToListAsync(ct);
+
+        return [.. incidents.Select(incident => IncidentDto.FromIncident(incident))];
     }
 
     /// <summary>The "what's near me" query — bounding box in SQL, exact distance in memory.</summary>

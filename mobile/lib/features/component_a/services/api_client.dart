@@ -80,10 +80,27 @@ class ApiClient {
     return (data as List).map((item) => item as String).toList();
   }
 
-  /// One incident by id — how "My reports" follows a report through review.
+  /// One incident by id. A report still under review is visible only to the
+  /// person who filed it (and staff), so this carries the session.
   Future<Incident> fetchIncident(String id) async {
     final data = await _getJson('/api/incidents/${Uri.encodeComponent(id)}');
     return Incident.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Every report the signed-in user has filed, newest first, from the
+  /// database — so "My reports" is the same on every device they use.
+  Future<List<Incident>> fetchMyReports() async {
+    final response = await _send(
+      http.Request('GET', _uri('/api/incidents/mine')),
+      timeout: _timeout,
+    );
+    try {
+      return (jsonDecode(response.body) as List)
+          .map((item) => Incident.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on FormatException {
+      throw ApiException('The server sent a response the app could not read.');
+    }
   }
 
   Future<ZoneCheck> checkZone({

@@ -4,11 +4,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/incident.dart';
 
-/// The reports this person filed from this device, so the Report tab can list
-/// them and follow each one through review.
+/// A copy of this account's reports kept on the phone.
 ///
-/// Kept per account on the device: the list is what was sent from here, and
-/// each entry is re-read by id on refresh for its live status.
+/// Not the record — the database is, through `GET /api/incidents/mine`. This
+/// copy only lets "My reports" show something the instant it opens, and
+/// still show the last known list when there is no signal.
 class MyReportsStore {
   const MyReportsStore._();
 
