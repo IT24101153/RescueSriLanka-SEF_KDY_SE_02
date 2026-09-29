@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 
 import '../core/theme.dart';
 import '../services/auth_service.dart';
@@ -8,6 +10,10 @@ import '../../features/component_d/screens/rescue_coordinator_tab.dart';
 import '../../features/component_a/screens/map/disaster_map_screen.dart';
 import 'profile/profile_screen.dart';
 import '../../features/component_a/screens/report/report_screen.dart';
+
+/// Whether this platform gets the floating "liquid glass" nav bar instead
+/// of the flat Material one.
+bool get _isIOS => defaultTargetPlatform == TargetPlatform.iOS;
 
 /// One tab per thing you can do, and the tab bar follows the session.
 ///
@@ -23,12 +29,32 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-/// A tab: the screen it shows and how it appears in the bar.
+/// A tab: the screen it shows and its icon/label, kept as raw data so both
+/// the Material bar and the glass bar can build their own widget from it.
 class _Tab {
-  const _Tab({required this.screen, required this.destination});
+  const _Tab({
+    required this.screen,
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+  });
 
   final Widget screen;
-  final NavigationDestination destination;
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+
+  NavigationDestination toDestination() => NavigationDestination(
+    icon: Icon(icon),
+    selectedIcon: Icon(selectedIcon),
+    label: label,
+  );
+
+  LiquidGlassTabBarItem toGlassItem() => LiquidGlassTabBarItem(
+    icon: icon,
+    selectedIcon: selectedIcon,
+    label: label,
+  );
 }
 
 class _HomeShellState extends State<HomeShell> {
@@ -37,55 +63,43 @@ class _HomeShellState extends State<HomeShell> {
 
   List<_Tab> _tabsFor(bool signedIn) {
     return [
-      _Tab(
-        screen: const DisasterMapScreen(),
-        destination: const NavigationDestination(
-          icon: Icon(Icons.map_outlined),
-          selectedIcon: Icon(Icons.map),
-          label: 'Map',
-        ),
+      const _Tab(
+        screen: DisasterMapScreen(),
+        icon: Icons.map_outlined,
+        selectedIcon: Icons.map,
+        label: 'Map',
       ),
       if (signedIn) ...[
         _Tab(
           screen: ReportScreen(auth: widget.auth),
-          destination: const NavigationDestination(
-            icon: Icon(Icons.add_alert_outlined),
-            selectedIcon: Icon(Icons.add_alert),
-            label: 'Report',
-          ),
+          icon: Icons.add_alert_outlined,
+          selectedIcon: Icons.add_alert,
+          label: 'Report',
         ),
         _Tab(
           screen: HelpRequestsTab(auth: widget.auth),
-          destination: const NavigationDestination(
-            icon: Icon(Icons.health_and_safety_outlined),
-            selectedIcon: Icon(Icons.health_and_safety),
-            label: 'Help',
-          ),
+          icon: Icons.health_and_safety_outlined,
+          selectedIcon: Icons.health_and_safety,
+          label: 'Help',
         ),
         _Tab(
           screen: ResourceHomePage(auth: widget.auth),
-          destination: const NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
-            label: 'Resources',
-          ),
+          icon: Icons.inventory_2_outlined,
+          selectedIcon: Icons.inventory_2,
+          label: 'Resources',
         ),
         _Tab(
           screen: RescueCoordinatorTab(auth: widget.auth),
-          destination: const NavigationDestination(
-            icon: Icon(Icons.groups_outlined),
-            selectedIcon: Icon(Icons.groups),
-            label: 'Rescue',
-          ),
+          icon: Icons.groups_outlined,
+          selectedIcon: Icons.groups,
+          label: 'Rescue',
         ),
       ],
       _Tab(
         screen: ProfileScreen(auth: widget.auth),
-        destination: const NavigationDestination(
-          icon: Icon(Icons.person_outline),
-          selectedIcon: Icon(Icons.person),
-          label: 'Profile',
-        ),
+        icon: Icons.person_outline,
+        selectedIcon: Icons.person,
+        label: 'Profile',
       ),
     ];
   }
@@ -108,31 +122,61 @@ class _HomeShellState extends State<HomeShell> {
         // Signing out shortens the bar, so a tab that no longer exists falls
         // back to the last one rather than crashing.
         final index = _index.clamp(0, tabs.length - 1);
+        void select(int value) => setState(() => _index = value);
 
-        return Scaffold(
-          body: IndexedStack(
-            index: index,
-            // IndexedStack keeps the map alive, so switching tabs never
-            // reloads it — and a half-filled report survives a glance at it.
-            children: [for (final tab in tabs) tab.screen],
-          ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: index,
-            onDestinationSelected: (value) => setState(() => _index = value),
-            backgroundColor: AppColors.surface,
-            indicatorColor: AppColors.brand.withValues(alpha: 0.18),
-            // Six tabs share the width, so labels run a size below the
-            // Material default; the selected one stays bolder to stand out.
-            labelTextStyle: WidgetStateProperty.resolveWith(
-              (states) => TextStyle(
-                fontSize: 11,
-                fontWeight: states.contains(WidgetState.selected)
-                    ? FontWeight.w600
-                    : FontWeight.w500,
-                color: AppColors.ink,
+        final content = IndexedStack(
+          index: index,
+          // IndexedStack keeps the map alive, so switching tabs never
+          // reloads it — and a half-filled report survives a glance at it.
+          children: [for (final tab in tabs) tab.screen],
+        );
+
+        if (!_isIOS) {
+          return Scaffold(
+            body: content,
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: index,
+              onDestinationSelected: select,
+              backgroundColor: AppColors.surface,
+              indicatorColor: AppColors.brand.withValues(alpha: 0.18),
+              // Six tabs share the width, so labels run a size below the
+              // Material default; the selected one stays bolder to stand out.
+              labelTextStyle: WidgetStateProperty.resolveWith(
+                (states) => TextStyle(
+                  fontSize: 11,
+                  fontWeight: states.contains(WidgetState.selected)
+                      ? FontWeight.w600
+                      : FontWeight.w500,
+                  color: AppColors.ink,
+                ),
               ),
+              destinations: [for (final tab in tabs) tab.toDestination()],
             ),
-            destinations: [for (final tab in tabs) tab.destination],
+          );
+        }
+
+        // iOS: a bodyless floating glass bar over the full-bleed body,
+        // matching the system tab bar introduced in iOS 26 — it reads the
+        // live content behind it instead of a captured page, so the
+        // Scaffold underneath needs no bottomNavigationBar slot at all.
+        return Scaffold(
+          body: Stack(
+            children: [
+              content,
+              LiquidGlassTabBar.withImpeller(
+                items: [for (final tab in tabs) tab.toGlassItem()],
+                selectedIndex: index,
+                onChanged: select,
+                width: MediaQuery.sizeOf(context).width - 32,
+                // The default white/white70 icon palette assumes a dark or
+                // colourful backdrop; this app's surfaces are light, so the
+                // bar needs dark ink instead to stay legible over them.
+                itemStyle: const LiquidGlassTabItemStyle(
+                  selectedColor: AppColors.brand,
+                  unselectedColor: AppColors.body,
+                ),
+              ),
+            ],
           ),
         );
       },

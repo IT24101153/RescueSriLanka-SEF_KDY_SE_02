@@ -630,7 +630,7 @@
     'meta   photos'
     'body   photos'
     'facts  photos'
-    'review agent';
+    'decide decide';
   animation: card-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -1118,8 +1118,7 @@
       'meta'
       'body'
       'facts'
-      'review'
-      'agent';
+      'decide';
   }
 
   .photos__strip {
@@ -1449,6 +1448,198 @@
 
 .review__delete {
   color: var(--danger);
+}
+
+/* ---------- report decision: true/false, then the AI's condition ---------- */
+.decide {
+  grid-area: decide;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+  margin-top: 4px;
+}
+
+.decide > .agent__error,
+.decide > .review__danger {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.decide__step {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+  display: grid;
+  gap: 12px;
+}
+
+.decide__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.decide__num {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.decide__num.is-done {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.decide__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.decide__reanalyse {
+  margin-left: auto;
+}
+
+.decide__by {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text);
+}
+
+.decide__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.decide__actions .btn-approve,
+.decide__actions .btn-reject {
+  height: 38px;
+  flex: 1 1 140px;
+}
+
+.decide__confirm {
+  display: grid;
+  gap: 10px;
+}
+
+.decide__confirm p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.decide__minor {
+  justify-self: start;
+}
+
+.decide__condition {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.decide__level {
+  padding: 5px 14px;
+  font-size: 14px;
+}
+
+.decide__detail {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.decide__step .proposal__rationale {
+  margin: 0;
+}
+
+.decide__working {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.decide__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: decide-spin 0.8s linear infinite;
+}
+
+@keyframes decide-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.decide__levels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+/* Each level button wears its own severity colour, with its name — colour is
+   never the only cue. */
+.level-btn {
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease, border-color 0.15s ease;
+}
+
+.level-btn:hover:not(:disabled) {
+  border-color: currentColor;
+}
+
+.level-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.level-btn--safe {
+  background: var(--safe-soft);
+  color: var(--safe-ink);
+}
+.level-btn--caution {
+  background: var(--caution-soft);
+  color: var(--caution-ink);
+}
+.level-btn--high {
+  background: var(--high-soft);
+  color: var(--high-ink);
+}
+.level-btn--critical {
+  background: var(--critical-soft);
+  color: var(--critical-ink);
+}
+
+@media (max-width: 720px) {
+  .decide {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---------- incident photos ---------- */

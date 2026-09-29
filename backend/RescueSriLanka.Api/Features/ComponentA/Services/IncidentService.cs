@@ -22,12 +22,16 @@ public interface IIncidentService
         string? district, bool activeOnly,
         string? sortBy = null, string? sortDir = null,
         int? page = null, int? pageSize = null,
+        bool approvedOnly = false,
         CancellationToken ct = default);
 
     Task<IncidentDto?> GetAsync(Guid id, CancellationToken ct = default);
 
+    /// <param name="approvedOnly">True for the public: leave out reports a
+    /// coordinator has not yet approved as true.</param>
     Task<IReadOnlyList<IncidentDto>> NearbyAsync(
-        double latitude, double longitude, double radiusKm, CancellationToken ct = default);
+        double latitude, double longitude, double radiusKm,
+        bool approvedOnly = false, CancellationToken ct = default);
 
     Task<IncidentDto> CreateAsync(
         CreateIncidentRequest request, Guid? reportedByUserId, CancellationToken ct = default);
@@ -67,11 +71,14 @@ public class IncidentService(
         string? district, bool activeOnly,
         string? sortBy = null, string? sortDir = null,
         int? page = null, int? pageSize = null,
+        bool approvedOnly = false,
         CancellationToken ct = default)
     {
         var query = db.Incidents.AsNoTracking().Include(incident => incident.Images).AsQueryable();
 
         if (activeOnly) query = query.Where(incident => incident.IsActive);
+        // A report is only public once a coordinator has approved it as true.
+        if (approvedOnly) query = query.Where(incident => incident.Status != IncidentStatus.Reported);
         if (status is not null) query = query.Where(incident => incident.Status == status);
         if (severity is not null) query = query.Where(incident => incident.Severity == severity);
         if (type is not null) query = query.Where(incident => incident.Type == type);
@@ -130,7 +137,8 @@ public class IncidentService(
 
     /// <summary>The "what's near me" query — bounding box in SQL, exact distance in memory.</summary>
     public async Task<IReadOnlyList<IncidentDto>> NearbyAsync(
-        double latitude, double longitude, double radiusKm, CancellationToken ct = default)
+        double latitude, double longitude, double radiusKm,
+        bool approvedOnly = false, CancellationToken ct = default)
     {
         var (minLat, maxLat, minLon, maxLon) = GeoService.BoundingBox(latitude, longitude, radiusKm);
 
@@ -139,6 +147,7 @@ public class IncidentService(
             .Include(incident => incident.Images)
             .Where(incident =>
                 incident.IsActive &&
+                (!approvedOnly || incident.Status != IncidentStatus.Reported) &&
                 incident.Latitude >= minLat && incident.Latitude <= maxLat &&
                 incident.Longitude >= minLon && incident.Longitude <= maxLon)
             .ToListAsync(ct);

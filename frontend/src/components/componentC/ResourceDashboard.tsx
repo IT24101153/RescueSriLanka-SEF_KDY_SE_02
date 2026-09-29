@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSession } from '../../shared/auth/session'
+import { API_BASE } from '../../shared/api/client'
 import './ResourceDashboard.css'
 
 /**
@@ -27,6 +28,8 @@ type FulfillmentRequest = { id: string; supplyKey: string; quantity: string }
 type AllocationRecommendation = { decision: string; resourceId: string | null; resourceType: string | null; quantity: number; confidence: number; reason: string; warnings: string[]; requiresApproval: boolean; resourceName: string | null; unit: string | null; availableQuantity: number | null }
 type StockForecastItem = { resourceType: string; resourceId: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number | null; usedInLast30Days: number; averageDailyUse: number; estimatedDaysRemaining: number | null; riskLevel: 'Critical' | 'Watch' | 'Stable'; suggestedAction: string }
 type StockForecast = { windowDays: number; generatedAtUtc: string; summary: string; items: StockForecastItem[] }
+type AllocationPlanItem = { helpRequestId: string; needType: string; requesterName: string; priority: number; decision: string; resourceId: string | null; resourceType: string | null; resourceName: string | null; unit: string | null; quantity: number; availableQuantity: number | null; confidence: number; reason: string; warnings: string[]; requiresApproval: boolean }
+type AllocationPlan = { generatedAtUtc: string; summary: string; items: AllocationPlanItem[] }
 
 const MANAGED_SUPPLY_ITEMS: Record<string, string[]> = {
   Food: ['Dry foods', 'Rice', 'Other'],
@@ -44,7 +47,7 @@ async function getResources<T>(path: string): Promise<T> {
   let lastError: unknown
   for (let attempt = 0; attempt < 8; attempt += 1) {
     try {
-      const response = await fetch(`/api/resources/${path}`, { headers: authHeaders() })
+      const response = await fetch(`${API_BASE}/api/resources/${path}`, { headers: authHeaders() })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string } | null
         throw new Error(result?.error ?? `Unable to load ${path}.`)
@@ -135,6 +138,9 @@ function ResourceDashboard() {
   const [stockForecast, setStockForecast] = useState<StockForecast | null>(null)
   const [loadingStockForecast, setLoadingStockForecast] = useState(false)
   const [stockForecastError, setStockForecastError] = useState('')
+  const [allocationPlan, setAllocationPlan] = useState<AllocationPlan | null>(null)
+  const [loadingAllocationPlan, setLoadingAllocationPlan] = useState(false)
+  const [allocationPlanError, setAllocationPlanError] = useState('')
 
   const loadResources = async () => {
     setIsLoading(true)
@@ -245,7 +251,7 @@ function ResourceDashboard() {
       ? { name: supplyForm.name, unit: supplyForm.unit, quantityOnHand: Number(supplyForm.quantityOnHand), lowStockThreshold: 0 }
       : { itemName: stockForm.itemName, unit: stockForm.unit, quantityOnHand: Number(stockForm.quantityOnHand), lowStockThreshold: 0 }
     try {
-      const endpoint = isManaged ? '/api/resources/managed-supplies' : `/api/resources/${path}`
+      const endpoint = isManaged ? `${API_BASE}/api/resources/managed-supplies` : `${API_BASE}/api/resources/${path}`
       const response = await fetch(editingId ? `${endpoint}/${editingId}` : endpoint, { method: editingId ? 'PUT' : 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string; title?: string } | null
@@ -255,7 +261,7 @@ function ResourceDashboard() {
         const duplicatePath = duplicate.type === 'managed'
           ? 'managed-supplies'
           : duplicate.type === 'medical' ? 'medical-supplies' : 'food-water-stock'
-        const duplicateResponse = await fetch(`/api/resources/${duplicatePath}/${duplicate.id}`, {
+        const duplicateResponse = await fetch(`${API_BASE}/api/resources/${duplicatePath}/${duplicate.id}`, {
           method: 'DELETE',
           headers: authHeaders(),
         })
@@ -423,7 +429,7 @@ function ResourceDashboard() {
     setError('')
     try {
       const path = type === 'medical' ? 'medical-supplies' : type === 'managed' ? 'managed-supplies' : 'food-water-stock'
-      const response = await fetch(`/api/resources/${path}/${id}`, { method: 'DELETE', headers: authHeaders() })
+      const response = await fetch(`${API_BASE}/api/resources/${path}/${id}`, { method: 'DELETE', headers: authHeaders() })
       if (!response.ok) {
         const result = await response.json().catch(() => null) as { error?: string } | null
         throw new Error(result?.error ?? `Unable to remove ${label}.`)
@@ -449,7 +455,7 @@ function ResourceDashboard() {
     setRequestActionError(null)
     setUpdatingRequestId(id)
     try {
-      const response = await fetch(`/api/resources/help-requests/${id}/status`, {
+      const response = await fetch(`${API_BASE}/api/resources/help-requests/${id}/status`, {
         method: 'PATCH',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ status }),
@@ -475,7 +481,7 @@ function ResourceDashboard() {
     setRequestActionError(null)
     setLoadingRecommendationId(id)
     try {
-      const response = await fetch(`/api/resources/help-requests/${id}/allocation-recommendation`, { method: 'POST', headers: authHeaders() })
+      const response = await fetch(`${API_BASE}/api/resources/help-requests/${id}/allocation-recommendation`, { method: 'POST', headers: authHeaders() })
       const result = await response.json().catch(() => null) as AllocationRecommendation | { error?: string } | null
       if (!response.ok) throw new Error((result && 'error' in result ? result.error : undefined) ?? `Unable to get an allocation recommendation (HTTP ${response.status}).`)
       setRecommendation({ id, result: result as AllocationRecommendation })
@@ -499,6 +505,21 @@ function ResourceDashboard() {
     }
   }
 
+  const getAllocationPlan = async () => {
+    setLoadingAllocationPlan(true)
+    setAllocationPlanError('')
+    try {
+      const response = await fetch(`${API_BASE}/api/resources/help-requests/allocation-plan`, { method: 'POST', headers: authHeaders() })
+      const result = await response.json().catch(() => null) as AllocationPlan | { error?: string } | null
+      if (!response.ok) throw new Error((result && 'error' in result ? result.error : undefined) ?? `Unable to plan allocations (HTTP ${response.status}).`)
+      setAllocationPlan(result as AllocationPlan)
+    } catch (planError) {
+      setAllocationPlanError(planError instanceof Error ? planError.message : 'Unable to plan allocations.')
+    } finally {
+      setLoadingAllocationPlan(false)
+    }
+  }
+
   const updateDonationStatus = async (submission: Donation[], status: 'Accepted' | 'Rejected') => {
     setError('')
     const first = submission[0]
@@ -506,8 +527,8 @@ function ResourceDashboard() {
     setUpdatingDonationKey(key)
     try {
       const endpoint = first.submissionId
-        ? `/api/resources/donations/batch/${first.submissionId}/status`
-        : `/api/resources/donations/${first.id}/status`
+        ? `${API_BASE}/api/resources/donations/batch/${first.submissionId}/status`
+        : `${API_BASE}/api/resources/donations/${first.id}/status`
       const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -564,7 +585,7 @@ function ResourceDashboard() {
     setRequestActionError(null)
     setSendingRequestId(fulfillmentRequest.id)
     try {
-      const response = await fetch('/api/resources/allocations', {
+      const response = await fetch(`${API_BASE}/api/resources/allocations`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
@@ -937,7 +958,37 @@ function ResourceDashboard() {
                 <h2>Resource requests</h2>
                 <p className="muted">Review support requests, accept or reject them, and send available resources.</p>
               </div>
+              <button className="secondary-button" type="button" disabled={loadingAllocationPlan} onClick={() => void getAllocationPlan()}>
+                {loadingAllocationPlan ? 'Planning...' : 'Plan all requests'}
+              </button>
             </div>
+            {allocationPlan && (
+              <section className="stock-forecast" aria-labelledby="allocation-plan-title">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Priority order across pending requests</p>
+                    <h2 id="allocation-plan-title">Allocation plan</h2>
+                  </div>
+                  <span>{allocationPlan.summary}</span>
+                </div>
+                <div className="stock-forecast-list">
+                  {allocationPlan.items.map((item) => (
+                    <div className="stock-forecast-row" key={item.helpRequestId}>
+                      <div><strong>#{item.priority} · {item.needType}</strong><span>{item.requesterName}</span></div>
+                      <div>
+                        <strong>{item.decision === 'Recommend' ? `${item.resourceName ?? item.resourceType} · ${item.quantity} ${item.unit ?? 'units'}` : 'No safe match'}</strong>
+                        {item.decision === 'Recommend' && <span>{item.availableQuantity} {item.unit} available before this request</span>}
+                      </div>
+                      <span className={`forecast-risk forecast-${item.decision === 'Recommend' ? 'stable' : 'critical'}`}>{item.decision}</span>
+                      <p>{item.reason}{item.warnings.length > 0 ? ` — ${item.warnings.join(' ')}` : ''}</p>
+                    </div>
+                  ))}
+                  {allocationPlan.items.length === 0 && <p className="empty-state">No pending requests to plan for.</p>}
+                </div>
+                <p className="muted">Manager approval is still required — use Accept and Send resources below to act on a request.</p>
+              </section>
+            )}
+            {allocationPlanError && <p className="request-row-error" role="alert">{allocationPlanError}</p>}
             <div className="data-table">
               {isLoading && <p className="empty-state">Loading requests...</p>}
               {!isLoading && helpRequests.length === 0 && <p className="empty-state">No resource requests yet.</p>}

@@ -38,9 +38,10 @@ export const ZONE_TOKEN: Record<ZoneStatus, string> = {
   Danger: 'critical',
 }
 
+/** Coordinator-facing words: a report is simply approved (true) or rejected. */
 export const STATUS_LABEL: Record<string, string> = {
-  Reported: 'Reported',
-  Verified: 'Verified',
+  Reported: 'Awaiting review',
+  Verified: 'Approved',
   InProgress: 'In progress',
   Resolved: 'Resolved',
   Rejected: 'Rejected',

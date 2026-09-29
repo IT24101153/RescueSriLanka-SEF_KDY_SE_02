@@ -94,15 +94,28 @@ public class AgentRunServiceTests
     }
 
     [Fact]
-    public async Task Approve_CreatesTheSafetyZone()
+    public async Task Approve_CreatesTheSafetyZone_OnceTheReportIsApproved()
+    {
+        await using var db = NewDb();
+        var (incident, run) = await AddProposalAsync(db, proposed: IncidentSeverity.Critical);
+        incident.Status = IncidentStatus.Verified;
+        await db.SaveChangesAsync();
+
+        await NewService(db, new RecordingQueue()).ApproveAsync(run.Id, null, Coordinator);
+
+        var zone = await db.SafetyZones.SingleAsync();
+        Assert.Equal(ZoneStatus.Danger, zone.Status);
+    }
+
+    [Fact]
+    public async Task Approve_OnAReportNotYetApproved_DrawsNoZone()
     {
         await using var db = NewDb();
         var (_, run) = await AddProposalAsync(db, proposed: IncidentSeverity.Critical);
 
         await NewService(db, new RecordingQueue()).ApproveAsync(run.Id, null, Coordinator);
 
-        var zone = await db.SafetyZones.SingleAsync();
-        Assert.Equal(ZoneStatus.Danger, zone.Status);
+        Assert.Empty(await db.SafetyZones.ToListAsync());
     }
 
     [Fact]
