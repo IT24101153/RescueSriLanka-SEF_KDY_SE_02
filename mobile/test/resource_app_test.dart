@@ -10,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mobile/features/component_c/screens/resource_home_screen.dart';
 import 'package:mobile/shared/core/theme.dart';
+import 'package:mobile/shared/models/auth.dart';
+import 'package:mobile/shared/services/auth_service.dart';
 
 void main() {
   testWidgets('resource request and donation tabs are available', (
@@ -52,6 +54,43 @@ void main() {
     expect(find.text('Shelter'), findsNothing);
     expect(find.text('Rescue'), findsNothing);
     expect(find.text('Food'), findsWidgets);
+  });
+
+  testWidgets('request form validates profile phone and required item fields', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: ResourceHomePage(auth: _TestAuthService('12345')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final submitButton = find.text('Send request');
+    await tester.ensureVisible(submitButton);
+    await tester.pumpAndSettle();
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Your profile phone number must be exactly 10 digits before sending a request.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: ResourceHomePage(auth: _TestAuthService('0771234567')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Send request'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Send request'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a positive quantity.'), findsOneWidget);
+    expect(find.text('Enter a unit.'), findsOneWidget);
   });
 
   testWidgets('donation categories show medical subcategories and custom item', (
@@ -134,4 +173,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Item 2'), findsOneWidget);
   });
+}
+
+class _TestAuthService extends AuthService {
+  _TestAuthService(String phoneNumber)
+      : _user = AuthUser(
+          id: 'test-user',
+          fullName: 'Test User',
+          email: 'test@example.com',
+          role: 'Citizen',
+          phoneNumber: phoneNumber,
+        );
+
+  final AuthUser _user;
+
+  @override
+  AuthUser? get user => _user;
+
+  @override
+  String? get token => 'test-token';
 }

@@ -154,6 +154,9 @@ const _resourceCategories = <String, List<String>>{
   'Other': ['Other'],
 };
 
+bool _hasValidResourcePhone(String? value) =>
+  RegExp(r'^\d{10}$').hasMatch(value?.trim() ?? '');
+
 class _ResourceItemDraft {
   String category = 'Food';
   String item = 'Dry foods';
@@ -308,7 +311,7 @@ class _ResourceItemEditor extends StatelessWidget {
                     ),
                     validator: (value) {
                       final quantity = double.tryParse(value?.trim() ?? '');
-                      return quantity == null || quantity <= 0
+                      return quantity == null || !quantity.isFinite || quantity <= 0
                           ? 'Enter a positive quantity.'
                           : null;
                     },
@@ -389,6 +392,13 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
     if (user == null || (user.phoneNumber?.trim().isEmpty ?? true)) {
       _toast(
         'Add your phone number in your profile before sending a request.',
+        isError: true,
+      );
+      return;
+    }
+    if (!_hasValidResourcePhone(user.phoneNumber)) {
+      _toast(
+        'Your profile phone number must be exactly 10 digits before sending a request.',
         isError: true,
       );
       return;
@@ -633,6 +643,17 @@ class _DonatePageState extends State<DonatePage> {
         const SnackBar(
           content: Text(
             'Add your phone number in your profile before donating.',
+          ),
+          backgroundColor: AppColors.critical,
+        ),
+      );
+      return;
+    }
+    if (!_hasValidResourcePhone(user.phoneNumber)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Your profile phone number must be exactly 10 digits before donating.',
           ),
           backgroundColor: AppColors.critical,
         ),
