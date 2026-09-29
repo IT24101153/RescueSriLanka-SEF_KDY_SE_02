@@ -68,6 +68,12 @@ public record IncidentDto
     };
 }
 
+/// <summary>
+/// A page of incidents plus the total count matching the filters, so the
+/// caller can render "page N of M" without a second round trip.
+/// </summary>
+public record IncidentQueryResult(IReadOnlyList<IncidentDto> Items, int TotalCount);
+
 public record CreateIncidentRequest
 {
     [Required, MaxLength(200)]

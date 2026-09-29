@@ -66,6 +66,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
         public VerificationStatus VerificationStatus { get; set; }
         public string? VerificationNotes { get; set; }
         public string? ImageUrl { get; set; }
+        public string? District { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

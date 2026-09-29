@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../shared/core/theme.dart';
+import '../../../shared/models/auth.dart';
+import '../../../shared/services/auth_service.dart';
 import '../../../shared/widgets/app_ui.dart';
 import '../services/resource_api.dart';
 
@@ -10,14 +14,16 @@ import '../services/resource_api.dart';
 /// /api/resources/*. Styling comes from the shared kit, so this reads like the
 /// disaster map and the report form.
 class ResourceHomePage extends StatefulWidget {
-  const ResourceHomePage({super.key});
+  const ResourceHomePage({super.key, this.auth});
+
+  final AuthService? auth;
 
   @override
   State<ResourceHomePage> createState() => _ResourceHomePageState();
 }
 
 class _ResourceHomePageState extends State<ResourceHomePage> {
-  final _api = ResourceApi();
+  late final ResourceApi _api;
 
   int _section = 0;
   List<HelpRequest> _requests = [];
@@ -27,6 +33,7 @@ class _ResourceHomePageState extends State<ResourceHomePage> {
   @override
   void initState() {
     super.initState();
+    _api = ResourceApi(token: widget.auth?.token);
     _loadRequests();
   }
 
@@ -97,12 +104,17 @@ class _ResourceHomePageState extends State<ResourceHomePage> {
                 children: [
                   RequestHelpPage(
                     api: _api,
+                    user: widget.auth?.user,
                     requests: _requests,
                     loadingRequests: _loading,
                     onSubmitted: _loadRequests,
                     onRefresh: _loadRequests,
                   ),
-                  DonatePage(api: _api, onRefresh: _loadRequests),
+                  DonatePage(
+                    api: _api,
+                    user: widget.auth?.user,
+                    onRefresh: _loadRequests,
+                  ),
                 ],
               ),
             ),
@@ -126,9 +138,209 @@ Color _statusTone(String status) {
   return AppColors.safe;
 }
 
+const _resourceCategories = <String, List<String>>{
+  'Food': ['Dry foods', 'Rice', 'Other'],
+  'Water': ['Bottled water', 'Drinking water', 'Water containers', 'Other'],
+  'Medical': [
+    'Bandages',
+    'Plasters',
+    'Surgical spirits',
+    'Saline',
+    'Gauze / cotton packets',
+    'Other',
+  ],
+  'Sanitary products': ['Napkins', 'Other'],
+  'Hygiene items': ['Soap', 'Toothpaste', 'Toothbrushes', 'Other'],
+  'Other': ['Other'],
+};
+
+class _ResourceItemDraft {
+  String category = 'Food';
+  String item = 'Dry foods';
+  final customItem = TextEditingController();
+  final quantity = TextEditingController();
+  final unit = TextEditingController();
+
+  bool get needsCustomItem => category == 'Other' || item == 'Other';
+
+  String get itemName => needsCustomItem
+      ? customItem.text.trim()
+      : item;
+
+  ResourceSubmissionItem toSubmissionItem() => ResourceSubmissionItem(
+    category: category,
+    itemName: itemName,
+    quantity: double.parse(quantity.text),
+    unit: unit.text.trim(),
+  );
+
+  void dispose() {
+    customItem.dispose();
+    quantity.dispose();
+    unit.dispose();
+  }
+}
+
+class _ResourceItemEditor extends StatelessWidget {
+  const _ResourceItemEditor({
+    required this.item,
+    required this.index,
+    required this.canRemove,
+    required this.onChanged,
+    required this.onRemove,
+    super.key,
+  });
+
+  final _ResourceItemDraft item;
+  final int index;
+  final bool canRemove;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final subcategories =
+        _resourceCategories[item.category] ?? const <String>[];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.gap),
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Item ${index + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (canRemove)
+                  IconButton(
+                    tooltip: 'Remove item',
+                    onPressed: onRemove,
+                    icon: const Icon(Icons.remove_circle_outline),
+                  ),
+              ],
+            ),
+            DropdownButtonFormField<String>(
+              key: ValueKey(
+                'category-${identityHashCode(item)}-${item.category}',
+              ),
+              initialValue: item.category,
+              decoration: const InputDecoration(
+                labelText: 'Category',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.category_outlined),
+              ),
+              items: _resourceCategories.keys
+                  .map(
+                    (category) => DropdownMenuItem(
+                      value: category,
+                      child: Text(category),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (category) {
+                if (category == null) return;
+                item.category = category;
+                item.item = _resourceCategories[category]?.first ?? '';
+                item.customItem.clear();
+                onChanged();
+              },
+            ),
+            if (subcategories.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.gap),
+              DropdownButtonFormField<String>(
+                key: ValueKey(
+                  'item-${identityHashCode(item)}-${item.category}-${item.item}',
+                ),
+                initialValue: item.item,
+                decoration: const InputDecoration(
+                  labelText: 'Item',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.inventory_2_outlined),
+                ),
+                items: subcategories
+                    .map(
+                      (subcategory) => DropdownMenuItem(
+                        value: subcategory,
+                        child: Text(subcategory),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (subcategory) {
+                  if (subcategory == null) return;
+                  item.item = subcategory;
+                  item.customItem.clear();
+                  onChanged();
+                },
+              ),
+            ],
+            if (item.needsCustomItem) ...[
+              const SizedBox(height: AppSpacing.gap),
+              TextFormField(
+                controller: item.customItem,
+                maxLength: 100,
+                decoration: const InputDecoration(
+                  labelText: 'Specify item',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.edit_outlined),
+                ),
+                validator: (value) => (value?.trim() ?? '').isEmpty
+                    ? 'Enter the item name.'
+                    : null,
+              ),
+            ],
+            const SizedBox(height: AppSpacing.gap),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: item.quantity,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Quantity',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.numbers),
+                    ),
+                    validator: (value) {
+                      final quantity = double.tryParse(value?.trim() ?? '');
+                      return quantity == null || quantity <= 0
+                          ? 'Enter a positive quantity.'
+                          : null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.gap),
+                Expanded(
+                  child: TextFormField(
+                    controller: item.unit,
+                    decoration: const InputDecoration(
+                      labelText: 'Unit',
+                      hintText: 'kg, packs, boxes',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.straighten),
+                    ),
+                    validator: (value) =>
+                        (value?.trim() ?? '').isEmpty ? 'Enter a unit.' : null,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class RequestHelpPage extends StatefulWidget {
   const RequestHelpPage({
     required this.api,
+    this.user,
     required this.requests,
     required this.loadingRequests,
     required this.onSubmitted,
@@ -137,6 +349,7 @@ class RequestHelpPage extends StatefulWidget {
   });
 
   final ResourceApi api;
+  final AuthUser? user;
   final List<HelpRequest> requests;
   final bool loadingRequests;
   final Future<void> Function() onSubmitted;
@@ -150,36 +363,54 @@ class RequestHelpPage extends StatefulWidget {
 
 class _RequestHelpPageState extends State<RequestHelpPage> {
   final _formKey = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _phone = TextEditingController();
-  final _description = TextEditingController();
-
-  String _needType = 'Food and water';
+  final List<_ResourceItemDraft> _items = [_ResourceItemDraft()];
   bool _submitting = false;
 
   @override
   void dispose() {
-    for (final controller in [_name, _phone, _description]) {
-      controller.dispose();
+    for (final item in _items) {
+      item.dispose();
     }
     super.dispose();
   }
 
+  void _addItem() => setState(() => _items.add(_ResourceItemDraft()));
+
+  void _removeItem(_ResourceItemDraft item) {
+    if (_items.length < 2) return;
+    setState(() {
+      _items.remove(item);
+      item.dispose();
+    });
+  }
+
   Future<void> _submit() async {
+    final user = widget.user;
+    if (user == null || (user.phoneNumber?.trim().isEmpty ?? true)) {
+      _toast(
+        'Add your phone number in your profile before sending a request.',
+        isError: true,
+      );
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _submitting = true);
     try {
-      await widget.api.createHelpRequest(
-        name: _name.text,
-        phone: _phone.text,
-        needType: _needType,
-        description: _description.text,
+      await widget.api.createHelpRequestsBatch(
+        items: _items.map((item) => item.toSubmissionItem()).toList(),
       );
       if (!mounted) return;
-      _description.clear();
+      for (final item in _items) {
+        item.dispose();
+      }
+      setState(
+        () => _items
+          ..clear()
+          ..add(_ResourceItemDraft()),
+      );
       await widget.onSubmitted();
-      _toast('Your request was sent to the resource manager.');
+      _toast('Your items were sent to the resource manager.');
     } catch (error) {
       _toast(error.toString().replaceFirst('Exception: ', ''), isError: true);
     } finally {
@@ -221,61 +452,26 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
               'is reviewed by a resource manager.',
         ),
         const SizedBox(height: AppSpacing.gap),
+        _AccountDetails(user: widget.user),
+        const SizedBox(height: AppSpacing.gap),
         Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _RequiredField(
-                controller: _name,
-                label: 'Your name',
-                icon: Icons.person_outline,
-              ),
-              const SizedBox(height: AppSpacing.gap),
-              _RequiredField(
-                controller: _phone,
-                label: 'Contact number',
-                icon: Icons.phone_outlined,
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: AppSpacing.gap),
-              DropdownButtonFormField<String>(
-                initialValue: _needType,
-                decoration: const InputDecoration(
-                  labelText: 'Type of help needed',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.category_outlined),
+              for (var index = 0; index < _items.length; index++)
+                _ResourceItemEditor(
+                  key: ObjectKey(_items[index]),
+                  item: _items[index],
+                  index: index,
+                  canRemove: _items.length > 1,
+                  onChanged: () => setState(() {}),
+                  onRemove: () => _removeItem(_items[index]),
                 ),
-                items:
-                    const [
-                          'Food and water',
-                          'Medical aid',
-                          'Rescue',
-                          'Shelter',
-                          'Other',
-                        ]
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value),
-                          ),
-                        )
-                        .toList(),
-                onChanged: (value) => setState(() => _needType = value!),
-              ),
-              const SizedBox(height: AppSpacing.gap),
-              TextFormField(
-                controller: _description,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Describe what is needed',
-                  alignLabelWithHint: true,
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.notes_outlined),
-                ),
-                validator: (value) => (value?.trim() ?? '').isEmpty
-                    ? 'Please describe the need.'
-                    : null,
+              OutlinedButton.icon(
+                onPressed: _items.length >= 20 ? null : _addItem,
+                icon: const Icon(Icons.add),
+                label: const Text('Add another item'),
               ),
               const SizedBox(height: 18),
               AppPrimaryButton(
@@ -342,9 +538,15 @@ class _RequestHelpPageState extends State<RequestHelpPage> {
 }
 
 class DonatePage extends StatefulWidget {
-  const DonatePage({required this.api, required this.onRefresh, super.key});
+  const DonatePage({
+    required this.api,
+    this.user,
+    required this.onRefresh,
+    super.key,
+  });
 
   final ResourceApi api;
+  final AuthUser? user;
 
   /// Pull-to-refresh reloads the section, as it does on the request tab.
   final Future<void> Function() onRefresh;
@@ -355,40 +557,108 @@ class DonatePage extends StatefulWidget {
 
 class _DonatePageState extends State<DonatePage> {
   final _formKey = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _phone = TextEditingController();
-  final _quantity = TextEditingController();
-  final _unit = TextEditingController();
   final _notes = TextEditingController();
-
-  String _donationType = 'Food and water';
+  final List<_ResourceItemDraft> _items = [_ResourceItemDraft()];
   bool _submitting = false;
+  bool _loadingDonations = true;
+  String? _donationError;
+  List<Donation> _donations = [];
+  Timer? _donationRefreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDonations();
+    _donationRefreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _loadDonations(showLoading: false),
+    );
+  }
+
+  Future<void> _loadDonations({bool showLoading = true}) async {
+    if (showLoading && mounted) {
+      setState(() {
+        _loadingDonations = true;
+        _donationError = null;
+      });
+    }
+    try {
+      final donations = await widget.api.getDonations();
+      if (!mounted) return;
+      setState(() {
+        _donations = donations
+            .where((donation) => donation.userId == widget.user?.id)
+            .toList();
+        _donationError = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _donationError = error.toString().replaceFirst('Exception: ', ''),
+        );
+      }
+    } finally {
+      if (mounted && showLoading) setState(() => _loadingDonations = false);
+    }
+  }
+
+  Future<void> _refreshDonations() async {
+    await Future.wait([widget.onRefresh(), _loadDonations()]);
+  }
+
+  void _addItem() => setState(() => _items.add(_ResourceItemDraft()));
+
+  void _removeItem(_ResourceItemDraft item) {
+    if (_items.length < 2) return;
+    setState(() {
+      _items.remove(item);
+      item.dispose();
+    });
+  }
 
   @override
   void dispose() {
-    for (final controller in [_name, _phone, _quantity, _unit, _notes]) {
-      controller.dispose();
+    _donationRefreshTimer?.cancel();
+    for (final item in _items) {
+      item.dispose();
     }
+    _notes.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    final user = widget.user;
+    if (user == null || (user.phoneNumber?.trim().isEmpty ?? true)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Add your phone number in your profile before donating.',
+          ),
+          backgroundColor: AppColors.critical,
+        ),
+      );
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _submitting = true);
     try {
-      await widget.api.createDonation(
-        name: _name.text,
-        phone: _phone.text,
-        donationType: _donationType,
-        quantity: double.parse(_quantity.text),
-        unit: _unit.text,
+      await widget.api.createDonationsBatch(
+        items: _items.map((item) => item.toSubmissionItem()).toList(),
         notes: _notes.text,
       );
       if (!mounted) return;
-      _quantity.clear();
-      _unit.clear();
+      await _loadDonations();
+      if (!mounted) return;
       _notes.clear();
+      for (final item in _items) {
+        item.dispose();
+      }
+      setState(
+        () => _items
+          ..clear()
+          ..add(_ResourceItemDraft()),
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Thank you. The resource manager will contact you.'),
@@ -410,7 +680,7 @@ class _DonatePageState extends State<DonatePage> {
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
-      onRefresh: widget.onRefresh,
+      onRefresh: _refreshDonations,
       child: _buildList(context),
     );
   }
@@ -433,69 +703,26 @@ class _DonatePageState extends State<DonatePage> {
               'resource manager reviews every offer and contacts you.',
         ),
         const SizedBox(height: AppSpacing.gap),
+        _AccountDetails(user: widget.user),
+        const SizedBox(height: AppSpacing.gap),
         Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _RequiredField(
-                controller: _name,
-                label: 'Your name',
-                icon: Icons.person_outline,
-              ),
-              const SizedBox(height: AppSpacing.gap),
-              _RequiredField(
-                controller: _phone,
-                label: 'Contact number',
-                icon: Icons.phone_outlined,
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: AppSpacing.gap),
-              DropdownButtonFormField<String>(
-                initialValue: _donationType,
-                decoration: const InputDecoration(
-                  labelText: 'What are you donating?',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.category_outlined),
+              for (var index = 0; index < _items.length; index++)
+                _ResourceItemEditor(
+                  key: ObjectKey(_items[index]),
+                  item: _items[index],
+                  index: index,
+                  canRemove: _items.length > 1,
+                  onChanged: () => setState(() {}),
+                  onRemove: () => _removeItem(_items[index]),
                 ),
-                items:
-                    const [
-                          'Food and water',
-                          'Medical supplies',
-                          'Clothing',
-                          'Other',
-                        ]
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value),
-                          ),
-                        )
-                        .toList(),
-                onChanged: (value) => setState(() => _donationType = value!),
-              ),
-              const SizedBox(height: AppSpacing.gap),
-              Row(
-                children: [
-                  Expanded(
-                    child: _RequiredField(
-                      controller: _quantity,
-                      label: 'Quantity',
-                      icon: Icons.numbers,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.gap),
-                  Expanded(
-                    child: _RequiredField(
-                      controller: _unit,
-                      label: 'Unit (kg, boxes…)',
-                      icon: Icons.straighten,
-                    ),
-                  ),
-                ],
+              OutlinedButton.icon(
+                onPressed: _items.length >= 20 ? null : _addItem,
+                icon: const Icon(Icons.add),
+                label: const Text('Add another item'),
               ),
               const SizedBox(height: AppSpacing.gap),
               TextFormField(
@@ -535,7 +762,117 @@ class _DonatePageState extends State<DonatePage> {
             ],
           ),
         ),
+        const SizedBox(height: AppSpacing.gap),
+        const AppSectionTitle('Your donations'),
+        if (_loadingDonations)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_donationError != null)
+          AppErrorBanner(
+            message: _donationError!,
+            onRetry: _loadDonations,
+          )
+        else if (_donations.isEmpty)
+          const AppEmptyState(
+            icon: Icons.volunteer_activism_outlined,
+            title: 'No donations yet',
+            message: 'Donations you offer appear here with their latest status.',
+          )
+        else
+          for (final donation in _donations)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.gap),
+              child: AppCard(
+                accent: _statusTone(donation.status),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            donation.donationType,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            '${donation.quantity} ${donation.unit} · ${MaterialLocalizations.of(context).formatShortDate(donation.createdAt.toLocal())}',
+                            style: const TextStyle(fontSize: 12.5, color: AppColors.body),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    AppPill(
+                      _donationStatusLabel(donation.status),
+                      tone: _statusTone(donation.status),
+                    ),
+                  ],
+                ),
+              ),
+            ),
       ],
+    );
+  }
+}
+
+String _donationStatusLabel(String status) => switch (status.toLowerCase()) {
+  'pendingreview' || 'pending' => 'Pending',
+  'accepted' => 'Accepted',
+  'rejected' => 'Rejected',
+  _ => status,
+};
+
+class _AccountDetails extends StatelessWidget {
+  const _AccountDetails({required this.user});
+
+  final AuthUser? user;
+
+  @override
+  Widget build(BuildContext context) {
+    final account = user;
+    final phone = account?.phoneNumber?.trim();
+
+    return AppCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.account_circle_outlined, color: AppColors.brandInk),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  account?.fullName ?? 'Account details unavailable',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  phone?.isNotEmpty == true
+                      ? phone!
+                      : 'Add a phone number in Profile',
+                  style: const TextStyle(fontSize: 13, color: AppColors.body),
+                ),
+                Text(
+                  'District: ${account?.district ?? 'Not set'}',
+                  style: const TextStyle(fontSize: 13, color: AppColors.body),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -591,36 +928,6 @@ class _SectionIntro extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// A required text field, styled like the report form's.
-class _RequiredField extends StatelessWidget {
-  const _RequiredField({
-    required this.controller,
-    required this.label,
-    required this.icon,
-    this.keyboardType,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final IconData icon;
-  final TextInputType? keyboardType;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-        prefixIcon: Icon(icon),
-      ),
-      validator: (value) =>
-          (value?.trim() ?? '').isEmpty ? 'This field is required.' : null,
     );
   }
 }

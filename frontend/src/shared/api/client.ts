@@ -14,13 +14,11 @@ export class ApiError extends Error {
 }
 
 /**
- * Fetch wrapper that attaches the bearer token and turns a rejected token into
- * a clean signed-out state rather than a wall of failing requests.
+ * Attaches the bearer token, turns a rejected token into a clean signed-out
+ * state rather than a wall of failing requests, and surfaces the API's error
+ * body on failure. Shared by apiFetch and apiFetchPage below.
  */
-export async function apiFetch<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+async function apiFetchRaw(path: string, init: RequestInit = {}): Promise<Response> {
   const session = getSession()
 
   const headers = new Headers(init.headers)
@@ -50,7 +48,32 @@ export async function apiFetch<T>(
     throw new ApiError(response.status, message)
   }
 
+  return response
+}
+
+/** Fetch wrapper for the common case: attach the token, return the parsed body. */
+export async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await apiFetchRaw(path, init)
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T)
+}
+
+/**
+ * Like apiFetch, but also reads the X-Total-Count header a paginated endpoint
+ * returns alongside its (still plain-array) body — for rendering "page N of M"
+ * without changing the response shape every other caller of that endpoint
+ * already depends on.
+ */
+export async function apiFetchPage<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<{ data: T; totalCount: number | null }> {
+  const response = await apiFetchRaw(path, init)
+  const data = response.status === 204 ? (undefined as T) : ((await response.json()) as T)
+  const header = response.headers.get('X-Total-Count')
+  return { data, totalCount: header === null ? null : Number(header) }
 }
 
 /** Builds a query string, skipping empty values. */

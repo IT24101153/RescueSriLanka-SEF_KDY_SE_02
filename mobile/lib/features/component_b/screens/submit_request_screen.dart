@@ -254,9 +254,7 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: List.generate(helpRequestTypeLabels.length, (
-                        i,
-                      ) {
+                      children: [0, 1, 2, 3, 5].map((i) {
                         final selected = _selectedType == i;
                         return ChoiceChip(
                           avatar: Icon(
@@ -284,7 +282,7 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
                                 : AppColors.body,
                           ),
                         );
-                      }),
+                      }).toList(),
                     ),
 
                     const SizedBox(height: 24),

@@ -9,12 +9,13 @@ class ResourceApi {
   // The base URL comes from the shared config, like every other section's
   // client, so this works on iOS and the web too and not only on the Android
   // emulator.
-  ResourceApi({http.Client? client, String? baseUrl})
+  ResourceApi({http.Client? client, String? baseUrl, this._token})
     : _client = client ?? http.Client(),
       _baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
 
   final http.Client _client;
   final String _baseUrl;
+  final String? _token;
 
   Future<HelpRequest> createHelpRequest({
     required String name,
@@ -32,6 +33,16 @@ class ResourceApi {
       'longitude': null,
     });
     return _decode<HelpRequest>(response, path, HelpRequest.fromJson);
+  }
+
+  Future<List<HelpRequest>> createHelpRequestsBatch({
+    required List<ResourceSubmissionItem> items,
+  }) async {
+    const path = '/api/resources/help-requests/batch';
+    final response = await _post(path, {
+      'items': items.map((item) => item.toJson()).toList(),
+    });
+    return _decodeList(response, path, HelpRequest.fromJson);
   }
 
   Future<Donation> createDonation({
@@ -54,23 +65,48 @@ class ResourceApi {
     return _decode<Donation>(response, path, Donation.fromJson);
   }
 
+  Future<List<Donation>> createDonationsBatch({
+    required List<ResourceSubmissionItem> items,
+    String? notes,
+  }) async {
+    const path = '/api/resources/donations/batch';
+    final response = await _post(path, {
+      'items': items.map((item) => item.toJson()).toList(),
+      'notes': notes,
+    });
+    return _decodeList(response, path, Donation.fromJson);
+  }
+
   Future<List<HelpRequest>> getHelpRequests() async {
     const path = '/api/resources/help-requests';
     final response = await _get(path);
     return _decodeList(response, path, HelpRequest.fromJson);
   }
 
+  Future<List<Donation>> getDonations() async {
+    const path = '/api/resources/donations';
+    final response = await _get(path);
+    return _decodeList(response, path, Donation.fromJson);
+  }
+
   void dispose() => _client.close();
 
   static const Duration _timeout = Duration(seconds: 15);
 
-  Future<http.Response> _get(String path) =>
-      _send(() => _client.get(Uri.parse('$_baseUrl$path')));
+  Future<http.Response> _get(String path) => _send(
+    () => _client.get(
+      Uri.parse('$_baseUrl$path'),
+      headers: {if (_token != null) 'Authorization': 'Bearer $_token'},
+    ),
+  );
 
   Future<http.Response> _post(String path, Map<String, dynamic> body) => _send(
     () => _client.post(
       Uri.parse('$_baseUrl$path'),
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      },
       body: jsonEncode(body),
     ),
   );
@@ -153,6 +189,27 @@ class ResourceApi {
   }
 }
 
+class ResourceSubmissionItem {
+  const ResourceSubmissionItem({
+    required this.category,
+    required this.itemName,
+    required this.quantity,
+    required this.unit,
+  });
+
+  final String category;
+  final String itemName;
+  final double quantity;
+  final String unit;
+
+  Map<String, dynamic> toJson() => {
+        'category': category,
+        'itemName': itemName,
+        'quantity': quantity,
+        'unit': unit,
+      };
+}
+
 class HelpRequest {
   const HelpRequest({
     required this.needType,
@@ -176,21 +233,30 @@ class HelpRequest {
 
 class Donation {
   const Donation({
+    required this.id,
+    required this.userId,
     required this.donationType,
     required this.quantity,
     required this.unit,
     required this.status,
+    required this.createdAt,
   });
 
+  final String id;
+  final String? userId;
   final String donationType;
   final double quantity;
   final String unit;
   final String status;
+  final DateTime createdAt;
 
   factory Donation.fromJson(Map<String, dynamic> json) => Donation(
+    id: json['id'] as String,
+    userId: json['userId'] as String?,
     donationType: json['donationType'] as String,
     quantity: (json['quantity'] as num).toDouble(),
     unit: json['unit'] as String,
     status: json['status'] as String,
+    createdAt: DateTime.parse(json['createdAtUtc'] as String),
   );
 }

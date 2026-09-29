@@ -1,3 +1,28 @@
+import '../../../shared/core/config.dart';
+
+/// A photo attached to a report. Mirrors IncidentImageDto.
+class IncidentPhoto {
+  const IncidentPhoto({required this.id, required this.url, this.caption});
+
+  final String id;
+
+  /// As the API stores it: absolute for Cloudinary, site-relative for the
+  /// local-disk store. Use [resolvedUrl] to load it.
+  final String url;
+  final String? caption;
+
+  String get resolvedUrl =>
+      url.startsWith('http') ? url : '${AppConfig.apiBaseUrl}$url';
+
+  factory IncidentPhoto.fromJson(Map<String, dynamic> json) => IncidentPhoto(
+        id: json['id'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+        caption: json['caption'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'url': url, 'caption': caption};
+}
+
 /// Mirrors IncidentDto from the ASP.NET Core API.
 class Incident {
   const Incident({
@@ -19,6 +44,7 @@ class Incident {
     this.aiConfidence,
     this.aiRationale,
     this.imageCount = 0,
+    this.images = const [],
     this.distanceKm,
   });
 
@@ -40,6 +66,9 @@ class Incident {
   final double? aiConfidence;
   final String? aiRationale;
   final int imageCount;
+
+  /// The photos themselves; the list and nearby queries send them along.
+  final List<IncidentPhoto> images;
   final double? distanceKm;
 
   bool get isAnalysed => aiSeverityScore != null;
@@ -65,6 +94,34 @@ class Incident {
         aiConfidence: (json['aiConfidence'] as num?)?.toDouble(),
         aiRationale: json['aiRationale'] as String?,
         imageCount: (json['imageCount'] as num?)?.toInt() ?? 0,
+        images: [
+          for (final image in (json['images'] as List? ?? const []))
+            IncidentPhoto.fromJson(image as Map<String, dynamic>),
+        ].where((photo) => photo.url.isNotEmpty).toList(),
         distanceKm: (json['distanceKm'] as num?)?.toDouble(),
       );
+
+  /// The same shape [Incident.fromJson] reads, so a report can be kept on
+  /// the device and read back.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'description': description,
+        'type': type,
+        'severity': severity,
+        'status': status,
+        'latitude': latitude,
+        'longitude': longitude,
+        'affectedRadiusMeters': affectedRadiusMeters,
+        'reportedAt': reportedAt.toUtc().toIso8601String(),
+        'district': district,
+        'addressText': addressText,
+        'estimatedAffectedPeople': estimatedAffectedPeople,
+        'aiSeverity': aiSeverity,
+        'aiSeverityScore': aiSeverityScore,
+        'aiConfidence': aiConfidence,
+        'aiRationale': aiRationale,
+        'imageCount': imageCount,
+        'images': [for (final photo in images) photo.toJson()],
+      };
 }

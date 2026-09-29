@@ -27,7 +27,9 @@ public class SafetyZoneServiceTests
         bool isActive = true,
         double latitude = 6.9271,
         double longitude = 79.8612,
-        int radiusMeters = 2000) => new()
+        int radiusMeters = 2000,
+        // Approved by default: only an approved report draws a zone.
+        IncidentStatus status = IncidentStatus.Verified) => new()
         {
             Title = "Test incident",
             Description = "Created by a unit test.",
@@ -37,8 +39,21 @@ public class SafetyZoneServiceTests
             Longitude = longitude,
             AffectedRadiusMeters = radiusMeters,
             District = "Colombo",
+            Status = status,
             IsActive = isActive
         };
+
+    [Fact]
+    public async Task Recompute_IgnoresAReportNotYetApproved()
+    {
+        await using var db = NewDb();
+        db.Incidents.Add(NewIncident(IncidentSeverity.Critical, status: IncidentStatus.Reported));
+        await db.SaveChangesAsync();
+
+        await NewService(db).RecomputeAsync();
+
+        Assert.Empty(await db.SafetyZones.ToListAsync());
+    }
 
     [Fact]
     public async Task Recompute_DerivesAZoneFromAnActiveIncident()

@@ -37,11 +37,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AgentStep> AgentSteps => Set<AgentStep>();
 
     // ---- Component C — Resource Management ----
-    public DbSet<Shelter> Shelters => Set<Shelter>();
     public DbSet<MedicalSupply> MedicalSupplies => Set<MedicalSupply>();
     public DbSet<FoodWaterStock> FoodWaterStocks => Set<FoodWaterStock>();
     public DbSet<ResourceAllocation> ResourceAllocations => Set<ResourceAllocation>();
     public DbSet<Donation> Donations => Set<Donation>();
+    public DbSet<DonatedSupply> DonatedSupplies => Set<DonatedSupply>();
+    public DbSet<ManagedSupply> ManagedSupplies => Set<ManagedSupply>();
 
     /// <summary>Requests for resources (Component C), separate from Component
     /// B's citizen help requests.</summary>
@@ -246,15 +247,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // ---- Component C ----
 
-        modelBuilder.Entity<Shelter>(entity =>
-        {
-            entity.Property(shelter => shelter.Name).HasMaxLength(200).IsRequired();
-            entity.Property(shelter => shelter.Address).HasMaxLength(500).IsRequired();
-            entity.Property(shelter => shelter.Latitude).HasPrecision(9, 6);
-            entity.Property(shelter => shelter.Longitude).HasPrecision(9, 6);
-            entity.Ignore(shelter => shelter.AvailableCapacity);
-        });
-
         modelBuilder.Entity<MedicalSupply>(entity =>
         {
             entity.Property(supply => supply.Name).HasMaxLength(200).IsRequired();
@@ -306,6 +298,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(donation => donation.Notes).HasMaxLength(1000);
             entity.Property(donation => donation.Status).HasMaxLength(30).IsRequired();
             entity.HasIndex(donation => new { donation.Status, donation.CreatedAtUtc });
+            entity.HasIndex(donation => donation.SubmissionId);
+        });
+
+        modelBuilder.Entity<DonatedSupply>(entity =>
+        {
+            entity.Property(supply => supply.Name).HasMaxLength(80).IsRequired();
+            entity.Property(supply => supply.DonorName).HasMaxLength(160).IsRequired();
+            entity.Property(supply => supply.QuantityOnHand).HasPrecision(12, 2);
+            entity.Property(supply => supply.Unit).HasMaxLength(40).IsRequired();
+            entity.Property(supply => supply.Notes).HasMaxLength(1000);
+            entity.HasIndex(supply => supply.DonationId).IsUnique();
+            entity.HasIndex(supply => new { supply.IsActive, supply.UpdatedAtUtc });
+        });
+
+        modelBuilder.Entity<ManagedSupply>(entity =>
+        {
+            entity.Property(supply => supply.Category).HasMaxLength(40).IsRequired();
+            entity.Property(supply => supply.Name).HasMaxLength(100).IsRequired();
+            entity.Property(supply => supply.Unit).HasMaxLength(40).IsRequired();
+            entity.Property(supply => supply.QuantityOnHand).HasPrecision(12, 2);
+            entity.Property(supply => supply.LowStockThreshold).HasPrecision(12, 2);
+            entity.HasIndex(supply => new { supply.IsActive, supply.Category, supply.Name });
         });
     }
 }

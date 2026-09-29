@@ -63,7 +63,14 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 .ThenByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
-            return [.. entities.Select(ToDto)];
+            var citizenIds = entities.Select(r => r.CitizenId).Distinct().ToArray();
+            var districts = await _db.Users
+                .AsNoTracking()
+                .Where(u => citizenIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.District);
+
+            return [.. entities.Select(r =>
+                ToDto(r, districts.TryGetValue(r.CitizenId, out var d) ? d : null))];
         }
 
         public async Task<List<HelpRequestResponseDto>> GetByCitizenAsync(Guid citizenId)
@@ -73,7 +80,13 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
-            return [.. entities.Select(ToDto)];
+            var district = await _db.Users
+                .AsNoTracking()
+                .Where(u => u.Id == citizenId)
+                .Select(u => u.District)
+                .FirstOrDefaultAsync();
+
+            return [.. entities.Select(r => ToDto(r, district))];
         }
 
         public async Task<HelpRequestResponseDto?> UpdateAsync(Guid id, Guid citizenId, UpdateHelpRequestDto dto)
@@ -233,7 +246,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             _ => false
         };
 
-        private static HelpRequestResponseDto ToDto(HelpRequest entity) => new()
+        private static HelpRequestResponseDto ToDto(HelpRequest entity, string? district = null) => new()
         {
             Id = entity.Id,
             CitizenId = entity.CitizenId,
@@ -246,6 +259,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             VerificationStatus = entity.VerificationStatus,
             VerificationNotes = entity.VerificationNotes,
             ImageUrl = entity.ImageUrl,
+            District = district,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt
         };

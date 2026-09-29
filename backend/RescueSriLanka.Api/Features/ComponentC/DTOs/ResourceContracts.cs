@@ -1,12 +1,5 @@
 namespace RescueSriLanka.Api.Features.ComponentC.DTOs;
 
-public record CreateShelterRequest(
-    string Name,
-    string Address,
-    decimal Latitude,
-    decimal Longitude,
-    int Capacity);
-
 public record CreateMedicalSupplyRequest(
     string Name,
     string Unit,
@@ -18,13 +11,6 @@ public record CreateFoodWaterStockRequest(
     string Unit,
     decimal QuantityOnHand,
     decimal LowStockThreshold);
-
-public record UpdateShelterRequest(
-    string Name,
-    string Address,
-    decimal Latitude,
-    decimal Longitude,
-    int Capacity);
 
 public record UpdateMedicalSupplyRequest(
     string Name,
@@ -79,6 +65,7 @@ public record CreateHelpRequestRequest(
 
 public record HelpRequestResponse(
     Guid Id,
+    Guid? UserId,
     string RequesterName,
     string ContactNumber,
     string NeedType,
@@ -86,7 +73,10 @@ public record HelpRequestResponse(
     decimal? Latitude,
     decimal? Longitude,
     string Status,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    string? District);
+
+public record UpdateHelpRequestStatusRequest(string Status);
 
 public record CreateDonationRequest(
     string DonorName,
@@ -96,8 +86,22 @@ public record CreateDonationRequest(
     string Unit,
     string? Notes);
 
+public record ResourceSubmissionItem(
+    string Category,
+    string ItemName,
+    decimal Quantity,
+    string Unit);
+
+public record CreateHelpRequestsBatchRequest(List<ResourceSubmissionItem> Items);
+
+public record CreateDonationsBatchRequest(
+    List<ResourceSubmissionItem> Items,
+    string? Notes);
+
 public record DonationResponse(
     Guid Id,
+    Guid? UserId,
+    Guid? SubmissionId,
     string DonorName,
     string ContactNumber,
     string DonationType,
@@ -105,4 +109,22 @@ public record DonationResponse(
     string Unit,
     string? Notes,
     string Status,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    string? District);
+
+public record DonatedSupplyResponse(
+    Guid Id,
+    Guid DonationId,
+    string Name,
+    string DonorName,
+    decimal QuantityOnHand,
+    string Unit,
+    string? Notes,
+    DateTime UpdatedAtUtc);
+
+public record CreateManagedSupplyRequest(
+    string Category,
+    string Name,
+    string Unit,
+    decimal QuantityOnHand,
+    decimal LowStockThreshold);

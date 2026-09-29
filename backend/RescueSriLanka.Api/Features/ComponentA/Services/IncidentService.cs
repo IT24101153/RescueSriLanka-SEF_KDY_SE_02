@@ -8,14 +8,30 @@ using RescueSriLanka.Api.Services;
 namespace RescueSriLanka.Api.Features.ComponentA.Services;
 public interface IIncidentService
 {
-    Task<IReadOnlyList<IncidentDto>> QueryAsync(
+    /// <summary>
+    /// <paramref name="sortBy"/> is one of severity (default), reportedat, status,
+    /// type, district or affectedpeople; unrecognised values fall back to the
+    /// default. <paramref name="sortDir"/> is "asc" or "desc" (default). Paging
+    /// applies only when both <paramref name="page"/> and <paramref name="pageSize"/>
+    /// are supplied — omitting them returns every matching incident, unchanged
+    /// from before paging existed, which is what the map and other components
+    /// that call this endpoint without paging still rely on.
+    /// </summary>
+    Task<IncidentQueryResult> QueryAsync(
         IncidentStatus? status, IncidentSeverity? severity, IncidentType? type,
-        string? district, bool activeOnly, CancellationToken ct = default);
+        string? district, bool activeOnly,
+        string? sortBy = null, string? sortDir = null,
+        int? page = null, int? pageSize = null,
+        bool approvedOnly = false,
+        CancellationToken ct = default);
 
     Task<IncidentDto?> GetAsync(Guid id, CancellationToken ct = default);
 
+    /// <param name="approvedOnly">True for the public: leave out reports a
+    /// coordinator has not yet approved as true.</param>
     Task<IReadOnlyList<IncidentDto>> NearbyAsync(
-        double latitude, double longitude, double radiusKm, CancellationToken ct = default);
+        double latitude, double longitude, double radiusKm,
+        bool approvedOnly = false, CancellationToken ct = default);
 
     Task<IncidentDto> CreateAsync(
         CreateIncidentRequest request, Guid? reportedByUserId, CancellationToken ct = default);
@@ -50,25 +66,63 @@ public class IncidentService(
     IImageStorageService imageStorage,
     ILogger<IncidentService> logger) : IIncidentService
 {
-    public async Task<IReadOnlyList<IncidentDto>> QueryAsync(
+    public async Task<IncidentQueryResult> QueryAsync(
         IncidentStatus? status, IncidentSeverity? severity, IncidentType? type,
-        string? district, bool activeOnly, CancellationToken ct = default)
+        string? district, bool activeOnly,
+        string? sortBy = null, string? sortDir = null,
+        int? page = null, int? pageSize = null,
+        bool approvedOnly = false,
+        CancellationToken ct = default)
     {
         var query = db.Incidents.AsNoTracking().Include(incident => incident.Images).AsQueryable();
 
         if (activeOnly) query = query.Where(incident => incident.IsActive);
+        // A report is only public once a coordinator has approved it as true.
+        if (approvedOnly) query = query.Where(incident => incident.Status != IncidentStatus.Reported);
         if (status is not null) query = query.Where(incident => incident.Status == status);
         if (severity is not null) query = query.Where(incident => incident.Severity == severity);
         if (type is not null) query = query.Where(incident => incident.Type == type);
         if (!string.IsNullOrWhiteSpace(district))
             query = query.Where(incident => incident.District == district);
 
-        var incidents = await query
-            .OrderByDescending(incident => incident.Severity)
-            .ThenByDescending(incident => incident.ReportedAt)
-            .ToListAsync(ct);
+        var totalCount = await query.CountAsync(ct);
 
-        return [.. incidents.Select(incident => IncidentDto.FromIncident(incident))];
+        var descending = !string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase);
+        query = sortBy?.ToLowerInvariant() switch
+        {
+            "reportedat" => descending
+                ? query.OrderByDescending(incident => incident.ReportedAt)
+                : query.OrderBy(incident => incident.ReportedAt),
+            "status" => descending
+                ? query.OrderByDescending(incident => incident.Status)
+                : query.OrderBy(incident => incident.Status),
+            "type" => descending
+                ? query.OrderByDescending(incident => incident.Type)
+                : query.OrderBy(incident => incident.Type),
+            "district" => descending
+                ? query.OrderByDescending(incident => incident.District)
+                : query.OrderBy(incident => incident.District),
+            "affectedpeople" => descending
+                ? query.OrderByDescending(incident => incident.EstimatedAffectedPeople)
+                : query.OrderBy(incident => incident.EstimatedAffectedPeople),
+            // Default: unchanged from before paging and sorting existed.
+            _ => query
+                .OrderByDescending(incident => incident.Severity)
+                .ThenByDescending(incident => incident.ReportedAt)
+        };
+
+        // Omitting page/pageSize keeps every existing caller (the map, other
+        // components) working exactly as before this was added.
+        if (page is > 0 && pageSize is > 0)
+        {
+            query = query.Skip((page.Value - 1) * pageSize.Value).Take(Math.Min(pageSize.Value, 100));
+        }
+
+        var incidents = await query.ToListAsync(ct);
+
+        return new IncidentQueryResult(
+            [.. incidents.Select(incident => IncidentDto.FromIncident(incident))],
+            totalCount);
     }
 
     public async Task<IncidentDto?> GetAsync(Guid id, CancellationToken ct = default)
@@ -83,7 +137,8 @@ public class IncidentService(
 
     /// <summary>The "what's near me" query — bounding box in SQL, exact distance in memory.</summary>
     public async Task<IReadOnlyList<IncidentDto>> NearbyAsync(
-        double latitude, double longitude, double radiusKm, CancellationToken ct = default)
+        double latitude, double longitude, double radiusKm,
+        bool approvedOnly = false, CancellationToken ct = default)
     {
         var (minLat, maxLat, minLon, maxLon) = GeoService.BoundingBox(latitude, longitude, radiusKm);
 
@@ -92,6 +147,7 @@ public class IncidentService(
             .Include(incident => incident.Images)
             .Where(incident =>
                 incident.IsActive &&
+                (!approvedOnly || incident.Status != IncidentStatus.Reported) &&
                 incident.Latitude >= minLat && incident.Latitude <= maxLat &&
                 incident.Longitude >= minLon && incident.Longitude <= maxLon)
             .ToListAsync(ct);

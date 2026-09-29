@@ -4,6 +4,10 @@ public class Donation
 {
     public Guid Id { get; set; }
 
+    public Guid? UserId { get; set; }
+
+    public Guid? SubmissionId { get; set; }
+
     public required string DonorName { get; set; }
 
     public required string ContactNumber { get; set; }

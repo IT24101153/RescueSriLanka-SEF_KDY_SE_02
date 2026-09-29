@@ -22,6 +22,7 @@ using RescueSriLanka.Api.Features.ComponentB.Data;
 using RescueSriLanka.Api.Features.ComponentB.Services;
 using RescueSriLanka.Api.Features.ComponentC.Services;
 using RescueSriLanka.Api.Features.ComponentC.Data;
+using RescueSriLanka.Api.Features.ComponentC.Agents.ResourceAllocationAgent;
 using RescueSriLanka.Api.Features.ComponentD.Agents.Orchestration;
 using RescueSriLanka.Api.Features.ComponentD.Agents.SafetyValidation;
 using RescueSriLanka.Api.Features.ComponentD.Services;
@@ -77,8 +78,10 @@ builder.Services.AddScoped<IPlannerAgentService, PlannerAgentService>();
 builder.Services.AddScoped<IHelpRequestServiceForAgent, HelpRequestServiceForAgent>();
 builder.Services.AddHttpClient<IAiAnalysisService, GeminiAnalysisService>();
 
-// Component C — shelters, medical supplies, food/water stock and allocations.
+// Component C — medical supplies, food/water stock and allocations.
 builder.Services.AddScoped<IResourceManagementService, ResourceManagementService>();
+builder.Services.AddScoped<IResourceAllocationAgent, ResourceAllocationAgent>();
+builder.Services.AddScoped<IResourceForecastAgent, ResourceForecastAgent>();
 
 // Component D — rescue teams, assignments, dispatch and its agents.
 builder.Services.AddDbContext<ComponentDDbContext>(options =>
@@ -183,6 +186,12 @@ builder.Services.AddHttpClient<ITestmailClient, TestmailClient>(client =>
 
 builder.Services.AddScoped<INotificationService, NotificationService>();
 
+builder.Services.AddSingleton<ResourceEmailQueue>();
+builder.Services.AddSingleton<IResourceEmailQueue>(
+    provider => provider.GetRequiredService<ResourceEmailQueue>());
+builder.Services.AddHostedService(
+    provider => provider.GetRequiredService<ResourceEmailQueue>());
+
 // Mail goes out on a background worker: nobody filing a report or approving an
 // assessment should wait on a mail server, or fail because one is down.
 builder.Services.AddSingleton<NotificationQueue>();
@@ -233,7 +242,9 @@ builder.Services.AddCors(options =>
                     Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
                     (uri.Host is "localhost" or "127.0.0.1" or "::1"))
                 .AllowAnyHeader()
-                .AllowAnyMethod();
+                .AllowAnyMethod()
+                // So the React dashboard can read the paged incident count.
+                .WithExposedHeaders("X-Total-Count");
             return;
         }
 
@@ -241,7 +252,8 @@ builder.Services.AddCors(options =>
             .GetSection("Cors:AllowedOrigins")
             .Get<string[]>() ?? [];
 
-        policy.WithOrigins(allowed).AllowAnyHeader().AllowAnyMethod();
+        policy.WithOrigins(allowed).AllowAnyHeader().AllowAnyMethod()
+            .WithExposedHeaders("X-Total-Count");
     }));
 
 // ---------------------------------------------------------------- api surface
@@ -250,6 +262,12 @@ builder.Services
     // Enums travel as readable strings ("Critical", not 3) in both directions.
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// Catches anything a controller's own try/catch did not already turn into a
+// response, so a bug never reaches a caller as a raw stack trace.
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database");
 builder.Services.AddEndpointsApiExplorer();
@@ -283,6 +301,9 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+// First in the pipeline, so it can catch whatever happens downstream of it.
+app.UseExceptionHandler();
 
 // Which photo backend is live should never be a guess when a demo misbehaves.
 using (var startupScope = app.Services.CreateScope())
@@ -357,7 +378,7 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
                 services.GetRequiredService<IPasswordHasher<User>>());
         }
 
-        // Component C's shelters, supplies and stock for the resource screens.
+        // Component C supplies and stock for the resource screens.
         await ResourceDataSeeder.SeedAsync(db);
 
         // Sample incidents for the map/dashboard — off via configuration.
