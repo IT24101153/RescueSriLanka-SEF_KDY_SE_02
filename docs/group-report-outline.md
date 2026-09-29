@@ -488,12 +488,18 @@ the multi-step plan, which steps are real vs. still placeholder logic against re
 comments flag this — report it honestly, a partially-implemented delegation is still gradeable if you're
 upfront about it), and its own approval gate.
 
-### 5.3 Agent Orchestrator + 3 agents (Component D) **[TODO — owner]**
+### 5.3 Safety Validation Agent (Component D)
 
-`AgentOrchestrator`, `GeminiIncidentAnalysisAgent`, `GeminiDispatchRecommendationAgent`,
-`GeminiSafetyValidationAgent`/`SafetyValidationAgent`. Cover how the orchestrator delegates across these,
-and how the Safety Validation Agent calls Component A's zone-check endpoint (real cross-component
-integration — a strong point to highlight here).
+Component D's owned Safety Validation Agent evaluates an existing assignment and recommends
+APPROVE, REVISE, or REJECT. GeminiSafetyValidationAgent uses seven allow-listed read-only tools
+and ten mandatory deterministic checks. It does not call Component A's zone-check endpoint.
+Workflow/audit persistence is separate from operational state changes.
+
+AI recommends -> human coordinator decides -> backend live-revalidates -> transactional dispatch.
+The separate SafetyValidationAgent supplies the approval-time deterministic guard.
+Formal offline evidence, contracts, security boundaries, 15 golden cases and known limitations:
+[Component D Safety Validation Agent - Golden Evaluation](component-d-safety-agent-golden-evaluation.md).
+The orchestrator and other agent integrations are separate from this owned-agent evaluation.
 
 ### 5.4 Component C **[flag — do not skip]**
 

@@ -1,5 +1,7 @@
 # Component D end-to-end test results
 
+## Optional live Gemini scenarios
+
 Live shared-database/Gemini scenarios are **NOT RUN** until explicit approval is given to create isolated demo records and send synthetic operational context to the configured Gemini API.
 
 | Test ID | Scenario | Expected result | Actual result | Status | Evidence / notes |
@@ -17,7 +19,22 @@ Live shared-database/Gemini scenarios are **NOT RUN** until explicit approval is
 | D-E2E-11 | Live revalidation conflict | No dispatch after resource state changes | NOT RUN | NOT RUN | Requires isolated shared-data scenario. |
 | D-E2E-12 | Resource release | Resolved mission releases team/vehicle | NOT RUN | NOT RUN | Covered by safe-dispatch tests. |
 
-## Automated baseline
+## Offline automated evidence
 
-- `dotnet build --no-restore`: PASS, 0 warnings / 0 errors.
-- `dotnet test backend/RescueSriLanka.Api.Tests/ --no-restore`: PASS, 65 passed, 0 failed, 0 skipped.
+These results use isolated InMemory databases and fake providers. They do not mean the
+optional live scenarios above ran.
+
+- [Safety Validation Agent golden evaluation](../component-d-safety-agent-golden-evaluation.md):
+  **15 passed, 0 failed**, G01-G15 using real agent/tools and a fake provider.
+- All Component D tests in this run: **152 passed, 0 failed**.
+- The selection includes **20 HTTP integration cases** with real routing/JWT/controllers/services.
+- Existing agent selections: deterministic safety **5/5**, Gemini safety **31/31**, safe decision **5/5**.
+- Backend/test-project build: **PASS, zero warnings and zero errors**.
+- Golden TRX remains local at backend/RescueSriLanka.Api.Tests/TestResults/component-d-safety-agent-golden.trx.
+- See the golden report for base commit, uncommitted-test qualification, execution timestamp,
+  repeatable command and limitations.
+- Full backend suite was not rerun for this task. The preceding recorded baseline was
+  **302 passed, 1 unrelated Component B metadata-test failure**.
+
+All optional live Gemini/UI scenarios remain **NOT RUN**. Offline revalidation assertions in
+an isolated database must not be presented as live shared-system results.

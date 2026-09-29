@@ -238,7 +238,7 @@ public class GeminiSafetyValidationAgentTests
         var assignment = await SeedValidAssignmentAsync(db);
         var args = JsonDocument.Parse("{\"assignmentId\":\"not-a-guid\"}").RootElement.Clone();
         var result = await CreateAgent(db, _ => new GeminiSafetyAgentResponse(
-            [new GeminiSafetyToolCall("check_team_availability", args, "call-1")], null, null, null)).ValidateAsync(assignment.Id);
+            [new GeminiSafetyToolCall("check_team_availability", args, "call-1")], null, null, null, "int-argument-validation")).ValidateAsync(assignment.Id);
 
         Assert.Equal(SafetyValidationDecision.REVISE, result.Decision);
         Assert.Contains("GEMINI_PROVIDER", result.FailedChecks);
@@ -344,7 +344,7 @@ public class GeminiSafetyValidationAgentTests
         var args = JsonDocument.Parse($"{{\"assignmentId\":\"{assignment.Id}\",\"planVersion\":{assignment.PlanVersion + 1}}}").RootElement.Clone();
 
         var result = await CreateAgent(db, _ => new GeminiSafetyAgentResponse(
-            [new GeminiSafetyToolCall("check_vehicle_capacity", args, "call-1")], null, null, null)).ValidateAsync(assignment.Id);
+            [new GeminiSafetyToolCall("check_vehicle_capacity", args, "call-1")], null, null, null, "int-argument-validation")).ValidateAsync(assignment.Id);
 
         Assert.Equal(SafetyValidationDecision.REVISE, result.Decision);
         Assert.Contains("GEMINI_PROVIDER", result.FailedChecks);
