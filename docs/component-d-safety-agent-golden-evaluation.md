@@ -8,9 +8,9 @@ Implementation: `GeminiSafetyValidationAgent : IAssignmentSafetyValidationAgent`
 
 ## 2. Architecture
 
-Assignment → Safety Validation Agent → allow-listed read-only tools → mandatory deterministic validation → recommendation → human coordinator → backend live revalidation → transactional dispatch.
+Assignment → Safety Validation Agent → allow-listed read-only tools → mandatory deterministic validation → recommendation → human Rescue Coordinator (RescueTeam) → backend live revalidation → transactional dispatch.
 
-`POST /api/assignments/{id}/validate` is coordinator-only. The separate decision endpoint invokes `DispatchService`, which uses `SafetyValidationAgent : ISafetyValidationAgent` for live revalidation. Dispatch uses Serializable transactions on relational providers.
+`POST /api/assignments/{id}/validate` is RescueTeam (Rescue Coordinator) only. The separate decision endpoint invokes `DispatchService`, which uses `SafetyValidationAgent : ISafetyValidationAgent` for live revalidation. Dispatch uses Serializable transactions on relational providers.
 
 The safety agent reads Component D facts and uses its provider boundary. It does **not** call Component A's zone-check endpoint. The fixture uses an existing incident in isolated AppDbContext, with exactly one incident reference and no HelpRequest reference.
 
@@ -87,7 +87,7 @@ REVISE. FailedChecks are assembled by the backend, not trusted from provider pro
 
 ## 7. Security Controls
 
-- Coordinator-only validation and decision endpoints; real JWT evidence is in ComponentDApiIntegrationTests.
+- RescueTeam (Rescue Coordinator) only validation and decision endpoints; real JWT evidence is in ComponentDApiIntegrationTests and AuthorizationIntegrationTests.
 - Assignment/version-bound tool arguments and trusted DB facts.
 - Exact allow-list; no SQL, dispatch, or resource-mutation tool.
 - Independent deterministic veto even if the provider skips tools.

@@ -4,7 +4,7 @@
 
 - [ ] Backend is running.
 - [ ] Frontend is running.
-- [ ] An `EmergencyCoordinator` account is available.
+- [ ] A `RescueTeam` account (`rescue@rescue.lk`, displayed as **Rescue Coordinator**) is available.
 - [ ] Demo rescue team and vehicle are available.
 - [ ] A demo Incident ID is available.
 - [ ] Gemini backend configuration is confirmed; no frontend key is used.

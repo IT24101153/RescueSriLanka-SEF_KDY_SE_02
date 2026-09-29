@@ -25,18 +25,18 @@ public class ComponentDApiIntegrationTests
     [InlineData("rescueteams")]
     [InlineData("assignments")]
     [InlineData("dispatches")]
-    public async Task AuthenticatedReadsReturnFixture(string resource)
+    public async Task RescueTeamReadsReturnFixture(string resource)
     {
         using var factory = new ComponentDApiFactory();
         var fixture = await factory.Seed(dispatch: true);
-        using var client = factory.Client("Citizen");
+        using var client = factory.Client();
         var rows = await Body<JsonElement[]>(await client.GetAsync("/api/" + resource), HttpStatusCode.OK);
         var id = resource switch { "rescueteams" => fixture.TeamId, "assignments" => fixture.AssignmentId, _ => fixture.DispatchId!.Value };
         Assert.Equal(id, Assert.Single(rows).GetProperty("id").GetGuid());
     }
 
     [Fact]
-    public async Task CoordinatorCreatesTeamWithLocationAndPersistedRow()
+    public async Task RescueTeamCreatesTeamWithLocationAndPersistedRow()
     {
         using var factory = new ComponentDApiFactory();
         using var client = factory.Client();
@@ -66,10 +66,10 @@ public class ComponentDApiIntegrationTests
     }
 
     [Fact]
-    public async Task RescueTeamCannotPerformCoordinatorWrite()
+    public async Task EmergencyCoordinatorCannotManageComponentD()
     {
         using var factory = new ComponentDApiFactory();
-        using var client = factory.Client("RescueTeam");
+        using var client = factory.Client("EmergencyCoordinator");
         var response = await client.PostAsJsonAsync("/api/rescueteams", new CreateRescueTeamDto("Denied", null, null));
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Equal(0, await factory.InDb(db => db.RescueTeams.CountAsync()));
@@ -79,6 +79,26 @@ public class ComponentDApiIntegrationTests
     {
         var problem = await Body<JsonElement>(response, HttpStatusCode.BadRequest);
         Assert.NotEmpty(problem.GetProperty("errors").EnumerateObject());
+    }
+
+    [Fact]
+    public async Task RescueTeamStartsWorkflowWithFakeProvidersWithoutDispatching()
+    {
+        using var factory = new ComponentDApiFactory();
+        var fixture = await factory.Seed();
+        using var client = factory.Client();
+        var workflow = await Body<AgentWorkflowDto>(await client.PostAsJsonAsync("/api/agents/workflows",
+            new { objectiveType = "Incident", objectiveId = fixture.IncidentId, requiredSkill = "FirstAid" }),
+            HttpStatusCode.Created);
+        Assert.Equal(WorkflowStatus.AwaitingApproval, workflow.Status);
+        Assert.Equal(fixture.IncidentId, workflow.ObjectiveId);
+        Assert.Equal(3, workflow.Steps.Count);
+        Assert.All(workflow.Steps, step => Assert.Equal(StepStatus.Completed, step.Status));
+        Assert.Equal(1, factory.Gemini.Calls);
+        Assert.Equal(1, await factory.InDb(db => db.Assignments.CountAsync()));
+        Assert.Equal(0, await factory.InDb(db => db.Dispatches.CountAsync()));
+        var fetched = await Body<AgentWorkflowDto>(await client.GetAsync($"/api/agents/workflows/{workflow.Id}"), HttpStatusCode.OK);
+        Assert.Equal(workflow.Id, fetched.Id);
     }
 
     [Fact]
@@ -225,6 +245,9 @@ public class ComponentDApiIntegrationTests
         Assert.Equal(1, factory.Gemini.Calls);
         var workflow = await factory.InDb(db => db.AgentWorkflows.SingleAsync());
         Assert.Equal(result.WorkflowId, workflow.Id);
+        var fetchedWorkflow = await Body<AgentWorkflowDto>(
+            await client.GetAsync($"/api/agents/workflows/{workflow.Id}"), HttpStatusCode.OK);
+        Assert.Equal(workflow.Id, fetchedWorkflow.Id);
         Assert.Equal(WorkflowStatus.AwaitingApproval, workflow.Status);
         var persisted = JsonSerializer.Deserialize<SafetyValidationWorkflowResultDto>(workflow.FinalOutcomeJson!, Json)!;
         Assert.Equal(result.AssignmentId, persisted.AssignmentId);
@@ -287,18 +310,16 @@ public class ComponentDApiIntegrationTests
     }
 
     [Fact]
-    public async Task LegalLifecycleAllowsBothRolesAndReleasesResources()
+    public async Task RescueTeamLegalLifecycleReleasesResources()
     {
         using var factory = new ComponentDApiFactory();
         var fixture = await factory.Seed(assignment: true);
-        using var coordinator = factory.Client();
-        using var rescuer = factory.Client("RescueTeam");
-        var validation = await Validate(coordinator, fixture.AssignmentId);
-        var approved = await Approve(coordinator, fixture.AssignmentId, validation);
+        using var client = factory.Client();
+        var validation = await Validate(client, fixture.AssignmentId);
+        var approved = await Approve(client, fixture.AssignmentId, validation);
         var path = $"/api/dispatches/{approved.Dispatch!.Id}/status";
         foreach (var state in new[] { DispatchStatus.EnRoute, DispatchStatus.OnScene, DispatchStatus.Resolved })
         {
-            var client = state == DispatchStatus.EnRoute ? coordinator : rescuer;
             var dto = await Body<DispatchDto>(await client.PatchAsJsonAsync(path, new TransitionDispatchStatusDto(state, null)), HttpStatusCode.OK);
             Assert.Equal(state, dto.Status);
             Assert.NotNull(state switch { DispatchStatus.EnRoute => dto.EnRouteAt, DispatchStatus.OnScene => dto.OnSceneAt, _ => dto.ResolvedAt });

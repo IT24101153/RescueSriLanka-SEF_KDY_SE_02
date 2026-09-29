@@ -15,6 +15,7 @@ using Microsoft.IdentityModel.Tokens;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentA.Models;
 using RescueSriLanka.Api.Features.ComponentD.Agents.SafetyValidation;
+using RescueSriLanka.Api.Features.ComponentD.Agents.Orchestration;
 using RescueSriLanka.Api.Features.ComponentD.Data;
 using RescueSriLanka.Api.Features.ComponentD.DTOs;
 using RescueSriLanka.Api.Features.ComponentD.Models;
@@ -29,6 +30,7 @@ public sealed class ComponentDApiFactory : WebApplicationFactory<Program>
     public const string CoordinatorId = "d0000000-0000-4000-8000-000000000099";
     private readonly string _database = Guid.NewGuid().ToString();
     public DeterministicGeminiClient Gemini { get; } = new();
+    public DeterministicWorkflowAgents WorkflowAgents { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -46,6 +48,10 @@ public sealed class ComponentDApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<IHostedService>();
             services.RemoveAll<IGeminiSafetyValidationClient>();
             services.AddSingleton<IGeminiSafetyValidationClient>(Gemini);
+            services.RemoveAll<IIncidentAnalysisAgent>();
+            services.RemoveAll<IDispatchRecommendationAgent>();
+            services.AddSingleton<IIncidentAnalysisAgent>(WorkflowAgents);
+            services.AddSingleton<IDispatchRecommendationAgent>(WorkflowAgents);
             // Fail closed if an unexpected service attempts any external HTTP request.
             services.ConfigureHttpClientDefaults(client =>
                 client.ConfigurePrimaryHttpMessageHandler(() => new RejectExternalRequests()));
@@ -60,7 +66,7 @@ public sealed class ComponentDApiFactory : WebApplicationFactory<Program>
         services.AddDbContext<T>(options => options.UseInMemoryDatabase(name));
     }
 
-    public HttpClient Client(string? role = "EmergencyCoordinator")
+    public HttpClient Client(string? role = "RescueTeam")
     {
         var client = CreateClient();
         if (role is not null)
@@ -113,6 +119,7 @@ public sealed class ComponentDApiFactory : WebApplicationFactory<Program>
             db.Add(response);
         }
         await db.SaveChangesAsync();
+        WorkflowAgents.TeamId = team.Id;
         return new(team.Id, vehicle.Id, incident.Id, proposal.Id, response?.Id);
     }
 
@@ -132,6 +139,15 @@ public sealed class ComponentDApiFactory : WebApplicationFactory<Program>
             return Task.FromResult(new GeminiSafetyAgentResponse([], SafetyValidationDecision.APPROVE,
                 "Isolated provider recommendation; real mandatory checks still apply.", []));
         }
+    }
+
+    public sealed class DeterministicWorkflowAgents : IIncidentAnalysisAgent, IDispatchRecommendationAgent
+    {
+        public Guid TeamId { get; set; }
+        public Task<IncidentAnalysisResult> AnalyzeAsync(Guid objectiveId) =>
+            Task.FromResult(new IncidentAnalysisResult("Moderate", "Isolated test analysis"));
+        public Task<DispatchRecommendationResult> RecommendAsync(string requiredSkill) =>
+            Task.FromResult(new DispatchRecommendationResult(true, TeamId, "Isolated test recommendation", []));
     }
 
     private sealed class RejectExternalRequests : HttpMessageHandler

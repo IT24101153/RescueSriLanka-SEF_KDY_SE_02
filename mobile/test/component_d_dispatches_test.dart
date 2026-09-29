@@ -63,7 +63,7 @@ final session = AuthSession(
     id: 'coordinator',
     fullName: 'Coordinator',
     email: 'test@example.lk',
-    role: 'EmergencyCoordinator',
+    role: 'RescueTeam',
   ),
 );
 

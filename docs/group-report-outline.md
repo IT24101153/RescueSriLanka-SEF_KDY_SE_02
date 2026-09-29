@@ -53,8 +53,8 @@ protected endpoint (`[Authorize(Roles = "...")]`), not just hidden in the UI:
   that appear on both the React map and the Flutter map.
 - **ResourceManager** — owns Component C: shelters, medical supplies, food and water stock, incoming
   donations, and how they're allocated against demand.
-- **RescueTeam** — the field role for Component D: receives dispatch assignments and reports status and
-  progress back from the field.
+- **RescueTeam** — owns Component D, displayed as **Rescue Coordinator**: manages rescue resources, assignments,
+  safety review and dispatches in React, and reports dispatch progress through Flutter.
 - **HelpRequestManager** — owns Component B's triage side: verifies citizen help requests and runs the
   travel-advisory workflow that keeps tourists and residents informed about zones to avoid.
 
@@ -64,10 +64,10 @@ protected endpoint (`[Authorize(Roles = "...")]`), not just hidden in the UI:
 | EmergencyCoordinator | React (review, approve, warn) | A |
 | HelpRequestManager | React (triage, advisories) | B |
 | ResourceManager | React (shelters, supplies) | C |
-| RescueTeam | Flutter (field assignments) | D |
+| RescueTeam | React (rescue coordination) and Flutter (dispatch progress) | D |
 
 *[TODO — B/C/D owners]* Confirm whether your role also has any React or Flutter screens beyond the primary
-client listed above (e.g. does a RescueTeam member ever use the React console?) and note it here.
+client listed above and note it here. Component D uses both React and Flutter.
 
 ### 1.3 Domain-complexity checklist (spec §4.1)
 
@@ -495,7 +495,7 @@ APPROVE, REVISE, or REJECT. GeminiSafetyValidationAgent uses seven allow-listed 
 and ten mandatory deterministic checks. It does not call Component A's zone-check endpoint.
 Workflow/audit persistence is separate from operational state changes.
 
-AI recommends -> human coordinator decides -> backend live-revalidates -> transactional dispatch.
+AI recommends -> Rescue Coordinator (RescueTeam) decides -> backend live-revalidates -> transactional dispatch.
 The separate SafetyValidationAgent supplies the approval-time deterministic guard.
 Formal offline evidence, contracts, security boundaries, 15 golden cases and known limitations:
 [Component D Safety Validation Agent - Golden Evaluation](component-d-safety-agent-golden-evaluation.md).
