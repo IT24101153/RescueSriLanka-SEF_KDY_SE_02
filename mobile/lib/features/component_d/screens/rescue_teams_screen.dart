@@ -266,7 +266,7 @@ class _RescueTeamsScreenState extends State<RescueTeamsScreen> {
                 vehicle['plateNumber'] is String
                     ? vehicle['plateNumber'] as String
                     : 'Registration not provided',
-                '${_label(vehicle['type'])} · Capacity: ${vehicle['capacity'] is num ? vehicle['capacity'] : 'Not provided'}',
+                '${_label(vehicle['type'])} · People/Patients Capacity: ${vehicle['capacity'] is num ? vehicle['capacity'] : 'Not provided'}',
                 vehicle['status'] is String
                     ? vehicle['status'] as String
                     : 'Unknown',

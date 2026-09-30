@@ -29,6 +29,7 @@ public sealed class ComponentDApiFactory : WebApplicationFactory<Program>
     private const string Key = "component-d-local-test-signing-key-never-used-in-production";
     public const string CoordinatorId = "d0000000-0000-4000-8000-000000000099";
     private readonly string _database = Guid.NewGuid().ToString();
+    public Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor? SaveInterceptor { get; init; }
     public DeterministicGeminiClient Gemini { get; } = new();
     public DeterministicWorkflowAgents WorkflowAgents { get; } = new();
 
@@ -58,12 +59,16 @@ public sealed class ComponentDApiFactory : WebApplicationFactory<Program>
         });
     }
 
-    private static void ReplaceDatabase<T>(IServiceCollection services, string name) where T : DbContext
+    private void ReplaceDatabase<T>(IServiceCollection services, string name) where T : DbContext
     {
         services.RemoveAll<T>();
         services.RemoveAll<DbContextOptions<T>>();
         services.RemoveAll<IDbContextOptionsConfiguration<T>>();
-        services.AddDbContext<T>(options => options.UseInMemoryDatabase(name));
+        services.AddDbContext<T>(options => {
+            options.UseInMemoryDatabase(name);
+            if (typeof(T) == typeof(ComponentDDbContext) && SaveInterceptor is not null)
+                options.AddInterceptors(SaveInterceptor);
+        });
     }
 
     public HttpClient Client(string? role = "RescueTeam")

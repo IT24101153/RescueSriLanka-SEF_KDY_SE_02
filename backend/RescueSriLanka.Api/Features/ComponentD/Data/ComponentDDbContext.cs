@@ -56,6 +56,7 @@ public class ComponentDDbContext(DbContextOptions<ComponentDDbContext> options) 
         ConfigureAudit<RescueTeam>(modelBuilder);
         ConfigureAudit<TeamMember>(modelBuilder);
         ConfigureAudit<Vehicle>(modelBuilder);
+        modelBuilder.Entity<Vehicle>().HasIndex(v => v.PlateNumber).IsUnique();
         ConfigureAudit<Assignment>(modelBuilder);
         ConfigureAudit<Dispatch>(modelBuilder);
 

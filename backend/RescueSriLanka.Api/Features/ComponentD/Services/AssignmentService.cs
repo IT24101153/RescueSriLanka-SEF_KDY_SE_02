@@ -82,11 +82,9 @@ public class AssignmentService : IAssignmentService
             return (null, "Assignment cannot be revised unless it is proposed, pending approval, or rejected.");
         }
 
-        if (assignment.Dispatch is not null
-            && assignment.Dispatch.Status is not DispatchStatus.Cancelled
-            and not DispatchStatus.Resolved)
+        if (assignment.Dispatch is not null)
         {
-            return (null, "An assignment with an active dispatch cannot be revised.");
+            return (null, "An assignment with a dispatch cannot be revised.");
         }
 
         var error = await ValidateProposalAsync(

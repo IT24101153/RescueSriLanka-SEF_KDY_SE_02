@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Features.ComponentD.DTOs;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentD.Data;
@@ -223,6 +224,28 @@ public class AssignmentServiceTests
 
         Assert.Null(revised);
         Assert.Contains("cannot be revised", error);
+    }
+
+    [Theory]
+    [InlineData(DispatchStatus.Resolved)]
+    [InlineData(DispatchStatus.Cancelled)]
+    [InlineData(DispatchStatus.OnScene)]
+    public async Task DispatchedAssignmentCannotBeRevisedEvenWhenRejected(DispatchStatus status)
+    {
+        using var db = TestDbFactory.Create();
+        var (team, vehicle) = await AddTeamAsync(db, "History", SkillType.FirstAid);
+        var service = new AssignmentService(db);
+        var created = (await service.CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid))).Assignment!;
+        var entity = await db.Assignments.FindAsync(created.Id);
+        entity!.Status = AssignmentStatus.Rejected;
+        db.Dispatches.Add(new Dispatch { AssignmentId = created.Id, Status = status });
+        await db.SaveChangesAsync();
+        var (revised, error) = await service.ReviseAsync(created.Id, ReviseDto(team.Id, vehicle.Id, SkillType.FirstAid, capacity: 2));
+        Assert.Null(revised);
+        Assert.Contains("cannot be revised", error);
+        Assert.Equal(created.PlanVersion, entity.PlanVersion);
+        Assert.Equal(1, entity.RequiredCapacity);
+        Assert.Equal(status, (await db.Dispatches.SingleAsync()).Status);
     }
 
     private static CreateAssignmentDto CreateDto(Guid teamId, Guid vehicleId, SkillType skill, int capacity = 1) =>
