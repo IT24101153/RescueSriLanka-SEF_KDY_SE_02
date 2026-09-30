@@ -73,6 +73,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Test
+        run: npm test
+
       # Runs tsc before vite, so a type error fails the build rather than
       # shipping.
       - name: Build

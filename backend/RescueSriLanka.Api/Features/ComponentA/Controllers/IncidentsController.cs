@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
 using RescueSriLanka.Api.Features.ComponentA.DTOs;
@@ -227,8 +228,10 @@ public class IncidentsController(
     /// </summary>
     [HttpPost("{id:guid}/analyse")]
     [Authorize(Roles = Coordinator)]
+    [EnableRateLimiting("ai")]
     [ProducesResponseType(typeof(IncidentAnalysisResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<ActionResult<IncidentAnalysisResult>> Analyse(Guid id, CancellationToken ct)
     {
         if (await incidentService.GetAsync(id, ct) is null)
@@ -236,7 +239,19 @@ public class IncidentsController(
             return NotFound();
         }
 
-        return Ok(await analysisAgent.AnalyseAsync(id, ct));
+        try
+        {
+            return Ok(await analysisAgent.AnalyseAsync(id, ct));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The agent has already recorded the failure on its run; the
+            // caller gets a clear answer rather than a bare 500.
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                message = "The analysis failed and was recorded on the agent run. Nothing was changed; try again."
+            });
+        }
     }
 
     /// <summary>

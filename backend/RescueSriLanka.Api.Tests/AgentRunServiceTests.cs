@@ -149,8 +149,11 @@ public class AgentRunServiceTests
 
         var savedRun = await db.AgentRuns.SingleAsync();
         Assert.False(savedRun.Approved);
+        Assert.Equal(AgentRunDecision.Rejected, savedRun.Decision);
         Assert.Equal(Coordinator, savedRun.ApprovedByUserId);
-        Assert.Contains("Photo shows a puddle", savedRun.ErrorMessage);
+        Assert.Contains("Photo shows a puddle", savedRun.DecisionNote);
+        // A human rejection is not an agent failure.
+        Assert.Null(savedRun.ErrorMessage);
         Assert.Empty(queue.Jobs);
         Assert.Empty(db.SafetyZones);
     }
@@ -174,5 +177,182 @@ public class AgentRunServiceTests
 
         Assert.Null(await service.ApproveAsync(Guid.NewGuid(), null, Coordinator));
         Assert.Null(await service.RejectAsync(Guid.NewGuid(), "n/a", Coordinator));
+    }
+
+    // ---------- one decision per proposal ----------
+
+    [Fact]
+    public async Task Approve_Twice_IsRefused_AndWarnsTheDistrictOnlyOnce()
+    {
+        await using var db = NewDb();
+        var queue = new RecordingQueue();
+        var (_, run) = await AddProposalAsync(db);
+        var service = NewService(db, queue);
+
+        await service.ApproveAsync(run.Id, null, Coordinator);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.ApproveAsync(run.Id, null, Coordinator));
+
+        Assert.Contains("already been approved", ex.Message);
+        Assert.Single(queue.Jobs);
+    }
+
+    [Fact]
+    public async Task Approve_AfterReject_IsRefused_AndChangesNothing()
+    {
+        await using var db = NewDb();
+        var queue = new RecordingQueue();
+        var (_, run) = await AddProposalAsync(db, inForce: IncidentSeverity.Moderate);
+        var service = NewService(db, queue);
+
+        await service.RejectAsync(run.Id, "Duplicate report.", Coordinator);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.ApproveAsync(run.Id, IncidentSeverity.Critical, Coordinator));
+
+        Assert.Contains("already been rejected", ex.Message);
+        Assert.Equal(IncidentSeverity.Moderate, (await db.Incidents.SingleAsync()).Severity);
+        Assert.False((await db.AgentRuns.SingleAsync()).Approved);
+        Assert.Empty(queue.Jobs);
+    }
+
+    [Fact]
+    public async Task Reject_AfterApprove_IsRefused_AndKeepsTheApproval()
+    {
+        await using var db = NewDb();
+        var (_, run) = await AddProposalAsync(db);
+        var service = NewService(db, new RecordingQueue());
+
+        await service.ApproveAsync(run.Id, null, Coordinator);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.RejectAsync(run.Id, "Changed my mind.", Coordinator));
+
+        Assert.True((await db.AgentRuns.SingleAsync()).Approved);
+    }
+
+    [Theory]
+    [InlineData(AgentRunStatus.Failed)]
+    [InlineData(AgentRunStatus.Running)]
+    public async Task RunWithoutAProposal_CannotBeDecided(AgentRunStatus status)
+    {
+        await using var db = NewDb();
+        var queue = new RecordingQueue();
+        var (_, run) = await AddProposalAsync(db);
+        run.Status = status;
+        await db.SaveChangesAsync();
+        var service = NewService(db, queue);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApproveAsync(run.Id, null, Coordinator));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RejectAsync(run.Id, "n/a", Coordinator));
+        Assert.Empty(queue.Jobs);
+    }
+
+    // ---------- decision record, staleness, atomicity ----------
+
+    [Fact]
+    public async Task Approve_StoresTheNote_AndMarksTheDecision()
+    {
+        await using var db = NewDb();
+        var (_, run) = await AddProposalAsync(db);
+
+        await NewService(db, new RecordingQueue())
+            .ApproveAsync(run.Id, null, Coordinator, "  Matches the photo.  ");
+
+        var saved = await db.AgentRuns.SingleAsync();
+        Assert.Equal(AgentRunDecision.Approved, saved.Decision);
+        Assert.Equal("Matches the photo.", saved.DecisionNote);
+    }
+
+    [Fact]
+    public async Task Approve_WithADifferentSeverity_IsRecordedAsRevised()
+    {
+        await using var db = NewDb();
+        var (_, run) = await AddProposalAsync(db, proposed: IncidentSeverity.High);
+
+        await NewService(db, new RecordingQueue())
+            .ApproveAsync(run.Id, IncidentSeverity.Critical, Coordinator);
+
+        Assert.Equal(AgentRunDecision.Revised, (await db.AgentRuns.SingleAsync()).Decision);
+    }
+
+    [Fact]
+    public async Task AnOlderRun_CannotBeDecided_OnceANewerAnalysisExists()
+    {
+        await using var db = NewDb();
+        var queue = new RecordingQueue();
+        var (incident, older) = await AddProposalAsync(db, inForce: IncidentSeverity.Moderate);
+        older.StartedAt = DateTime.UtcNow.AddMinutes(-10);
+        db.AgentRuns.Add(new AgentRun
+        {
+            AgentName = "IncidentAnalysisAgent", Objective = "Classify severity",
+            IncidentId = incident.Id, Status = AgentRunStatus.Succeeded,
+            OutputJson = """{ "severity": "Critical", "recommendedRadiusMeters": 5000 }"""
+        });
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => NewService(db, queue).ApproveAsync(older.Id, null, Coordinator));
+
+        Assert.Contains("newer analysis", ex.Message);
+        Assert.Equal(IncidentSeverity.Moderate, (await db.Incidents.SingleAsync()).Severity);
+        Assert.Empty(queue.Jobs);
+    }
+
+    [Fact]
+    public async Task ANewerFailedRun_DoesNotBlockDecidingTheLastGoodProposal()
+    {
+        await using var db = NewDb();
+        var (incident, good) = await AddProposalAsync(db);
+        good.StartedAt = DateTime.UtcNow.AddMinutes(-10);
+        db.AgentRuns.Add(new AgentRun
+        {
+            AgentName = "IncidentAnalysisAgent", Objective = "Classify severity",
+            IncidentId = incident.Id, Status = AgentRunStatus.Failed
+        });
+        await db.SaveChangesAsync();
+
+        var result = await NewService(db, new RecordingQueue()).ApproveAsync(good.Id, null, Coordinator);
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void TheDecisionTimestamp_IsAConcurrencyToken_SoTwoCoordinatorsCannotBothDecide()
+    {
+        using var db = NewDb();
+
+        var property = db.Model.FindEntityType(typeof(AgentRun))!.FindProperty(nameof(AgentRun.ApprovedAt))!;
+
+        Assert.True(property.IsConcurrencyToken);
+    }
+
+    private sealed class FailingZones : ISafetyZoneService
+    {
+        public Task<IReadOnlyList<RescueSriLanka.Api.Features.ComponentA.DTOs.SafetyZoneDto>> GetActiveAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<RescueSriLanka.Api.Features.ComponentA.DTOs.ZoneCheckResultDto> CheckPointAsync(double latitude, double longitude, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<int> RecomputeAsync(CancellationToken ct = default) => throw new IOException("zone store down");
+    }
+
+    [Fact]
+    public async Task IfTheZoneRecomputeFails_NoDistrictWarningIsQueued()
+    {
+        await using var db = NewDb();
+        var queue = new RecordingQueue();
+        var (_, run) = await AddProposalAsync(db);
+        var service = new AgentRunService(db, new FailingZones(), queue, NullLogger<AgentRunService>.Instance);
+
+        await Assert.ThrowsAsync<IOException>(() => service.ApproveAsync(run.Id, null, Coordinator));
+
+        Assert.Empty(queue.Jobs);
+    }
+
+    [Fact]
+    public void TheAnalyseEndpoint_IsRateLimited()
+    {
+        var method = typeof(RescueSriLanka.Api.Features.ComponentA.Controllers.IncidentsController)
+            .GetMethod("Analyse")!;
+
+        var limit = method.GetCustomAttributes(typeof(Microsoft.AspNetCore.RateLimiting.EnableRateLimitingAttribute), false);
+
+        Assert.NotEmpty(limit);
     }
 }

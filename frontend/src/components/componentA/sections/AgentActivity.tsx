@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../../shared/api/client'
 import type { AgentRun } from '../../../shared/types'
+import { parsePlan } from '../agentPlan'
 import { timeAgo } from '../severity'
 
 /** Workflow monitoring — every agent execution, newest first. */
@@ -84,6 +85,7 @@ export default function AgentActivity() {
                   <th>Status</th>
                   <th>Model</th>
                   <th className="num">Duration</th>
+                  <th>Plan</th>
                   <th>Approval</th>
                   <th>Started</th>
                   <th className="col-wide">Note</th>
@@ -111,17 +113,16 @@ export default function AgentActivity() {
                     </td>
                     <td className="num">{run.durationMs.toLocaleString()} ms</td>
                     <td>
+                      <PlanCell planJson={run.planJson} attempts={run.modelAttempts} />
+                    </td>
+                    <td>
                       <span className="state">
-                        {run.approvedAt === null
-                          ? 'Awaiting'
-                          : run.approved
-                            ? 'Approved'
-                            : 'Rejected'}
+                        {run.decision === 'Pending' ? 'Awaiting' : run.decision}
                       </span>
                     </td>
                     <td>{timeAgo(run.startedAt)}</td>
                     <td className="col-wide">
-                      <span className="state">{run.errorMessage ?? '—'}</span>
+                      <span className="state">{run.decisionNote ?? run.errorMessage ?? '—'}</span>
                     </td>
                   </tr>
                 ))}
@@ -131,5 +132,33 @@ export default function AgentActivity() {
         )}
       </section>
     </div>
+  )
+}
+
+/** The run's plan: which agent each step was delegated to and how it went. */
+function PlanCell({ planJson, attempts }: { planJson: string | null; attempts: number }) {
+  const plan = parsePlan(planJson)
+  if (!plan) return <span className="state">—</span>
+
+  return (
+    <details className="plan">
+      <summary>{plan.steps.length} steps</summary>
+      <ol className="plan__steps">
+        {plan.steps.map((step) => (
+          <li key={step.step} className={`plan__step plan__step--${step.status.toLowerCase()}`}>
+            <strong>{step.agent}</strong> — {step.action}
+            <span className="plan__meta">
+              {step.status} · {step.durationMs} ms
+              {step.tools.length > 0 && ` · tools: ${step.tools.join(', ')}`}
+            </span>
+            {step.detail && <span className="plan__meta">{step.detail}</span>}
+          </li>
+        ))}
+      </ol>
+      {plan.notes.map((note) => (
+        <p key={note} className="plan__note">{note}</p>
+      ))}
+      {attempts > 1 && <p className="plan__note">Model needed {attempts} attempts.</p>}
+    </details>
   )
 }

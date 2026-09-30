@@ -20,10 +20,17 @@ export type AgentRun = {
   usedFallback: boolean
   approved: boolean
   approvedAt: string | null
+  /** The coordinator's verdict; a proposal takes exactly one. */
+  decision: 'Pending' | 'Approved' | 'Revised' | 'Rejected'
+  decisionNote: string | null
+  /** Model calls made, retries included (0 = the model was never called). */
+  modelAttempts: number
   errorMessage: string | null
   durationMs: number
   startedAt: string
   completedAt: string | null
+  /** Structured plan: steps, the agent each was delegated to, and how each went. */
+  planJson: string | null
   toolCallsJson: string | null
   outputJson: string | null
 }

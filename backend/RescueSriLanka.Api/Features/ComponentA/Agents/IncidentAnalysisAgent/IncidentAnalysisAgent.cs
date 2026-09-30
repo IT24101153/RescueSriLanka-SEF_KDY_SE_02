@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
@@ -15,13 +14,19 @@ public interface IIncidentAnalysisAgent
 }
 
 /// <summary>
-/// Component A's agent. Classifies severity and safety-zone status from an
-/// incident's text, location and context.
+/// Component A's coordinator. Receives the objective (analyse this incident),
+/// has the Planner build a structured plan, delegates each step to the agent
+/// named in it, and persists the plan, every step's outcome and the final
+/// result on the run.
 ///
 /// Contract with the Coordinator/Planner Agent (Student B): call
 /// <see cref="AnalyseAsync"/> with an incident id; receive a validated
 /// <see cref="IncidentAnalysisResult"/>. The agent proposes only — it never
 /// writes the incident's severity in force. A coordinator approves that.
+///
+/// A model failure is recovered by the rule engine and recorded. Any other
+/// failure marks the run <see cref="AgentRunStatus.Failed"/> and rethrows, so a
+/// run is never left "Running" and nothing is applied to the incident.
 /// </summary>
 public class IncidentAnalysisAgent(
     AppDbContext db,
@@ -32,55 +37,22 @@ public class IncidentAnalysisAgent(
 {
     public const string AgentName = "IncidentAnalysisAgent";
 
-    /// <summary>The model emits enum names, so parsing must accept them.</summary>
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private readonly AnalysisPlannerAgent planner = new();
+    private readonly EvidenceGatheringAgent evidenceAgent = new(tools, imageStorage);
+    private readonly SeverityAnalysisAgent severityAgent = new(llm, logger);
+    private readonly ProposalValidationAgent validator = new();
+
+    /// <summary>One plan step plus how it went; serialised to the run's PlanJson.</summary>
+    private sealed class StepTrace(PlannedStep step)
     {
-        Converters = { new JsonStringEnumConverter() },
-        PropertyNameCaseInsensitive = true
-    };
-
-    private const string SystemInstruction =
-        """
-        You are the Incident Analysis Agent for a Sri Lankan disaster response
-        platform. You classify how severe a reported incident is and what safety
-        zone status the surrounding area should carry.
-
-        Judge severity from: the hazard type, how many people are exposed,
-        whether nearby reports suggest a larger event, any weather signal, and
-        any photographs attached to the report.
-
-        When photographs are supplied, use what is actually visible in them —
-        water depth against buildings or vehicles, structural damage, blocked
-        roads, smoke — and say in your rationale what you saw. Never invent
-        detail that is not visible.
-
-        Be conservative about human life: when the evidence is ambiguous but
-        people are exposed, prefer the higher severity.
-
-        Return only the JSON object described by the schema. The rationale must
-        be one or two plain sentences a coordinator can act on, citing the
-        specific evidence you used.
-        """;
-
-    /// <summary>Forces the provider to return exactly the shape we validate.</summary>
-    private static object ResponseSchema => new
-    {
-        type = "object",
-        properties = new
-        {
-            severity = new { type = "string", @enum = new[] { "Low", "Moderate", "High", "Critical" } },
-            severityScore = new { type = "integer" },
-            confidence = new { type = "number" },
-            recommendedZoneStatus = new { type = "string", @enum = new[] { "Safe", "Caution", "Danger" } },
-            recommendedRadiusMeters = new { type = "integer" },
-            rationale = new { type = "string" }
-        },
-        required = new[]
-        {
-            "severity", "severityScore", "confidence",
-            "recommendedZoneStatus", "recommendedRadiusMeters", "rationale"
-        }
-    };
+        public int Step { get; } = step.Number;
+        public string Agent { get; } = step.Agent;
+        public string Action { get; } = step.Action;
+        public IReadOnlyList<string> Tools { get; } = step.Tools;
+        public string Status { get; set; } = "Pending";
+        public int DurationMs { get; set; }
+        public string? Detail { get; set; }
+    }
 
     public async Task<IncidentAnalysisResult> AnalyseAsync(
         Guid incidentId, CancellationToken ct = default)
@@ -106,133 +78,161 @@ public class IncidentAnalysisAgent(
             AgentName = AgentName,
             Objective = $"Classify severity and zone status for incident {incident.Id}",
             IncidentId = incident.Id,
-            InputJson = JsonSerializer.Serialize(input, JsonOptions)
+            InputJson = JsonSerializer.Serialize(input, AnalysisJson.Options)
         };
         db.AgentRuns.Add(run);
         await db.SaveChangesAsync(ct);
 
         var stopwatch = Stopwatch.StartNew();
+        List<StepTrace> traces = [];
+        List<string> notes = [];
 
-        // ---- Step 1: gather evidence from allow-listed tools ----
-        var nearby = await tools.CountNearbyActiveIncidentsAsync(
-            input.Latitude, input.Longitude, 5, incident.Id, ct);
-        var rainfall = await tools.GetRainfallLast48hAsync(input.Latitude, input.Longitude, ct);
-
-        // Photos are evidence too: at most 3, capped at 6 MB in total so the
-        // request stays well inside the provider's limits.
-        var photos = await imageStorage.LoadForAnalysisAsync(incident.Id, 3, 6 * 1024 * 1024, ct);
-        var images = photos.Select(photo => new LlmImage(photo.MimeType, photo.Data)).ToList();
-
-        var toolCalls = new Dictionary<string, object?>
+        try
         {
-            ["count_nearby_active_incidents"] = new { radiusKm = 5, result = nearby },
-            ["get_rainfall_last_48h"] = new { result = rainfall, available = rainfall is not null },
-            ["load_incident_images"] = new { requested = 3, loaded = images.Count }
-        };
-        run.ToolCallsJson = JsonSerializer.Serialize(toolCalls);
+            // ---- Plan: the Planner turns the objective into ordered steps ----
+            var plan = planner.Plan(input);
+            traces = [.. plan.Steps.Select(step => new StepTrace(step))];
+            notes = [.. plan.Notes];
+            await SavePlanAsync(run, traces, notes, ct);
 
-        // ---- Step 2: reason, with a deterministic floor ----
-        IncidentAnalysisResult result;
+            // ---- Step 1: Evidence agent — the only role that calls tools ----
+            var evidence = await RunStepAsync(run, traces, notes, 0, ct, async () =>
+            {
+                var bundle = await evidenceAgent.GatherAsync(input, plan, ct);
+                return (bundle,
+                    $"{bundle.NearbyIncidents} nearby, rainfall "
+                    + (bundle.RainfallMm is null ? "unavailable" : $"{bundle.RainfallMm:F0} mm")
+                    + $", {bundle.Images.Count} photo(s)");
+            });
+            run.ToolCallsJson = JsonSerializer.Serialize(evidence.ToolCalls);
 
-        if (!llm.IsConfigured)
-        {
-            result = SeverityRules.Score(input, nearby, rainfall);
-            run.ErrorMessage = "No language model configured — deterministic rules applied.";
-            run.Status = AgentRunStatus.SucceededWithFallback;
-            run.Model = "rule-engine";
+            // ---- Step 2: Severity agent — model, with a deterministic floor ----
+            var proposal = await RunStepAsync(run, traces, notes, 1, ct, async () =>
+            {
+                var result = await severityAgent.ProposeAsync(input, evidence, ct);
+                var attempts = result.Attempts > 1 ? $", {result.Attempts} attempts" : string.Empty;
+                return (result, $"{result.Model}: {result.Result.Severity}{attempts}");
+            });
+
+            // ---- Step 3: Validation agent — deterministic, has the last word ----
+            var accepted = await RunStepAsync(run, traces, notes, 2, ct, () =>
+            {
+                var outcome = validator.Validate(proposal.Result);
+                if (outcome.Accepted)
+                {
+                    return Task.FromResult((proposal with { Result = outcome.Result! },
+                        outcome.Adjustments.Count == 0 ? "accepted" : "accepted: " + string.Join("; ", outcome.Adjustments)));
+                }
+
+                // The model's answer is unusable; the rule engine takes over and the
+                // reason is recorded.
+                logger.LogWarning(
+                    "Proposal rejected for incident {Id}: {Reason}; using rule engine.",
+                    incident.Id, outcome.Rejection);
+                var fallback = SeverityAnalysisAgent.RuleEngine(input, evidence, outcome.Rejection!, proposal.Attempts);
+                return Task.FromResult((fallback with { Result = validator.Validate(fallback.Result).Result! },
+                    "rejected: " + outcome.Rejection + " — rule engine applied"));
+            });
+
+            var result = accepted.Result with
+            {
+                ToolResults = evidence.ToolCalls.ToDictionary(kv => kv.Key, kv => kv.Value!)
+            };
+
+            // ---- Persist the proposal (never the severity in force) ----
+            stopwatch.Stop();
+            run.Status = accepted.Status;
+            run.Model = accepted.Model;
+            run.ModelAttempts = accepted.Attempts;
+            run.ErrorMessage = accepted.Error;
+            run.OutputJson = JsonSerializer.Serialize(result, AnalysisJson.Options);
+            run.UsedFallback = result.UsedFallback;
+            run.DurationMs = (int)stopwatch.ElapsedMilliseconds;
+            run.CompletedAt = DateTime.UtcNow;
+
+            incident.AiSeverity = result.Severity;
+            incident.AiSeverityScore = result.SeverityScore;
+            incident.AiConfidence = result.Confidence;
+            incident.AiRationale = result.Rationale;
+            incident.AiAnalysedAt = DateTime.UtcNow;
+
+            await db.SaveChangesAsync(ct);
+
+            logger.LogInformation(
+                "Incident {Id} analysed: {Severity} ({Score}/100){Fallback}",
+                incident.Id, result.Severity, result.SeverityScore,
+                result.UsedFallback ? " via rule engine" : string.Empty);
+
+            return result;
         }
-        else
+        catch (Exception ex)
         {
+            // A safe, clearly recorded failure: the run says why, and the
+            // incident keeps whatever it had.
+            stopwatch.Stop();
+            logger.LogError(ex, "Incident analysis failed for incident {Id}.", incident.Id);
+
+            db.Entry(incident).State = EntityState.Unchanged;
+            run.Status = AgentRunStatus.Failed;
+            run.ErrorMessage = Truncate(ex is OperationCanceledException ? "Analysis was cancelled." : ex.Message, 1000);
+            run.DurationMs = (int)stopwatch.ElapsedMilliseconds;
+            run.CompletedAt = DateTime.UtcNow;
+            run.PlanJson = SerializePlan(traces, notes);
+
             try
             {
-                var raw = await llm.GenerateAsync(
-                    SystemInstruction,
-                    BuildPrompt(input, nearby, rainfall, images.Count),
-                    ResponseSchema,
-                    images,
-                    ct);
-
-                result = Validate(JsonSerializer.Deserialize<IncidentAnalysisResult>(raw, JsonOptions)
-                    ?? throw new LlmUnavailableException("Model returned no parseable object."));
-
-                run.Status = AgentRunStatus.Succeeded;
-                run.Model = llm.ModelName;
+                await db.SaveChangesAsync(CancellationToken.None);
             }
-            catch (Exception ex) when (ex is LlmUnavailableException or JsonException)
+            catch (Exception saveError)
             {
-                // A safe, clearly recorded failure — never a silent one.
-                logger.LogWarning(ex, "Model unusable for incident {Id}; using rule engine.", incident.Id);
-                result = SeverityRules.Score(input, nearby, rainfall);
-                run.ErrorMessage = ex.Message;
-                run.Status = AgentRunStatus.SucceededWithFallback;
-                run.Model = "rule-engine";
+                logger.LogError(saveError, "Could not record the failure of run {RunId}.", run.Id);
             }
+
+            throw;
         }
-
-        result = result with { ToolResults = toolCalls!.ToDictionary(kv => kv.Key, kv => kv.Value!) };
-
-        // ---- Step 3: persist the proposal (never the severity in force) ----
-        stopwatch.Stop();
-        run.OutputJson = JsonSerializer.Serialize(result, JsonOptions);
-        run.UsedFallback = result.UsedFallback;
-        run.DurationMs = (int)stopwatch.ElapsedMilliseconds;
-        run.CompletedAt = DateTime.UtcNow;
-
-        incident.AiSeverity = result.Severity;
-        incident.AiSeverityScore = result.SeverityScore;
-        incident.AiConfidence = result.Confidence;
-        incident.AiRationale = result.Rationale;
-        incident.AiAnalysedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync(ct);
-
-        logger.LogInformation(
-            "Incident {Id} analysed: {Severity} ({Score}/100){Fallback}",
-            incident.Id, result.Severity, result.SeverityScore,
-            result.UsedFallback ? " via rule engine" : string.Empty);
-
-        return result;
     }
 
-    private static string BuildPrompt(
-        IncidentAnalysisInput input, int nearby, double? rainfall, int photosAttached) =>
-        $"""
-        Incident report
-        ---------------
-        Title: {input.Title}
-        Description: {input.Description}
-        Reported type: {input.Type}
-        District: {input.District ?? "unknown"}
-        Coordinates: {input.Latitude:F4}, {input.Longitude:F4}
-        Estimated people affected: {(input.EstimatedAffectedPeople?.ToString() ?? "not reported")}
-        Photos attached to this message: {photosAttached}
-
-        Tool evidence
-        -------------
-        Other active incidents within 5 km: {nearby}
-        Rainfall in the last 48 hours: {(rainfall is null ? "unavailable" : $"{rainfall:F0} mm")}
-
-        Classify this incident.
-        """;
-
-    /// <summary>
-    /// Deterministic checks on the model's output. A language model is never
-    /// trusted to stay in range — anything outside it is clamped, and an
-    /// unusable rationale rejects the whole response.
-    /// </summary>
-    private static IncidentAnalysisResult Validate(IncidentAnalysisResult candidate)
+    private async Task<T> RunStepAsync<T>(
+        AgentRun run, List<StepTrace> traces, List<string> notes, int index, CancellationToken ct,
+        Func<Task<(T Value, string Detail)>> work)
     {
-        if (string.IsNullOrWhiteSpace(candidate.Rationale))
-        {
-            throw new LlmUnavailableException("Model returned an empty rationale.");
-        }
+        var trace = traces[index];
+        trace.Status = "Running";
+        var stopwatch = Stopwatch.StartNew();
 
-        return candidate with
+        try
         {
-            SeverityScore = Math.Clamp(candidate.SeverityScore, 0, 100),
-            Confidence = Math.Clamp(candidate.Confidence, 0, 1),
-            RecommendedRadiusMeters = Math.Clamp(candidate.RecommendedRadiusMeters, 100, 20000),
-            Rationale = candidate.Rationale.Trim()
-        };
+            var (value, detail) = await work();
+            trace.Status = "Completed";
+            trace.Detail = detail;
+            trace.DurationMs = (int)stopwatch.ElapsedMilliseconds;
+
+            // Each finished step is durable before the next one starts.
+            await SavePlanAsync(run, traces, notes, ct);
+            return value;
+        }
+        catch (Exception ex)
+        {
+            // The coordinator's handler records the failed step on the run.
+            trace.Status = "Failed";
+            trace.Detail = Truncate(ex.Message, 300);
+            trace.DurationMs = (int)stopwatch.ElapsedMilliseconds;
+            throw;
+        }
     }
+
+    private async Task SavePlanAsync(
+        AgentRun run, List<StepTrace> traces, List<string> notes, CancellationToken ct)
+    {
+        run.PlanJson = SerializePlan(traces, notes);
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static readonly JsonSerializerOptions TraceJson = new(JsonSerializerDefaults.Web);
+
+    private static string SerializePlan(List<StepTrace> traces, List<string> notes) =>
+        JsonSerializer.Serialize(new { steps = traces, notes }, TraceJson);
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max];
 }
