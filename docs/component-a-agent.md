@@ -328,8 +328,21 @@ assertions, not LLM-as-a-judge.
 **React:** `AgentActivity.test.tsx` — 4 tests (plan rendering with delegated agents and notes, a rejection
 shown as a decision with its reason, empty and error states, malformed-plan handling).
 
-**Result (30 September 2026):** `dotnet test RescueSriLanka.slnx` — **375 passed, 0 failed** (whole backend
-suite); `npm test` — **27 passed** (whole React suite). Both run in GitHub Actions on every push.
+**`PostgresIntegrationTests.cs`** — 5 tests on a real PostgreSQL 16 (throwaway database per test; skipped
+unless `TEST_POSTGRES` is set; CI provides a `postgres:16` service):
+
+| Test | Checks |
+|---|---|
+| `EveryMigration_AppliesToAnEmptyDatabase_AndTheModelHasNoPendingChanges` | The full migration chain (both contexts, as the API runs them) builds an empty database; no model drift; the new `agent_runs` columns, types and `Decision` default |
+| `TheDecisionMigration_BackfillsRunsDecidedBeforeItExisted` | Approved, rejected and undecided old rows get `Approved` / `Rejected` / `Pending` |
+| `TwoCoordinatorsApprovingAtOnce_ExactlyOneWins_AndOnlyOneWarningIsQueued` | 10 rounds of two simultaneous approvals: one success, one 409-type refusal, one email |
+| `ADecisionBasedOnAStaleRead_IsRejectedByTheDatabase_ThroughTheConcurrencyToken` | A write built on a stale read raises `DbUpdateConcurrencyException`; the winner's decision stands |
+| `IfTheZoneRecomputeFails_TheWholeApprovalRollsBack` | Decision, severity and radius all revert; no email; the run can still be decided afterwards |
+
+Mutation check: with the concurrency token and the transaction removed, 3 of these 5 fail.
+
+**Result (30 September 2026):** `dotnet test RescueSriLanka.slnx` — **380 passed, 0 failed** with
+`TEST_POSTGRES` set (375 passed, 5 skipped without it) (whole backend suite); `npm test` — **27 passed** (whole React suite). Both run in GitHub Actions on every push.
 
 ### 11.2 Live model evaluation
 
@@ -360,9 +373,9 @@ latency section 12 asks for), how many runs fell back, and one real `PlanJson`.
 - The four agents are one deterministic pipeline with a single model-backed step (Severity). The Planner,
   Evidence and Validator are code, by design: they must be predictable and cannot be steered by report text.
   The plan varies by tools, not by adding or removing agents.
-- The transaction and the concurrency conflict are only exercised on PostgreSQL. The automated tests use the
-  in-memory provider, so they verify that the token is configured and that a failing recompute queues no
-  email, but not a live conflict.
+- The transaction and the concurrency conflict only exist on PostgreSQL, so they are covered by
+  `PostgresIntegrationTests` (section 11.1), which runs only when `TEST_POSTGRES` is set. The in-memory tests
+  verify that the token is configured and that a failing recompute queues no email.
 - Re-running analysis creates a new run each time; older undecided runs can then no longer be decided (by
   design, section 8.1).
 - Nearby-incident counting loads the candidates in a bounding box and filters by distance in memory. Fine at

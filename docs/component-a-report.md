@@ -125,7 +125,7 @@ workflows; Component A's workflow is self-contained and does not call them (see 
 Results below were produced on 30 September 2026 by running the suites locally; re-run them before you
 submit and update the numbers if the code has changed.
 
-- Backend: **375 tests passing** (`dotnet test RescueSriLanka.slnx`, whole suite), of which Component A's
+- Backend: **380 tests passing** with PostgreSQL available (375 without, 5 skipped) (`dotnet test RescueSriLanka.slnx`, whole suite), of which Component A's
   agent and approval tests are:
   - `IncidentAnalysisAgentTests.cs` — 27 test cases: golden case, planning and delegation (persisted plan
     with three distinct agents, adaptive planner, invalid coordinates), tool recording and skipped tools,
@@ -139,6 +139,14 @@ submit and update the numbers if the code has changed.
   - `SafetyZoneServiceTests.cs`, `NotificationServiceTests.cs`, `ReportWithPhotoTests.cs`,
     `IncidentReadTests.cs`, `IncidentStatusRollbackTests.cs`.
   - `GlobalExceptionHandlerTests.cs` — 3 tests confirming the exception message is hidden outside Development.
+- PostgreSQL integration: `PostgresIntegrationTests.cs` — 5 tests against a real PostgreSQL 16, each in a
+  throwaway database: every migration applies to an empty database and the model has no pending changes;
+  the decision migration backfills old runs; two coordinators approving at once (10 rounds) give exactly one
+  winner and one warning; a decision built on a stale read is rejected by the database through the
+  concurrency token; a failing zone recompute rolls the whole approval back. They run when `TEST_POSTGRES`
+  is set (locally, and in CI against a `postgres:16` service container) and are skipped otherwise. I also
+  checked they can fail: with the concurrency token and the transaction removed, 3 of the 5 fail.
+  Run: `TEST_POSTGRES="Host=localhost;Username=<you>;Database=postgres" dotnet test RescueSriLanka.slnx --filter PostgresIntegration`.
 - React: **27 tests passing** (`npm test`, whole suite). Component A's `AgentActivity.test.tsx` — 4 tests:
   plan rendering (delegated agents, tools, planner notes, attempts), a rejection shown as a decision with its
   reason, empty and error states, malformed-plan handling. CI now runs `npm test`.
@@ -148,9 +156,8 @@ submit and update the numbers if the code has changed.
   Flutter on every push.
 - **Gaps to disclose honestly:** no React component tests for `DisasterDashboard`, `IncidentTable` or
   `ReportDecision`; no Flutter widget tests for `report_screen.dart` / `disaster_map_screen.dart`; the
-  backend tests use the EF Core in-memory provider, so there is no PostgreSQL integration test for the
-  migrations, the constraints, the transactional approval or a live concurrency conflict; no load/performance
-  test has been run. Say so in the testing report rather than implying full coverage.
+  most backend tests use the EF Core in-memory provider (the PostgreSQL integration tests below cover the
+  migrations, the transactional approval and concurrency, but not every constraint); load/performance results are in [component-a-performance.md](component-a-performance.md) (local, rule-engine path only). Say so in the testing report rather than implying full coverage.
 
 ## 7. Git / commit evidence
 

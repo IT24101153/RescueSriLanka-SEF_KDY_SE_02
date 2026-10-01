@@ -18,10 +18,24 @@ jobs:
   backend:
     name: Backend (ASP.NET Core)
     runs-on: ubuntu-latest
+    # A real PostgreSQL for the integration tests (migrations, transactions,
+    # concurrency). Each test creates and drops its own database on it.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       Database__MigrateOnStartup: 'false'
       ComponentD__SeedDemoData: 'false'
       Email__Enabled: 'false'
+      TEST_POSTGRES: Host=localhost;Username=postgres;Password=postgres;Database=postgres
     steps:
       - uses: actions/checkout@v4
 
@@ -35,8 +49,8 @@ jobs:
       - name: Build
         run: dotnet build RescueSriLanka.slnx --configuration Release --no-restore
 
-      # The tests use the EF Core in-memory provider, so no PostgreSQL service
-      # container is needed here.
+      # Most tests use the EF Core in-memory provider; PostgresIntegrationTests
+      # run against the service container above.
       - name: Test
         run: >-
           dotnet test RescueSriLanka.slnx
