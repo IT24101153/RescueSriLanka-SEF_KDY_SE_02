@@ -57,7 +57,7 @@ public class ComponentDSafetyAgentGoldenTests
         db.AddRange(team, member, vehicle);
         await db.SaveChangesAsync();
         // Start with a proposal accepted by the real service and an existing isolated incident.
-        var (created, error) = await new AssignmentService(db).CreateAsync(
+        var (created, error) = await new AssignmentService(db, new IncidentReadService(shared), new HelpRequestCandidateService(db, new HelpRequestReadService(shared))).CreateAsync(
             new(incident.Id, null, team.Id, vehicle.Id, SkillType.FirstAid, 2, null));
         Assert.Null(error);
         Assert.NotNull(created);

@@ -199,3 +199,18 @@
   .rescue-dashboard .rescue-team-pagination { justify-content: flex-start; }
   .rescue-dashboard .rescue-team-pagination > span:first-child { flex-basis: 100%; }
 }
+
+.assignment-summary { display: grid; gap: .4rem; width: 100%; text-align: left; background: transparent; border: 0; color: inherit; padding: 0; }
+.assignment-card-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+@media (max-width: 560px) { .assignment-card-actions > button { flex: 1 1 100%; } }
+
+.rescue-dashboard .assignment-card-actions { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 4px; }
+.rescue-dashboard .assignment-card-actions > button { min-height: 42px; padding: 9px 13px; }
+.rescue-dashboard .assignment-summary { min-width: 0; gap: 8px; }
+.rescue-dashboard .assignment-reference { color: var(--text-muted, #64748b); font-size: 11px; overflow-wrap: anywhere; }
+.rescue-dashboard .assignment-card-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rescue-dashboard .assignment-form { align-content: start; }
+.rescue-dashboard .assignment-form label { gap: 7px; }
+.rescue-dashboard .response-objective-tabs { flex-wrap: wrap; gap: 8px; }
+.rescue-dashboard .response-objective-tabs button { min-height: 42px; }
+.rescue-dashboard .response-objective-tabs button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent-strong); color: var(--text-strong); box-shadow: inset 0 -2px var(--accent-strong); }

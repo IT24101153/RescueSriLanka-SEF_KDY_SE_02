@@ -244,7 +244,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
             // Without a dispatch, preserve the existing non-rejected planning reservation.
             return status == TeamStatus.OnMission || await _db.Assignments.AnyAsync(a =>
                 a.RescueTeamId == teamId && (a.Dispatch == null
-                    ? a.Status != AssignmentStatus.Rejected
+                    ? a.Status != AssignmentStatus.Rejected && a.Status != AssignmentStatus.Cancelled
                     : a.Dispatch.Status != DispatchStatus.Resolved && a.Dispatch.Status != DispatchStatus.Cancelled));
         }
 

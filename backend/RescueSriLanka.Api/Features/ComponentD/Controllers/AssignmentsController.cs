@@ -71,7 +71,20 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
         [Authorize(Roles = "RescueTeam")]
         [HttpPost("{id:guid}/validate")]
         public async Task<ActionResult<SafetyValidationWorkflowResultDto>> Validate(Guid id, CancellationToken cancellationToken)
-            => Ok(await _safetyValidationAgent.ValidateAsync(id, cancellationToken));
+        {
+            var assignment = await _assignmentService.GetByIdAsync(id);
+            if (assignment?.Status == Models.AssignmentStatus.Cancelled)
+                return Conflict(new { error = "Cancelled assignments cannot start a safety review." });
+            return Ok(await _safetyValidationAgent.ValidateAsync(id, cancellationToken));
+        }
+
+        [HttpPost("{id:guid}/cancel")]
+        public async Task<ActionResult<AssignmentDto>> Cancel(Guid id)
+        {
+            var (assignment, error) = await _assignmentService.CancelAsync(id);
+            if (assignment is not null) return Ok(assignment);
+            return error == "Assignment not found." ? NotFound(new { error }) : Conflict(new { error });
+        }
 
         [Authorize(Roles = "RescueTeam")]
         [HttpPost("{id:guid}/decision")]

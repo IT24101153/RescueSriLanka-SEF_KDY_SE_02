@@ -18,6 +18,7 @@ vi.mock('../../components/componentD/api', async (importOriginal) => ({
   getRescueTeams: vi.fn().mockResolvedValue([]),
   getAssignments: vi.fn().mockResolvedValue([]),
   getDispatches: vi.fn().mockResolvedValue([]),
+  getActiveIncidents: vi.fn().mockResolvedValue([]),
 }))
 
 function Location() {

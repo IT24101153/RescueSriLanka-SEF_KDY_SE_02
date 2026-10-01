@@ -5,7 +5,7 @@ import RescueCoordinatorDashboard from './RescueCoordinatorDashboard'
 import * as api from './api'
 import type { AssignmentDto, DispatchDto } from './types'
 
-vi.mock('./api', () => ({ getAssignments: vi.fn(), getDispatches: vi.fn(), getRescueTeams: vi.fn(), transitionDispatch: vi.fn() }))
+vi.mock('./api', () => ({ getActiveIncidents: vi.fn(), getAssignments: vi.fn(), getDispatches: vi.fn(), getRescueTeams: vi.fn(), transitionDispatch: vi.fn() }))
 afterEach(cleanup)
 const assignment = (id: string, status: AssignmentDto['status'] = 'Approved'): AssignmentDto => ({
   id, status, incidentId: null, helpRequestId: null, rescueTeamId: 'team', rescueTeamName: 'Kandy', vehicleId: 'vehicle', vehiclePlateNumber: 'PJ 2343', requiredSkill: 'FirstAid', requiredCapacity: 1, planVersion: 1, assignedAt: '2026-09-01T00:00:00Z', notes: null, dispatchId: status === 'Approved' ? `dispatch-${id}` : null,
@@ -15,6 +15,7 @@ const dispatch = (id: string, status: DispatchDto['status']): DispatchDto => ({
 })
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(api.getActiveIncidents).mockResolvedValue([])
   vi.mocked(api.getAssignments).mockResolvedValue([assignment('ongoing'), assignment('resolved'), assignment('cancelled'), assignment('proposal', 'Proposed')])
   vi.mocked(api.getDispatches).mockResolvedValue([dispatch('ongoing', 'OnScene'), dispatch('resolved', 'Resolved'), dispatch('cancelled', 'Cancelled')])
   vi.mocked(api.getRescueTeams).mockResolvedValue([])

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using RescueSriLanka.Api.Features.ComponentD.Services;
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.DTOs;
@@ -143,14 +144,12 @@ public sealed class SafetyValidationTools
     }
 
     private async Task<bool> HasActiveTeamConflictAsync(Guid assignmentId, Guid teamId) =>
-        await _db.Assignments.AsNoTracking().AnyAsync(a =>
-            a.Id != assignmentId && a.RescueTeamId == teamId && a.Status != AssignmentStatus.Rejected &&
-            (a.Dispatch == null || (a.Dispatch.Status != DispatchStatus.Resolved && a.Dispatch.Status != DispatchStatus.Cancelled)));
+        await _db.Assignments.AsNoTracking().Active().AnyAsync(a =>
+            a.Id != assignmentId && a.RescueTeamId == teamId);
 
     private async Task<bool> HasActiveVehicleConflictAsync(Guid assignmentId, Guid vehicleId) =>
-        await _db.Assignments.AsNoTracking().AnyAsync(a =>
-            a.Id != assignmentId && a.VehicleId == vehicleId && a.Status != AssignmentStatus.Rejected &&
-            (a.Dispatch == null || (a.Dispatch.Status != DispatchStatus.Resolved && a.Dispatch.Status != DispatchStatus.Cancelled)));
+        await _db.Assignments.AsNoTracking().Active().AnyAsync(a =>
+            a.Id != assignmentId && a.VehicleId == vehicleId);
 
     private static bool TryValidateArguments(JsonElement arguments, Guid assignmentId, int planVersion) =>
         arguments.ValueKind == JsonValueKind.Object

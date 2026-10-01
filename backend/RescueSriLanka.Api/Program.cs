@@ -104,6 +104,10 @@ builder.Services.AddScoped<IResourceForecastAgent, ResourceForecastAgent>();
 builder.Services.AddDbContext<ComponentDDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddScoped<IIncidentReadService, IncidentReadService>();
+builder.Services.AddScoped<IHelpRequestReadService, HelpRequestReadService>();
+builder.Services.AddScoped<HelpRequestCandidateService>();
+builder.Services.AddScoped<IRescueRecommendationExplanation, GeminiRescueRecommendationExplanation>();
+builder.Services.AddScoped<HelpRequestRecommendationService>();
 builder.Services.AddScoped<IRescueTeamService, RescueTeamService>();
 builder.Services.AddScoped<ITeamMatchingService, TeamMatchingService>();
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
