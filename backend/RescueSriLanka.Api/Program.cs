@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
 using CloudinaryDotNet;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -62,6 +64,21 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+// Brute-force and cost protection. "auth" throttles the unauthenticated
+// account endpoints per IP (login, register, password reset); "ai" throttles
+// the endpoints that call Gemini per signed-in user.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", http => RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+    options.AddPolicy("ai", http => RateLimitPartition.GetFixedWindowLimiter(
+        http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+});
+
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -87,6 +104,10 @@ builder.Services.AddScoped<IResourceForecastAgent, ResourceForecastAgent>();
 builder.Services.AddDbContext<ComponentDDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddScoped<IIncidentReadService, IncidentReadService>();
+builder.Services.AddScoped<IHelpRequestReadService, HelpRequestReadService>();
+builder.Services.AddScoped<HelpRequestCandidateService>();
+builder.Services.AddScoped<IRescueRecommendationExplanation, GeminiRescueRecommendationExplanation>();
+builder.Services.AddScoped<HelpRequestRecommendationService>();
 builder.Services.AddScoped<IRescueTeamService, RescueTeamService>();
 builder.Services.AddScoped<ITeamMatchingService, TeamMatchingService>();
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
@@ -394,12 +415,25 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
     }
 }
 
+// Explicitly opted-in development fixtures do not depend on automatic migrations.
+if (app.Environment.IsDevelopment() && app.Configuration.GetValue("ComponentD:SeedDemoData", false))
+{
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+    await ComponentDDataSeeder.SeedAsync(
+        services.GetRequiredService<ComponentDDbContext>(),
+        services.GetRequiredService<AppDbContext>(),
+        app.Environment, app.Configuration,
+        services.GetRequiredService<ILoggerFactory>().CreateLogger("ComponentDDataSeeder"));
+}
+
 // Serves uploaded incident photos from wwwroot/uploads.
 app.UseStaticFiles();
 
 app.UseCors(CorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 
 // Public liveness probe for the host and for evaluators: reports whether the

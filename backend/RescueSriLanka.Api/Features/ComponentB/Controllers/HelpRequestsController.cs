@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
@@ -77,6 +78,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
 
         // Pre-submission guidance improves a report but never prevents submission.
         [HttpPost("ai-draft-analysis")]
+        [EnableRateLimiting("ai")]
         [Authorize]
         public async Task<ActionResult<AiAnalysisResult>> AnalyzeDraft([FromBody] AnalyzeRequestDraftDto dto)
         {
@@ -101,6 +103,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         // AI guidance is generated server-side; the API key is never exposed to clients.
         // The requester and authorised coordinators may run the review.
         [HttpPost("{id}/ai-analysis")]
+        [EnableRateLimiting("ai")]
         [Authorize]
         public async Task<ActionResult<AiAnalysisResult>> Analyze(Guid id)
         {

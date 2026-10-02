@@ -156,6 +156,8 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
                 var assignment = await _db.Assignments.Include(a => a.RescueTeam).ThenInclude(t => t!.Members)
                     .Include(a => a.Vehicle).Include(a => a.Dispatch).SingleOrDefaultAsync(a => a.Id == assignmentId);
                 if (assignment is null) return DecisionFailure("Assignment not found.");
+                if (assignment.Status == AssignmentStatus.Cancelled)
+                    return DecisionFailure("Cancelled assignments cannot receive safety decisions or dispatches.", assignment);
                 var workflow = await _db.AgentWorkflows.SingleOrDefaultAsync(w => w.Id == dto.WorkflowId);
                 if (workflow is null) return DecisionFailure("Safety validation workflow not found.", assignment);
 

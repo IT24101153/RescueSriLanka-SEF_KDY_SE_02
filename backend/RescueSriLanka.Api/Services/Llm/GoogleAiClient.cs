@@ -21,6 +21,8 @@ public class GoogleAiClient(
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey);
 
+    public int LastAttempts { get; private set; }
+
     public string ModelName => configuration["GoogleAi:Model"] ?? DefaultModel;
 
     public async Task<string> GenerateAsync(
@@ -106,8 +108,10 @@ public class GoogleAiClient(
 
         HttpResponseMessage? response = null;
 
+        LastAttempts = 0;
         for (var attempt = 1; attempt <= attempts; attempt++)
         {
+            LastAttempts = attempt;
             using var request = new HttpRequestMessage(HttpMethod.Post, url)
             {
                 Content = JsonContent.Create(body)

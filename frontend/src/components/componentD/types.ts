@@ -1,4 +1,18 @@
 // Mirrors RescueSriLanka.Api's Component D DTOs and enums.
+export interface RescueHelpRequest {
+  id: string; type: string; description: string; latitude: number | null; longitude: number | null;
+  urgencyScore: number; status: string; verificationStatus: string; createdAt: string;
+}
+export interface RescueCandidate {
+  teamId: string; teamName: string; vehicleId: string; vehicleType: VehicleType;
+  distanceKm: number; matchingSkill: SkillType; vehicleCapacity: number;
+  teamAvailability: TeamStatus; vehicleAvailability: VehicleStatus;
+  baseLatitude: number; baseLongitude: number;
+}
+export interface RescueRecommendation {
+  candidates: RescueCandidate[]; recommendedCandidate: RescueCandidate | null;
+  aiAvailable: boolean; explanation: string;
+}
 // Enum string values must match the C# enum member names exactly —
 // the API serializes enums as strings (see frontend-ui-guide.md §6).
 
@@ -26,7 +40,7 @@ export type DispatchStatus =
   | "Cancelled";
 
 export type ApprovalStatus = "PendingApproval" | "Approved" | "Rejected" | "Revised";
-export type AssignmentStatus = "Proposed" | "PendingApproval" | "Approved" | "Rejected";
+export type AssignmentStatus = "Proposed" | "PendingApproval" | "Approved" | "Rejected" | "Cancelled";
 export type SafetyValidationDecision = "APPROVE" | "REVISE" | "REJECT";
 export type WorkflowStatus = "Planning" | "AwaitingApproval" | "Approved" | "Rejected" | "Executing" | "Completed" | "Failed";
 

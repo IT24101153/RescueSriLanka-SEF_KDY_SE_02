@@ -55,6 +55,10 @@ class RescueCoordinationService {
   Future<List<dynamic>> getDispatches(AuthSession session) =>
       _getList('/api/dispatches', session);
 
+  /// Read-only summary for the citizen view of the Rescue tab.
+  Future<Map<String, dynamic>> getRescueOverview(AuthSession session) =>
+      _object('GET', '/api/rescue/overview', session);
+
   String _id(String id) => Uri.encodeComponent(id);
   Future<Map<String, dynamic>> createTeam(AuthSession s, TeamInput data) =>
       _object('POST', '/api/rescueteams', s, data.toJson(editing: false));
@@ -272,6 +276,7 @@ class RescueCoordinationService {
       'Concurrent or duplicate dispatch commit detected; retry safely.',
       'Dispatch has not been approved by a coordinator yet.',
       'Assignment must reference exactly one incident or help request.',
+      'A vehicle with this registration number already exists.',
       'Required capacity must be greater than zero.',
       'Rescue team not found.',
       'Rescue team must be available.',

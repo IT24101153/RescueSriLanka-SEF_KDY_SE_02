@@ -7,10 +7,13 @@ namespace RescueSriLanka.Api.Features.ComponentD.Models
     // One Dispatch per Assignment. Timestamps double as a lightweight audit
     // trail; swap for a separate DispatchStatusHistory table later if the
     // rubric's observability requirement calls for more granular logging.
-    public class Dispatch
+    public class Dispatch : IComponentDAuditable
     {
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
 
         public Guid AssignmentId { get; set; }
 
@@ -19,7 +22,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Models
 
         public DispatchStatus Status { get; set; } = DispatchStatus.Pending;
 
-        // Human-approval gate — set by the Emergency Coordinator after the
+        // Human-approval gate — set by the Rescue Coordinator after the
         // Safety Validation Agent's deterministic checks pass.
         public ApprovalStatus ApprovalStatus { get; set; } = ApprovalStatus.PendingApproval;
         public string? ApprovedByUserId { get; set; }

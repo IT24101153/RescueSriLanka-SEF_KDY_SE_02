@@ -10,7 +10,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize(Roles = "RescueTeam")]
     public class DispatchesController : ControllerBase
     {
         private readonly IDispatchService _service;
@@ -35,21 +35,21 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
         // found / already resolved / already has an active dispatch)
         // instead of a generic validation-issues blob, so the frontend
         // can show the coordinator exactly why creation was blocked.
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPost]
         public async Task<IActionResult> Create(CreateDispatchDto dto)
         {
             return Conflict(new { error = "Legacy dispatch creation is disabled. Use POST /api/assignments/{id}/decision with a validated workflow." });
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPost("{id:guid}/approve")]
         public async Task<ActionResult<DispatchDto>> Approve(Guid id, ApproveDispatchDto dto)
         {
             return Conflict(new { error = "Legacy dispatch approval is disabled. Use POST /api/assignments/{id}/decision." });
         }
 
-        [Authorize(Roles = "EmergencyCoordinator,RescueTeam")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPatch("{id:guid}/status")]
         public async Task<ActionResult<DispatchDto>> TransitionStatus(Guid id, TransitionDispatchStatusDto dto)
         {

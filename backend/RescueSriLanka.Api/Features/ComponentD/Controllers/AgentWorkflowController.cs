@@ -8,7 +8,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
 {
     [ApiController]
     [Route("api/agents/workflows")]
-    [Authorize(Roles = "EmergencyCoordinator")]
+    [Authorize(Roles = "RescueTeam")]
     public class AgentWorkflowController : ControllerBase
     {
         private readonly IAgentOrchestrator _orchestrator;
@@ -20,7 +20,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
 
         // Triggers analysis, resource recommendation, and safety validation.
         // The workflow produces a recommendation only; dispatch approval and
-        // operational execution remain an EmergencyCoordinator responsibility.
+        // operational execution remain a RescueTeam responsibility.
         [HttpPost]
         public async Task<ActionResult<AgentWorkflowDto>> Start(StartWorkflowDto dto)
         {

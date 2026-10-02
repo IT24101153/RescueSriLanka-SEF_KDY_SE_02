@@ -6,8 +6,10 @@ namespace RescueSriLanka.Api.Data;
 
 /// <summary>
 /// Creates the accounts the team develops and demonstrates against.
-/// Idempotent: existing emails are left untouched, so it is safe to run on
-/// every start-up.
+/// Idempotent and safe to run on every start-up. Existing accounts keep their
+/// password and profile, but their role is realigned with the seed list so a
+/// stale role (e.g. from an earlier seed) can't route a user to the wrong
+/// dashboard.
 /// </summary>
 public static class DbSeeder
 {
@@ -18,7 +20,7 @@ public static class DbSeeder
         new("Lelum Jayasooriya", "emergency@rescue.lk", "Rescue@123", UserRole.EmergencyCoordinator, "+94711000001"),
         new("Help Request Manager", "helprequests@rescue.lk", "Rescue@123", UserRole.HelpRequestManager, null),
         new("Resource Manager", "resources@rescue.lk", "Rescue@123", UserRole.ResourceManager, null),
-        new("Rescue Team Lead", "rescue@rescue.lk", "Rescue@123", UserRole.RescueTeam, null)
+        new("Rescue Coordinator", "rescue@rescue.lk", "Rescue@123", UserRole.RescueTeam, null)
     ];
 
     public static async Task SeedAsync(
@@ -27,17 +29,24 @@ public static class DbSeeder
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
+        var seedEmails = Accounts.Select(a => a.Email.ToLowerInvariant()).ToList();
         var existing = await db.Users
-            .Select(u => u.Email)
-            .ToListAsync(cancellationToken);
+            .Where(u => seedEmails.Contains(u.Email))
+            .ToDictionaryAsync(u => u.Email, cancellationToken);
 
         var added = 0;
+        var updated = 0;
 
         foreach (var account in Accounts)
         {
             var email = account.Email.ToLowerInvariant();
-            if (existing.Contains(email))
+            if (existing.TryGetValue(email, out var current))
             {
+                if (current.Role != account.Role)
+                {
+                    current.Role = account.Role;
+                    updated++;
+                }
                 continue;
             }
 
@@ -55,10 +64,10 @@ public static class DbSeeder
             added++;
         }
 
-        if (added > 0)
+        if (added > 0 || updated > 0)
         {
             await db.SaveChangesAsync(cancellationToken);
-            logger.LogInformation("Seeded {Count} account(s).", added);
+            logger.LogInformation("Seeded {Added} account(s), corrected role on {Updated}.", added, updated);
         }
         else
         {

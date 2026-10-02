@@ -71,6 +71,12 @@ export default function LoginPage({ onSignedIn }: LoginPageProps) {
         setFormError(result.message)
         return
       }
+      if (result.session.user.role === 'Citizen') {
+        setFormError(
+          'Citizen accounts cannot use the staff console. Please use the mobile app.',
+        )
+        return
+      }
       storeSession(result.session, remember)
       onSignedIn(result.session)
     } finally {

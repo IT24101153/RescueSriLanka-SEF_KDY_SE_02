@@ -50,6 +50,9 @@ public sealed class GeminiSafetyValidationAgent : IAssignmentSafetyValidationAge
         if (context is null)
             return SafeFailure(null, assignmentId, null, "Assignment was not found.", "ASSIGNMENT_EXISTS");
 
+        if (context.AssignmentStatus == AssignmentStatus.Cancelled)
+            return SafeFailure(null, assignmentId, context.PlanVersion, "Cancelled assignments cannot start a safety review.", "ASSIGNMENT_EXISTS");
+
         var workflow = new AgentWorkflow
         {
             // The shared schema has only Incident/HelpRequest objectives. The
@@ -263,7 +266,7 @@ public sealed class GeminiSafetyValidationClient : IGeminiSafetyValidationClient
         AssignmentValidationContextDto context, IReadOnlyList<object> priorToolResults,
         string? previousInteractionId, CancellationToken cancellationToken)
     {
-        const string instruction = "You are a safety-validation agent. Use only supplied read-only tools. Operational facts come only from tool results; never assume missing facts. You cannot dispatch or mutate anything. A human EmergencyCoordinator must approve any recommendation. After tool use, return only a JSON object matching the required decision schema; do not return prose or Markdown.";
+        const string instruction = "You are a safety-validation agent. Use only supplied read-only tools. Operational facts come only from tool results; never assume missing facts. You cannot dispatch or mutate anything. A human rescue administrator must approve any recommendation. After tool use, return only a JSON object matching the required decision schema; do not return prose or Markdown.";
         var payload = new Dictionary<string, object?>
         {
             ["model"] = _model,

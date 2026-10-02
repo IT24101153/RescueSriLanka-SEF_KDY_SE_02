@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using RescueSriLanka.Api.DTOs.Auth;
 using RescueSriLanka.Api.Services;
 
@@ -12,6 +13,7 @@ public class AuthController(IAuthService authService) : ControllerBase
 {
     /// <summary>Exchanges email and password for a JWT.</summary>
     [HttpPost("login")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -29,6 +31,7 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     /// <summary>Citizen self-registration for the Flutter app.</summary>
     [HttpPost("register")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -54,6 +57,7 @@ public class AuthController(IAuthService authService) : ControllerBase
     /// <summary>Emails a one-time code for a forgotten password. Always reports
     /// success — the response must never reveal whether the address has an account.</summary>
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> ForgotPassword(
@@ -67,6 +71,7 @@ public class AuthController(IAuthService authService) : ControllerBase
     /// <summary>Checks the emailed code and, if correct, issues the token
     /// <see cref="ResetPassword"/> spends to actually change the password.</summary>
     [HttpPost("verify-reset-code")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(VerifyResetCodeResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -83,6 +88,7 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     /// <summary>Spends the token from <see cref="VerifyResetCode"/> to set a new password.</summary>
     [HttpPost("reset-password")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

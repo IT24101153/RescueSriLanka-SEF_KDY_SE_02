@@ -8,10 +8,13 @@ namespace RescueSriLanka.Api.Features.ComponentD.Models
     // by Id only — those entities live in other students' components, so we
     // don't take a hard EF navigation dependency on them here. Coordinate
     // with A/B on the exact FK names once their models are merged into dev.
-    public class Assignment
+    public class Assignment : IComponentDAuditable
     {
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
 
         // One of these two should be set depending on what triggered the assignment
         public Guid? IncidentId { get; set; }

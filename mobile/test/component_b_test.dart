@@ -40,6 +40,8 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: SubmitRequestScreen()));
 
+    await tester.ensureVisible(find.text('Submit request'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Submit request'));
     await tester.pump();
     expect(find.text('Please describe what help you need.'), findsOneWidget);
@@ -48,6 +50,8 @@ void main() {
       find.byType(TextField).first,
       'Need water for my family',
     );
+    await tester.ensureVisible(find.text('Submit request'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Submit request'));
     await tester.pump();
     expect(find.text('Please share your location first.'), findsOneWidget);

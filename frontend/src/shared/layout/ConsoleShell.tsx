@@ -46,21 +46,33 @@ const RESCUE_PAGES: Page[] = [
 /**
  * Each account sees only its own component's dashboard: Help Request
  * Managers get the help-request pages, Resource Managers the resource
- * dashboard, Rescue Teams the rescue coordination dashboard, everyone
- * else the disaster dashboard. The first page listed
+ * dashboard, Rescue Teams the rescue coordination dashboard, Emergency
+ * Coordinators the disaster dashboard, and no other role gets in. The first page listed
  * is where sign-in lands.
  */
-function pagesFor(role: Role): Page[] {
+function pagesFor(role: Role): Page[] | null {
   if (role === 'HelpRequestManager') return HELP_REQUEST_PAGES
   if (role === 'ResourceManager') return RESOURCE_PAGES
   if (role === 'RescueTeam') return RESCUE_PAGES
-  return DISASTER_PAGES
+  if (role === 'EmergencyCoordinator') return DISASTER_PAGES
+  return null
 }
 
 /** Signed-in frame. Component screens render inside <main>. */
 export default function ConsoleShell({ session, onSignOut }: ConsoleShellProps) {
   const { user } = session
   const pages = pagesFor(user.role)
+  if (!pages) {
+    // No console page for this role — never fall back to an admin dashboard.
+    return (
+      <main className="shell__body">
+        <p>Your account does not have access to the console.</p>
+        <button type="button" className="btn-ghost" onClick={onSignOut}>
+          Sign out
+        </button>
+      </main>
+    )
+  }
   // The disaster dashboard is the only page its role sees, so a tab bar with
   // one tab is just dead chrome — every other role still gets its nav.
   const showNav = pages !== DISASTER_PAGES

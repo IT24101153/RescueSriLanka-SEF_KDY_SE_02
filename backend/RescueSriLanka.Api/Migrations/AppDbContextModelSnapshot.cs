@@ -824,6 +824,7 @@ namespace RescueSriLanka.Api.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<DateTime?>("ApprovedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("ApprovedByUserId")
@@ -831,6 +832,17 @@ namespace RescueSriLanka.Api.Migrations
 
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<int>("DurationMs")
                         .HasColumnType("integer");
@@ -849,12 +861,18 @@ namespace RescueSriLanka.Api.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
+                    b.Property<int>("ModelAttempts")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Objective")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
                     b.Property<string>("OutputJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PlanJson")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("StartedAt")

@@ -266,7 +266,7 @@ class _RescueTeamsScreenState extends State<RescueTeamsScreen> {
                 vehicle['plateNumber'] is String
                     ? vehicle['plateNumber'] as String
                     : 'Registration not provided',
-                '${_label(vehicle['type'])} · Capacity: ${vehicle['capacity'] is num ? vehicle['capacity'] : 'Not provided'}',
+                '${_label(vehicle['type'])} · People/Patients Capacity: ${vehicle['capacity'] is num ? vehicle['capacity'] : 'Not provided'}',
                 vehicle['status'] is String
                     ? vehicle['status'] as String
                     : 'Unknown',
@@ -295,13 +295,6 @@ class _RescueTeamsScreenState extends State<RescueTeamsScreen> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
           actions: [
-            IconButton(
-              onPressed: _busy || _isLoading
-                  ? null
-                  : () => _edit(ResourceKind.team),
-              tooltip: 'Add team',
-              icon: const Icon(Icons.add),
-            ),
             IconButton(
               onPressed: _isLoading || _busy ? null : _loadTeams,
               tooltip: 'Refresh teams',

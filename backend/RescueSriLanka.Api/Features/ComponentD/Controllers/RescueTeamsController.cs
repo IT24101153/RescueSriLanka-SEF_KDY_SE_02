@@ -9,7 +9,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize(Roles = "RescueTeam")]
     public class RescueTeamsController : ControllerBase
     {
         private readonly IRescueTeamService _service;
@@ -30,7 +30,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
             return team is null ? NotFound() : Ok(team);
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPost]
         public async Task<ActionResult<RescueTeamDto>> Create(CreateRescueTeamDto dto)
         {
@@ -38,7 +38,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
             return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPut("{id:guid}")]
         public async Task<ActionResult<RescueTeamDto>> Update(Guid id, UpdateRescueTeamDto dto)
         {
@@ -49,7 +49,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
         // FIX: now distinguishes "not found" (404) from "blocked because
         // the team has active assignments" (409 Conflict) instead of
         // letting a foreign-key violation surface as an unhandled 500.
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpDelete("{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
@@ -60,7 +60,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
                 : Conflict(new { error });
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPost("{id:guid}/members")]
         public async Task<ActionResult<TeamMemberDto>> AddMember(Guid id, CreateTeamMemberDto dto)
         {
@@ -68,7 +68,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
             return member is null ? NotFound("Team not found.") : Ok(member);
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPatch("{teamId:guid}/members/{memberId:guid}/availability")]
         public async Task<IActionResult> SetMemberAvailability(Guid teamId, Guid memberId, UpdateTeamMemberAvailabilityDto dto)
         {
@@ -76,7 +76,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
             return success ? NoContent() : error == "Team member not found." ? NotFound(error) : Conflict(new { error });
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPut("{teamId:guid}/members/{memberId:guid}")]
         public async Task<ActionResult<TeamMemberDto>> UpdateMember(Guid teamId, Guid memberId, UpdateTeamMemberDto dto)
         {
@@ -85,7 +85,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
             return error == "Team member not found." ? NotFound(error) : Conflict(new { error });
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpDelete("{teamId:guid}/members/{memberId:guid}")]
         public async Task<IActionResult> DeleteMember(Guid teamId, Guid memberId)
         {
@@ -94,15 +94,16 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
             return error == "Team member not found." ? NotFound(error) : Conflict(new { error });
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPost("{id:guid}/vehicles")]
         public async Task<ActionResult<VehicleDto>> AddVehicle(Guid id, CreateVehicleDto dto)
         {
-            var vehicle = await _service.AddVehicleAsync(id, dto);
-            return vehicle is null ? NotFound("Team not found.") : Ok(vehicle);
+            var (vehicle, error) = await _service.AddVehicleAsync(id, dto);
+            if (vehicle is not null) return Ok(vehicle);
+            return error == "Team not found." ? NotFound(error) : Conflict(new { error });
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPatch("{teamId:guid}/vehicles/{vehicleId:guid}/status")]
         public async Task<IActionResult> SetVehicleStatus(Guid teamId, Guid vehicleId, UpdateVehicleStatusDto dto)
         {
@@ -110,7 +111,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
             return success ? NoContent() : error == "Vehicle not found." ? NotFound(error) : Conflict(new { error });
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpPut("{teamId:guid}/vehicles/{vehicleId:guid}")]
         public async Task<ActionResult<VehicleDto>> UpdateVehicle(Guid teamId, Guid vehicleId, UpdateVehicleDto dto)
         {
@@ -119,7 +120,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
             return error == "Vehicle not found." ? NotFound(error) : Conflict(new { error });
         }
 
-        [Authorize(Roles = "EmergencyCoordinator")]
+        [Authorize(Roles = "RescueTeam")]
         [HttpDelete("{teamId:guid}/vehicles/{vehicleId:guid}")]
         public async Task<IActionResult> DeleteVehicle(Guid teamId, Guid vehicleId)
         {

@@ -6,7 +6,15 @@ import { clearSession, getSession } from './shared/auth/session'
 import type { Session } from './shared/auth/session'
 
 function App() {
-  const [session, setSession] = useState<Session | null>(() => getSession())
+  const [session, setSession] = useState<Session | null>(() => {
+    const stored = getSession()
+    // A citizen session (e.g. saved before this rule) must not open the console.
+    if (stored?.user.role === 'Citizen') {
+      clearSession()
+      return null
+    }
+    return stored
+  })
 
   function handleSignOut() {
     clearSession()

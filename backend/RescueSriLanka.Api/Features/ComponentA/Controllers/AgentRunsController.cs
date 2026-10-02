@@ -35,8 +35,15 @@ public class AgentRunsController(IAgentRunService agentRunService) : ControllerB
     {
         if (CurrentUserId() is not Guid userId) return Unauthorized();
 
-        var run = await agentRunService.ApproveAsync(id, request.Severity, userId, ct);
-        return run is null ? NotFound() : Ok(run);
+        try
+        {
+            var run = await agentRunService.ApproveAsync(id, request.Severity, userId, request.Note, ct);
+            return run is null ? NotFound() : Ok(run);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
     }
 
     /// <summary>Reject the proposal. The incident is left exactly as it was.</summary>
@@ -47,8 +54,15 @@ public class AgentRunsController(IAgentRunService agentRunService) : ControllerB
     {
         if (CurrentUserId() is not Guid userId) return Unauthorized();
 
-        var run = await agentRunService.RejectAsync(id, request.Reason, userId, ct);
-        return run is null ? NotFound() : Ok(run);
+        try
+        {
+            var run = await agentRunService.RejectAsync(id, request.Reason, userId, ct);
+            return run is null ? NotFound() : Ok(run);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
     }
 
     private Guid? CurrentUserId() =>

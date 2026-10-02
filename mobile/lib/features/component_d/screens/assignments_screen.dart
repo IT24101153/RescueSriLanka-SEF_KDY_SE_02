@@ -306,7 +306,7 @@ class AssignmentCard extends StatelessWidget {
                 CoordinationField('Vehicle ID', assignment['vehicleId']),
               CoordinationField('Required skill', assignment['requiredSkill']),
               CoordinationField(
-                'Required capacity',
+                'People/Patients Requiring Transport',
                 assignment['requiredCapacity'],
               ),
               CoordinationField('Plan version', assignment['planVersion']),
