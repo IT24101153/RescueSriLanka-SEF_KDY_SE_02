@@ -171,6 +171,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint("CK_HelpRequests_UrgencyScore", "\"UrgencyScore\" >= 0 AND \"UrgencyScore\" <= 100");
+                table.HasCheckConstraint("CK_HelpRequests_EstimatedPeopleCount", "\"EstimatedPeopleCount\" IS NULL OR \"EstimatedPeopleCount\" >= 1");
                 table.HasCheckConstraint("CK_HelpRequests_Latitude", "\"Latitude\" >= -90 AND \"Latitude\" <= 90");
                 table.HasCheckConstraint("CK_HelpRequests_Longitude", "\"Longitude\" >= -180 AND \"Longitude\" <= 180");
             });

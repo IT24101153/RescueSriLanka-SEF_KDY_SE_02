@@ -6,7 +6,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.DTOs;
 // Deliberately excludes citizen identity, contact details, images and verification notes.
 public record RescueHelpRequestDto(Guid Id, string Type, string Description,
     double? Latitude, double? Longitude, int UrgencyScore, string Status,
-    string VerificationStatus, DateTime CreatedAt);
+    string VerificationStatus, DateTime CreatedAt, int? EstimatedPeopleCount = null);
 
 public record RecommendRescueTeamRequest(
     [param: Required, EnumDataType(typeof(SkillType))] SkillType? RequiredSkill,

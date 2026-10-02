@@ -29,6 +29,7 @@ void main() {
       expect(helpRequestTypeLabels[request.type], 'Rescue');
       expect(helpRequestStatusLabels[request.status], 'In Progress');
       expect(request.urgencyScore, 90);
+      expect(request.estimatedPeopleCount, isNull);
       expect(helpRequestStatusLabels[history.oldStatus], 'Assigned');
       expect(helpRequestStatusLabels[history.newStatus], 'In Progress');
       expect(history.notes, 'Responder started travel');
@@ -50,6 +51,7 @@ void main() {
       find.byType(TextField).first,
       'Need water for my family',
     );
+    await tester.enterText(find.byType(TextFormField), '4');
     await tester.ensureVisible(find.text('Submit request'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Submit request'));

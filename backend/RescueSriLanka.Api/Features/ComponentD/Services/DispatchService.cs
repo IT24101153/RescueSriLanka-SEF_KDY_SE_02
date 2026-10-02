@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore.Storage;
+using HelpRequestStatus = RescueSriLanka.Api.Features.ComponentB.Models.HelpRequestStatus;
+using RescueSriLanka.Api.Features.ComponentB.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using System.Text.Json;
@@ -24,6 +27,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
     public class DispatchService : IDispatchService
     {
         private readonly ComponentDDbContext _db;
+        private readonly IHelpRequestResponseStatusService _responseStatus;
         private readonly ISafetyValidationAgent _safetyAgent;
 
         private static readonly Dictionary<DispatchStatus, DispatchStatus[]> AllowedTransitions = new()
@@ -36,9 +40,10 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
             [DispatchStatus.Cancelled] = Array.Empty<DispatchStatus>()
         };
 
-        public DispatchService(ComponentDDbContext db, ISafetyValidationAgent safetyAgent)
+        public DispatchService(ComponentDDbContext db, ISafetyValidationAgent safetyAgent, IHelpRequestResponseStatusService responseStatus)
         {
             _db = db;
+            _responseStatus = responseStatus;
             _safetyAgent = safetyAgent;
         }
 
@@ -212,6 +217,8 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
                 workflow.Status = WorkflowStatus.Executing;
                 workflow.FinalOutcomeJson = JsonSerializer.Serialize(new { assignmentId, planVersion = dto.PlanVersion, coordinatorDecision = "APPROVE", dispatchId = dispatch.Id });
                 await _db.SaveChangesAsync();
+                if (assignment.HelpRequestId is Guid requestId)
+                    await _responseStatus.SynchronizeAsync(requestId, HelpRequestStatus.InProgress, transaction?.GetDbTransaction());
                 if (transaction is not null) await transaction.CommitAsync();
                 return new(true, false, null, ToDto(dispatch), assignment.Status, assignment.RescueTeam.Status, assignment.Vehicle.Status);
             }
@@ -300,6 +307,11 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
                 }
             }
             await _db.SaveChangesAsync();
+            if (dispatch.Assignment?.HelpRequestId is Guid requestId
+                && dto.NewStatus is DispatchStatus.Dispatched or DispatchStatus.EnRoute or DispatchStatus.OnScene or DispatchStatus.Resolved)
+                await _responseStatus.SynchronizeAsync(requestId,
+                    dto.NewStatus == DispatchStatus.Resolved ? HelpRequestStatus.Resolved : HelpRequestStatus.InProgress,
+                    transaction?.GetDbTransaction());
             if (transaction is not null) await transaction.CommitAsync();
             return (true, null, ToDto(dispatch));
         }

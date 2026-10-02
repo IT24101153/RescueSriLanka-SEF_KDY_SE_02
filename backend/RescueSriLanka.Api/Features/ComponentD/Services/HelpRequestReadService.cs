@@ -9,6 +9,7 @@ public interface IHelpRequestReadService
 {
     Task<List<RescueHelpRequestDto>> GetEligibleAsync(CancellationToken ct = default);
     Task<RescueHelpRequestDto?> GetEligibleAsync(Guid id, CancellationToken ct = default);
+    Task<RescueHelpRequestDto?> GetForExistingPlanAsync(Guid id, CancellationToken ct = default);
 }
 
 public sealed class HelpRequestReadService(AppDbContext db) : IHelpRequestReadService
@@ -26,6 +27,14 @@ public sealed class HelpRequestReadService(AppDbContext db) : IHelpRequestReadSe
         return request is null ? null : ToDto(request);
     }
 
+    public async Task<RescueHelpRequestDto?> GetForExistingPlanAsync(Guid id, CancellationToken ct = default)
+    {
+        var request = await db.HelpRequests.AsNoTracking().SingleOrDefaultAsync(r => r.Id == id
+            && r.VerificationStatus == VerificationStatus.Verified
+            && (r.Status == HelpRequestStatus.Pending || r.Status == HelpRequestStatus.Assigned), ct);
+        return request is null ? null : ToDto(request);
+    }
+
     private static RescueHelpRequestDto ToDto(HelpRequest r) => new(r.Id, r.Type.ToString(), r.Description,
-        double.IsFinite(r.Latitude) ? r.Latitude : null, double.IsFinite(r.Longitude) ? r.Longitude : null, r.UrgencyScore, r.Status.ToString(), r.VerificationStatus.ToString(), r.CreatedAt);
+        double.IsFinite(r.Latitude) ? r.Latitude : null, double.IsFinite(r.Longitude) ? r.Longitude : null, r.UrgencyScore, r.Status.ToString(), r.VerificationStatus.ToString(), r.CreatedAt, r.EstimatedPeopleCount);
 }

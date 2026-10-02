@@ -90,6 +90,8 @@ builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
 
 // Component B — help requests, travel advisories and the Planner Agent.
 builder.Services.AddScoped<IHelpRequestService, HelpRequestService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IHelpRequestResponseStatusService, HelpRequestResponseStatusService>();
 builder.Services.AddScoped<ITravelAdvisoryService, TravelAdvisoryService>();
 builder.Services.AddScoped<IPlannerAgentService, PlannerAgentService>();
 builder.Services.AddScoped<IHelpRequestServiceForAgent, HelpRequestServiceForAgent>();

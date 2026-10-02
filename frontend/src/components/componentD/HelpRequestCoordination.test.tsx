@@ -32,6 +32,8 @@ async function selectRequest() { fireEvent.click(await screen.findByRole('button
 function confirmDemand() {
   fireEvent.change(screen.getByLabelText('Required skill'), { target: { value: 'WaterRescue' } })
   fireEvent.change(screen.getByLabelText('People/patients requiring transport'), { target: { value: '3' } })
+  const confirmation = screen.getByLabelText('I confirm the number requiring transport') as HTMLInputElement
+  if (!confirmation.checked) fireEvent.click(confirmation)
 }
 async function recommend() {
   confirmDemand(); fireEvent.click(screen.getByRole('button', { name: 'Recommend rescue team' }))
@@ -44,6 +46,7 @@ function panel() {
 
 it('requires explicit skill and transport demand without mapping the request type or defaulting to one', async () => {
   panel(); await selectRequest()
+  expect(screen.getByText('Approximate people affected: Not specified')).toBeTruthy()
   expect((screen.getByLabelText('Required skill') as HTMLSelectElement).value).toBe('')
   expect((screen.getByLabelText('People/patients requiring transport') as HTMLInputElement).value).toBe('')
   expect((screen.getByRole('button', { name: 'Recommend rescue team' }) as HTMLButtonElement).disabled).toBe(true)
@@ -52,6 +55,26 @@ it('requires explicit skill and transport demand without mapping the request typ
     expect((screen.getByRole('button', { name: 'Recommend rescue team' }) as HTMLButtonElement).disabled).toBe(true)
   }
   expect(api.recommendRescueTeam).not.toHaveBeenCalled(); expect(api.createAssignment).not.toHaveBeenCalled()
+})
+
+it('prefills affected people but requires confirmation, keeps edits local, and recommends with confirmed demand', async () => {
+  const counted = { ...request, estimatedPeopleCount: 12 }
+  vi.mocked(api.getRescueHelpRequests).mockResolvedValue([counted])
+  panel(); await selectRequest()
+  expect(screen.getByText('Approximate people affected: 12')).toBeTruthy()
+  const transport = screen.getByLabelText('People/patients requiring transport') as HTMLInputElement
+  expect(transport.value).toBe('12')
+  fireEvent.change(screen.getByLabelText('Required skill'), { target: { value: 'WaterRescue' } })
+  expect((screen.getByRole('button', { name: 'Recommend rescue team' }) as HTMLButtonElement).disabled).toBe(true)
+  await recommend()
+  expect(transport.value).toBe('3')
+  expect(counted.estimatedPeopleCount).toBe(12)
+  expect(screen.getByText('Approximate people affected: 12')).toBeTruthy()
+  expect(api.recommendRescueTeam).toHaveBeenCalledExactlyOnceWith(request.id, 'WaterRescue', 3)
+  fireEvent.change(transport, { target: { value: '2' } })
+  expect((screen.getByLabelText('I confirm the number requiring transport') as HTMLInputElement).checked).toBe(false)
+  expect((screen.getByRole('button', { name: 'Recommend rescue team' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(api.createAssignment).not.toHaveBeenCalled()
 })
 
 it('recommends without mutation, supports a different eligible pair, and creates only on final submission', async () => {

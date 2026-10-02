@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore.Storage;
+using HelpRequestStatus = RescueSriLanka.Api.Features.ComponentB.Models.HelpRequestStatus;
+using RescueSriLanka.Api.Features.ComponentB.Services;
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.DTOs;
@@ -19,12 +22,14 @@ public interface IAssignmentService
 public class AssignmentService : IAssignmentService
 {
     private readonly ComponentDDbContext _db;
+    private readonly IHelpRequestResponseStatusService _responseStatus;
     private readonly IIncidentReadService _incidents;
     private readonly HelpRequestCandidateService _helpRequests;
 
-    public AssignmentService(ComponentDDbContext db, IIncidentReadService incidents, HelpRequestCandidateService helpRequests)
+    public AssignmentService(ComponentDDbContext db, IIncidentReadService incidents, HelpRequestCandidateService helpRequests, IHelpRequestResponseStatusService responseStatus)
     {
         _db = db;
+        _responseStatus = responseStatus;
         _incidents = incidents;
         _helpRequests = helpRequests;
     }
@@ -72,6 +77,8 @@ public class AssignmentService : IAssignmentService
         try
         {
             await _db.SaveChangesAsync();
+            if (assignment.HelpRequestId is Guid requestId)
+                await _responseStatus.SynchronizeAsync(requestId, HelpRequestStatus.Assigned, transaction?.GetDbTransaction());
             if (transaction is not null) await transaction.CommitAsync();
         }
         catch (DbUpdateException) when (dto.HelpRequestId.HasValue)
@@ -150,9 +157,14 @@ public class AssignmentService : IAssignmentService
             if (assignment.Status is not (AssignmentStatus.Proposed or AssignmentStatus.PendingApproval
                 or AssignmentStatus.Rejected or AssignmentStatus.Approved))
                 return (null, "Assignment is already cancelled or cannot be cancelled.");
+            if (assignment.HelpRequestId is Guid linkedRequestId && await _db.Assignments.Active()
+                .AnyAsync(a => a.Id != assignment.Id && a.HelpRequestId == linkedRequestId))
+                return (null, "Help Request has other active response work. Resolve that work before cancelling this plan.");
             assignment.Status = AssignmentStatus.Cancelled;
             assignment.PlanVersion++; // Invalidate any previously captured review without deleting it.
             await _db.SaveChangesAsync(); // Component D audit hook updates UpdatedAt.
+            if (assignment.HelpRequestId is Guid requestId)
+                await _responseStatus.ReturnToPendingForRecoordinationAsync(requestId, assignment.Id, transaction?.GetDbTransaction());
             if (transaction is not null) await transaction.CommitAsync();
             return (ToDto(assignment), null);
         }

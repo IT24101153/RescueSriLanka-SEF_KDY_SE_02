@@ -110,7 +110,7 @@ public class ComponentDAssignmentCancellationTests
     }
 
     [Fact]
-    public async Task HelpRequestRowIsUnchangedAndReturnsToEligibleQueue()
+    public async Task CancellationReturnsVerifiedHelpRequestToPendingQueue()
     {
         using var factory = new ComponentDApiFactory(); var fixture = await factory.Seed();
         using var scope = factory.Services.CreateScope();
@@ -122,10 +122,12 @@ public class ComponentDAssignmentCancellationTests
         var created = (await (await client.PostAsJsonAsync("/api/assignments", fixture.Proposal() with { IncidentId = null, HelpRequestId = help.Id })).Content.ReadFromJsonAsync<AssignmentDto>(JsonOptions))!;
         var revised = (await (await client.PostAsJsonAsync($"/api/assignments/{created.Id}/revise", new ReviseAssignmentDto(fixture.TeamId, fixture.VehicleId, SkillType.FirstAid, 1, "Updated notes"))).Content.ReadFromJsonAsync<AssignmentDto>(JsonOptions))!;
         Assert.Equal(help.Id, revised.HelpRequestId); Assert.Null(revised.IncidentId); Assert.Equal(2, revised.PlanVersion);
+        var assigned = await shared.HelpRequests.AsNoTracking().SingleAsync();
         (await client.PostAsync($"/api/assignments/{created.Id}/cancel", null)).EnsureSuccessStatusCode();
         Assert.Single((await client.GetFromJsonAsync<List<RescueHelpRequestDto>>("/api/rescue/help-requests"))!);
         var unchanged = await shared.HelpRequests.AsNoTracking().SingleAsync();
-        Assert.Equal(help.Status, unchanged.Status); Assert.Equal(help.UpdatedAt, unchanged.UpdatedAt); Assert.Empty(shared.RequestStatusHistories);
+        Assert.Equal(HelpRequestStatus.Pending, unchanged.Status); Assert.True(unchanged.UpdatedAt > assigned.UpdatedAt); Assert.Equal(2, shared.RequestStatusHistories.Count());
+        Assert.Equal(VerificationStatus.Verified, unchanged.VerificationStatus);
     }
 
     [Fact]

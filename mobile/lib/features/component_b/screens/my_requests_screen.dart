@@ -4,6 +4,7 @@ import '../../../shared/core/theme.dart';
 import '../../../shared/widgets/app_ui.dart';
 import '../help_style.dart';
 import '../services/help_request_service.dart';
+import '../widgets/estimated_people_field.dart';
 
 class MyRequestsScreen extends StatefulWidget {
   const MyRequestsScreen({super.key});
@@ -155,6 +156,7 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
                         height: 1.35,
                       ),
                     ),
+                    Text('People affected: ${request.estimatedPeopleCount ?? 'Not specified'}'),
                     if (aiPriority != null) ...[
                       const SizedBox(height: 9),
                       _AiPriorityBadge(priority: aiPriority),
@@ -277,11 +279,14 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
   Future<void> _editRequest() async {
     var type = widget.request.type;
     final description = TextEditingController(text: widget.request.description);
+    final people = TextEditingController(text: widget.request.estimatedPeopleCount?.toString() ?? '');
+    final peopleFormKey = GlobalKey<FormState>();
     final changed = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Edit request'),
+          scrollable: true,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -305,6 +310,7 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
                 maxLength: 2000,
                 decoration: const InputDecoration(labelText: 'Description'),
               ),
+              Form(key: peopleFormKey, child: EstimatedPeopleField(controller: people)),
             ],
           ),
           actions: [
@@ -315,10 +321,12 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
             FilledButton(
               onPressed: () async {
                 if (description.text.trim().length < 5) return;
+                if (!peopleFormKey.currentState!.validate()) return;
                 final saved = await HelpRequestService.update(
                   request: widget.request,
                   type: type,
                   description: description.text.trim(),
+                  estimatedPeopleCount: int.parse(people.text),
                 );
                 if (context.mounted) Navigator.pop(context, saved);
               },
@@ -329,6 +337,7 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
       ),
     );
     description.dispose();
+    people.dispose();
     if (!mounted || changed != true) return;
     Navigator.pop(context, true);
   }
@@ -434,6 +443,7 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
                     request.description,
                     style: const TextStyle(fontSize: 14.5, height: 1.45),
                   ),
+                  Text('People affected: ${request.estimatedPeopleCount ?? 'Not specified'}'),
                   if (request.verificationNotes != null &&
                       request.verificationNotes!.isNotEmpty) ...[
                     const SizedBox(height: 10),

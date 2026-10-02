@@ -10,6 +10,7 @@ import '../../../shared/widgets/app_ui.dart';
 import '../help_style.dart';
 import '../services/help_request_service.dart';
 import '../services/cloudinary_service.dart';
+import '../widgets/estimated_people_field.dart';
 
 class SubmitRequestScreen extends StatefulWidget {
   const SubmitRequestScreen({super.key});
@@ -20,6 +21,8 @@ class SubmitRequestScreen extends StatefulWidget {
 
 class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
   final _descriptionController = TextEditingController();
+  final _peopleController = TextEditingController();
+  final _peopleFormKey = GlobalKey<FormState>();
   final _picker = ImagePicker();
 
   int _selectedType = 2; // default to Medical
@@ -39,6 +42,7 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
   @override
   void dispose() {
     _descriptionController.dispose();
+    _peopleController.dispose();
     super.dispose();
   }
 
@@ -151,6 +155,8 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
       setState(() => _error = 'Please describe what help you need.');
       return;
     }
+    if (!_peopleFormKey.currentState!.validate()) return;
+    final estimatedPeopleCount = int.parse(_peopleController.text);
     if (_latitude == null || _longitude == null) {
       setState(() => _error = 'Please share your location first.');
       return;
@@ -181,6 +187,7 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
     final result = await HelpRequestService.submit(
       type: _selectedType,
       description: _descriptionController.text.trim(),
+      estimatedPeopleCount: estimatedPeopleCount,
       latitude: _latitude!,
       longitude: _longitude!,
       imageUrl: imageUrl,
@@ -366,6 +373,12 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
                       ),
                     ],
 
+                    const SizedBox(height: 24),
+                    const AppSectionTitle('Approximate number of people affected'),
+                    Form(
+                      key: _peopleFormKey,
+                      child: EstimatedPeopleField(controller: _peopleController),
+                    ),
                     const SizedBox(height: 24),
                     const AppSectionTitle('Photo (optional)'),
                     if (_selectedImagePath != null)
