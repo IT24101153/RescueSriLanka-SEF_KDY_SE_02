@@ -13,7 +13,7 @@ public class ComponentBServiceTests
     public async Task UpdateStatusAsync_AllowsTheDefinedLifecycleAndRecordsHistory()
     {
         await using var context = CreateContext();
-        var request = new HelpRequest { CitizenId = Guid.NewGuid(), Type = HelpRequestType.Medical };
+        var request = new HelpRequest { CitizenId = Guid.NewGuid(), Type = HelpRequestType.Medical, EstimatedPeopleCount = 12 };
         context.HelpRequests.Add(request);
         await context.SaveChangesAsync();
         var service = new HelpRequestService(context);
@@ -27,6 +27,7 @@ public class ComponentBServiceTests
             new UpdateHelpRequestStatusDto { NewStatus = HelpRequestStatus.Resolved });
 
         Assert.Equal(HelpRequestStatus.Resolved, result!.Status);
+        Assert.Equal(12, result.EstimatedPeopleCount);
         Assert.Equal(3, await context.RequestStatusHistories.CountAsync());
     }
 
@@ -187,6 +188,7 @@ public class ComponentBServiceTests
             {
                 Type = HelpRequestType.Water,
                 Description = "Water is needed at this location.",
+                EstimatedPeopleCount = 4,
                 Latitude = 6.9271,
                 Longitude = 79.8612,
                 RelatedIncidentId = Guid.NewGuid()
@@ -217,12 +219,15 @@ public class ComponentBServiceTests
             {
                 Type = HelpRequestType.Medical,
                 Description = "Medical assistance is urgently needed.",
+                EstimatedPeopleCount = 4,
                 Latitude = 7.2906,
                 Longitude = 80.6337
             });
 
         Assert.Equal(HelpRequestType.Medical, updated!.Type);
         Assert.Equal(80, updated.UrgencyScore);
+        Assert.Equal(4, updated.EstimatedPeopleCount);
+        Assert.Equal(4, (await context.HelpRequests.AsNoTracking().SingleAsync()).EstimatedPeopleCount);
 
         await service.UpdateStatusAsync(request.Id, Guid.NewGuid(),
             new UpdateHelpRequestStatusDto { NewStatus = HelpRequestStatus.Assigned });

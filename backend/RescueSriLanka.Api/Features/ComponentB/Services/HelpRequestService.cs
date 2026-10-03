@@ -27,6 +27,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
 
         public async Task<HelpRequestResponseDto> CreateAsync(Guid citizenId, CreateHelpRequestDto dto)
         {
+            ValidatePeopleCount(dto.EstimatedPeopleCount);
             await EnsureRelatedIncidentExistsAsync(dto.RelatedIncidentId);
 
             var entity = new HelpRequest
@@ -34,6 +35,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 CitizenId = citizenId,
                 Type = dto.Type,
                 Description = dto.Description,
+                EstimatedPeopleCount = dto.EstimatedPeopleCount,
                 Latitude = dto.Latitude,
                 Longitude = dto.Longitude,
                 RelatedIncidentId = dto.RelatedIncidentId,
@@ -103,7 +105,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             }
 
             await EnsureRelatedIncidentExistsAsync(dto.RelatedIncidentId);
+            ValidatePeopleCount(dto.EstimatedPeopleCount);
             entity.Type = dto.Type;
+            entity.EstimatedPeopleCount = dto.EstimatedPeopleCount;
             entity.Description = dto.Description;
             entity.Latitude = dto.Latitude;
             entity.Longitude = dto.Longitude;
@@ -120,25 +124,8 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             var entity = await _db.HelpRequests.FindAsync(id);
             if (entity is null) return null;
 
-            if (!IsAllowedStatusTransition(entity.Status, dto.NewStatus))
-            {
-                throw new InvalidOperationException(
-                    $"Cannot change a help request from {entity.Status} to {dto.NewStatus}.");
-            }
-
-            var oldStatus = entity.Status;
-            entity.Status = dto.NewStatus;
-            entity.UpdatedAt = DateTime.UtcNow;
-
-            // Business rule: every status change is recorded in history
-            _db.RequestStatusHistories.Add(new RequestStatusHistory
-            {
-                HelpRequestId = entity.Id,
-                OldStatus = oldStatus,
-                NewStatus = dto.NewStatus,
-                ChangedByUserId = changedByUserId,
-                Notes = dto.Notes
-            });
+            _db.RequestStatusHistories.Add(HelpRequestStatusTransition.Apply(
+                entity, dto.NewStatus, changedByUserId, dto.Notes));
 
             await _db.SaveChangesAsync();
             return ToDto(entity);
@@ -233,18 +220,11 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             }
         }
 
-        private static bool IsAllowedStatusTransition(
-            HelpRequestStatus current,
-            HelpRequestStatus next) => (current, next) switch
+        private static void ValidatePeopleCount(int? count)
         {
-            (HelpRequestStatus.Pending, HelpRequestStatus.Assigned) => true,
-            (HelpRequestStatus.Pending, HelpRequestStatus.Cancelled) => true,
-            (HelpRequestStatus.Assigned, HelpRequestStatus.InProgress) => true,
-            (HelpRequestStatus.Assigned, HelpRequestStatus.Cancelled) => true,
-            (HelpRequestStatus.InProgress, HelpRequestStatus.Resolved) => true,
-            (HelpRequestStatus.InProgress, HelpRequestStatus.Cancelled) => true,
-            _ => false
-        };
+            if (count is null or < 1)
+                throw new ArgumentException("Approximate number of people affected must be at least 1.", nameof(count));
+        }
 
         private static HelpRequestResponseDto ToDto(HelpRequest entity, string? district = null) => new()
         {
@@ -252,6 +232,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             CitizenId = entity.CitizenId,
             Type = entity.Type,
             Description = entity.Description,
+            EstimatedPeopleCount = entity.EstimatedPeopleCount,
             Latitude = entity.Latitude,
             Longitude = entity.Longitude,
             UrgencyScore = entity.UrgencyScore,

@@ -57,7 +57,7 @@ public class ComponentDSafetyAgentGoldenTests
         db.AddRange(team, member, vehicle);
         await db.SaveChangesAsync();
         // Start with a proposal accepted by the real service and an existing isolated incident.
-        var (created, error) = await new AssignmentService(db, new IncidentReadService(shared), new HelpRequestCandidateService(db, new HelpRequestReadService(shared))).CreateAsync(
+        var (created, error) = await new AssignmentService(db, new IncidentReadService(shared), new HelpRequestCandidateService(db, new HelpRequestReadService(shared)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(shared)).CreateAsync(
             new(incident.Id, null, team.Id, vehicle.Id, SkillType.FirstAid, 2, null));
         Assert.Null(error);
         Assert.NotNull(created);
@@ -189,7 +189,7 @@ public class ComponentDSafetyAgentGoldenTests
             var beforeDecision = await OperationalSnapshot(db);
             var historicalJson = workflow.FinalOutcomeJson;
             db.ChangeTracker.Clear();
-            var decision = await new DispatchService(db, new SafetyValidationAgent(db)).DecideAsync(
+            var decision = await new DispatchService(db, new SafetyValidationAgent(db), new RejectHelpRequestResponseStatusService()).DecideAsync(
                 assignment.Id, "d1000000-0000-4000-8000-000000000099",
                 new(result.WorkflowId!.Value, initialVersion, CoordinatorDecision.APPROVE, "Golden live revalidation"));
             Assert.False(decision.Success);

@@ -18,6 +18,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
         public string Description { get; set; } = string.Empty;
         [Range(-90, 90)]
         public double Latitude { get; set; }
+        [Required(ErrorMessage = "Please enter the number of people affected.")]
+        [Range(1, int.MaxValue, ErrorMessage = "Approximate number of people affected must be at least 1.")]
+        public int? EstimatedPeopleCount { get; set; }
         [Range(-180, 180)]
         public double Longitude { get; set; }
         public Guid? RelatedIncidentId { get; set; }
@@ -51,6 +54,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
     // What the API returns to clients (React + Flutter)
     public class HelpRequestResponseDto
     {
+        public int? EstimatedPeopleCount { get; set; }
         public Guid Id { get; set; }
         public Guid CitizenId { get; set; }
         [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestType>))]

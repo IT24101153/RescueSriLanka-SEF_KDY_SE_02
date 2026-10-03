@@ -14,7 +14,7 @@ public sealed class HelpRequestCoordinationTests : IDisposable
     private readonly ComponentDDbContext db = TestDbFactory.Create();
     private readonly HelpRequest request = new() { Type = HelpRequestType.Rescue, Description = "Need transport", Latitude = 7, Longitude = 80, VerificationStatus = VerificationStatus.Verified };
     private HelpRequestCandidateService Candidates => new(db, new HelpRequestReadService(shared));
-    private AssignmentService Assignments => new(db, new IncidentReadService(shared), Candidates);
+    private AssignmentService Assignments => new(db, new IncidentReadService(shared), Candidates, new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(shared));
 
     public HelpRequestCoordinationTests() { shared.HelpRequests.Add(request); shared.SaveChanges(); }
     public void Dispose() { shared.Dispose(); db.Dispose(); }
@@ -45,8 +45,8 @@ public sealed class HelpRequestCoordinationTests : IDisposable
         Assert.Equal(eligible, assignment is not null);
         if (eligible) { Assert.Null(error); Assert.Null(assignment!.IncidentId); Assert.Equal(request.Id, assignment.HelpRequestId); }
         else { Assert.Contains("unavailable", error); Assert.Empty(db.Assignments); }
-        Assert.Equal(status, (await shared.HelpRequests.AsNoTracking().SingleAsync()).Status);
-        Assert.Empty(shared.RequestStatusHistories);
+        Assert.Equal(eligible ? HelpRequestStatus.Assigned : status, (await shared.HelpRequests.AsNoTracking().SingleAsync()).Status);
+        Assert.Equal(eligible ? 1 : 0, shared.RequestStatusHistories.Count());
     }
 
     [Fact]

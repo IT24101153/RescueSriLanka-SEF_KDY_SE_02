@@ -1,5 +1,6 @@
 // Mirrors RescueSriLanka.Api's Component D DTOs and enums.
 export interface RescueHelpRequest {
+  estimatedPeopleCount?: number | null;
   id: string; type: string; description: string; latitude: number | null; longitude: number | null;
   urgencyScore: number; status: string; verificationStatus: string; createdAt: string;
 }

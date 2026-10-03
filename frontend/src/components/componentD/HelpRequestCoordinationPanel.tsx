@@ -18,6 +18,7 @@ export default function HelpRequestCoordinationPanel({ refreshVersion, onCreated
   const [requestId, setRequestId] = useState('')
   const [skill, setSkill] = useState<SkillType | ''>('')
   const [capacity, setCapacity] = useState('')
+  const [capacityConfirmed, setCapacityConfirmed] = useState(false)
   const [notes, setNotes] = useState('')
   const [result, setResult] = useState<RescueRecommendation | null>(null)
   const [selectedKey, setSelectedKey] = useState('')
@@ -45,7 +46,7 @@ export default function HelpRequestCoordinationPanel({ refreshVersion, onCreated
   const validLocation = request && hasBaseLocation({ baseLatitude: request.latitude, baseLongitude: request.longitude })
   function invalidate() { generation.current++; setResult(null); setSelectedKey(''); setError(null); setBusy(null) }
   async function recommend() {
-    if (!request || !skill || !validDemand || !validLocation) return
+    if (!request || !skill || !validDemand || !capacityConfirmed || !validLocation) return
     const current = ++generation.current
     setBusy('recommend'); setError(null); setResult(null); setSelectedKey('')
     try { const next = await recommendRescueTeam(request.id, skill, demand); if (generation.current === current) setResult(next) }
@@ -53,7 +54,7 @@ export default function HelpRequestCoordinationPanel({ refreshVersion, onCreated
     finally { if (generation.current === current) setBusy(null) }
   }
   async function create() {
-    if (!request || !selected || !skill || !validDemand || busy || creating.current || loading || loadError) return
+    if (!request || !selected || !skill || !validDemand || !capacityConfirmed || busy || creating.current || loading || loadError) return
     creating.current = true; onCreating?.(true); setBusy('create'); setError(null)
     try {
       const assignment = await createAssignment({ helpRequestId: request.id, incidentId: null,
@@ -69,7 +70,7 @@ export default function HelpRequestCoordinationPanel({ refreshVersion, onCreated
       {loadError && <div role="alert">{loadError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Retry Help Requests</button></div>}
       {!loading && !loadError && requests.length === 0 && <p>No eligible Help Requests are currently available.</p>}
       {!loading && !loadError && requests.map((item) => <button type="button" className="help-request-card" key={item.id} aria-pressed={item.id === requestId} disabled={busy === 'create'}
-        onClick={() => { invalidate(); setRequestId(item.id); setSkill(''); setCapacity(''); setNotes('') }}>
+        onClick={() => { invalidate(); setRequestId(item.id); setSkill(''); setCapacity(item.estimatedPeopleCount?.toString() ?? ''); setCapacityConfirmed(false); setNotes('') }}>
         <strong>{item.type}</strong><span>{item.description}</span><span>Urgency: {item.urgencyScore} · {item.verificationStatus} · {item.status}</span>
         <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
         <span>{hasBaseLocation({ baseLatitude: item.latitude, baseLongitude: item.longitude }) ? 'Location available — select to view map' : 'Location unavailable'}</span>
@@ -77,14 +78,17 @@ export default function HelpRequestCoordinationPanel({ refreshVersion, onCreated
     </section>
     {request && !loading && !loadError && <section className="panel"><h2>Help Request response plan</h2>
       <p>{request.type}: {request.description}</p>
+      <p>Approximate people affected: {request.estimatedPeopleCount ?? 'Not specified'}</p>
       <HelpRequestResponseMap request={request} candidates={result?.candidates ?? []} recommendedTeamId={result?.recommendedCandidate?.teamId} selectedTeamId={selected?.teamId} />
       <form className="assignment-form" onSubmit={(event) => { event.preventDefault(); void create() }}>
         <p>The Rescue Coordinator selects the required skill and confirms transport demand. Total beneficiaries are not assumed to require transport.</p>
         <label>Required skill<select required value={skill} disabled={busy === 'create'} onChange={(event) => { invalidate(); setSkill(event.target.value as SkillType | '') }}>
           <option value="">Select required skill</option>{skills.map((value) => <option key={value}>{value}</option>)}
         </select></label>
-        <label>People/patients requiring transport<input required type="number" min="1" max="2147483647" step="1" value={capacity} disabled={busy === 'create'} onChange={(event) => { invalidate(); setCapacity(event.target.value) }} /></label>
-        <button type="button" className="btn" disabled={Boolean(busy) || !skill || !validDemand || !validLocation} onClick={() => void recommend()}>{busy === 'recommend' ? 'Finding eligible teams…' : 'Recommend rescue team'}</button>
+        <label>People/patients requiring transport<input required type="number" min="1" max="2147483647" step="1" value={capacity} disabled={busy === 'create'} onChange={(event) => { invalidate(); setCapacity(event.target.value); setCapacityConfirmed(false) }} /></label>
+        {request.estimatedPeopleCount != null && <p>Prefilled from the citizen's estimated affected people. Confirm the number requiring transport.</p>}
+        <label><input type="checkbox" checked={capacityConfirmed} disabled={busy === 'create' || !validDemand} onChange={(event) => { invalidate(); setCapacityConfirmed(event.target.checked) }} />I confirm the number requiring transport</label>
+        <button type="button" className="btn" disabled={Boolean(busy) || !skill || !validDemand || !capacityConfirmed || !validLocation} onClick={() => void recommend()}>{busy === 'recommend' ? 'Finding eligible teams…' : 'Recommend rescue team'}</button>
         {error && <p className="alert" role="alert">{error}</p>}
         {result && <section aria-label="Rescue team recommendation">
           <h3>{result.aiAvailable ? 'AI recommendation' : 'Deterministic recommendation'}</h3>
@@ -101,7 +105,7 @@ export default function HelpRequestCoordinationPanel({ refreshVersion, onCreated
         {selected && <section aria-label="Selected response resources"><h3>Selected team: {selected.teamName}</h3><CandidateFacts candidate={selected} /></section>}
         <label>Notes<input value={notes} maxLength={500} disabled={busy === 'create'} onChange={(event) => setNotes(event.target.value)} /></label>
         <p>AI recommends → Rescue Coordinator decides → backend revalidates → transactional dispatch.</p>
-        <button type="submit" className="btn" disabled={Boolean(busy) || !selected || !validDemand || !skill}>{busy === 'create' ? 'Creating response plan…' : 'Create response plan'}</button>
+        <button type="submit" className="btn" disabled={Boolean(busy) || !selected || !validDemand || !capacityConfirmed || !skill}>{busy === 'create' ? 'Creating response plan…' : 'Create response plan'}</button>
       </form>
     </section>}
   </div>

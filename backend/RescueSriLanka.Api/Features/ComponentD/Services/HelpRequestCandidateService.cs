@@ -20,14 +20,17 @@ public sealed class HelpRequestCandidateService(ComponentDDbContext db, IHelpReq
     {
         if (!Enum.IsDefined(skill) || capacity < 1)
             throw new ArgumentException("Select a required skill and enter a positive people/patient transport demand.");
-        var request = await requests.GetEligibleAsync(id, ct)
+        var active = db.Assignments.AsNoTracking().Active().Where(a => a.Id != excludedAssignmentId);
+        if (await active.AnyAsync(a => a.HelpRequestId == id, ct))
+            throw new ArgumentException("Help Request already has current response work. Refresh the queue.");
+        var revisingLinkedPlan = excludedAssignmentId.HasValue && await db.Assignments.AsNoTracking()
+            .AnyAsync(a => a.Id == excludedAssignmentId && a.HelpRequestId == id, ct);
+        var request = await (revisingLinkedPlan
+            ? requests.GetForExistingPlanAsync(id, ct) : requests.GetEligibleAsync(id, ct))
             ?? throw new ArgumentException("Help Request is unavailable or no longer Pending and Verified. Refresh the queue.");
         if (!ValidCoordinates(request.Latitude, request.Longitude))
             throw new ArgumentException("Help Request location is missing or invalid. A valid location is required for team selection.");
 
-        var active = db.Assignments.AsNoTracking().Active().Where(a => a.Id != excludedAssignmentId);
-        if (await active.AnyAsync(a => a.HelpRequestId == id, ct))
-            throw new ArgumentException("Help Request already has current response work. Refresh the queue.");
         var occupiedTeams = await active.Select(a => a.RescueTeamId).ToListAsync(ct);
         var occupiedVehicles = await active.Where(a => a.VehicleId != null).Select(a => a.VehicleId!.Value).ToListAsync(ct);
         var teams = await db.RescueTeams.AsNoTracking().Include(t => t.Members).Include(t => t.Vehicles)

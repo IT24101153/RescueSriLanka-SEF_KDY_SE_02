@@ -31,7 +31,7 @@ public class AssignmentServiceTests : IDisposable
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
         var request = CreateDto(team.Id, vehicle.Id, SkillType.FirstAid) with { IncidentId = Guid.NewGuid() };
-        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb))).CreateAsync(request);
+        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb)).CreateAsync(request);
         Assert.Null(assignment);
         Assert.Contains("no longer exists", error);
         Assert.Empty(db.Assignments);
@@ -48,7 +48,7 @@ public class AssignmentServiceTests : IDisposable
         _incident.IsActive = active;
         _incident.Status = status;
         await _incidentDb.SaveChangesAsync();
-        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)))
+        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb))
             .CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid));
         Assert.Null(assignment);
         Assert.Contains("no longer active", error);
@@ -65,7 +65,7 @@ public class AssignmentServiceTests : IDisposable
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
         _incident.Status = status;
         await _incidentDb.SaveChangesAsync();
-        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)));
+        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb));
         var (created, createError) = await service.CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid));
         Assert.Null(createError);
         Assert.Equal(_incident.Id, created!.IncidentId);
@@ -80,7 +80,7 @@ public class AssignmentServiceTests : IDisposable
     {
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
-        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)));
+        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb));
         var created = (await service.CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid))).Assignment!;
         _incident.IsActive = false;
         await _incidentDb.SaveChangesAsync();
@@ -108,7 +108,7 @@ public class AssignmentServiceTests : IDisposable
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
 
-        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb))).CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid));
+        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb)).CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid));
 
         Assert.Null(error);
         Assert.NotNull(assignment);
@@ -125,7 +125,7 @@ public class AssignmentServiceTests : IDisposable
         var (teamA, _) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
         var (_, vehicleB) = await AddTeamAsync(db, "Bravo", SkillType.FirstAid);
 
-        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb))).CreateAsync(CreateDto(teamA.Id, vehicleB.Id, SkillType.FirstAid));
+        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb)).CreateAsync(CreateDto(teamA.Id, vehicleB.Id, SkillType.FirstAid));
 
         Assert.Null(assignment);
         Assert.Contains("belong", error);
@@ -137,7 +137,7 @@ public class AssignmentServiceTests : IDisposable
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid, vehicleStatus: VehicleStatus.UnderMaintenance);
 
-        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb))).CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid));
+        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb)).CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid));
 
         Assert.Null(assignment);
         Assert.Contains("Vehicle must be available", error);
@@ -149,7 +149,7 @@ public class AssignmentServiceTests : IDisposable
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid, teamStatus: TeamStatus.OnMission);
 
-        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb))).CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid));
+        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb)).CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid));
 
         Assert.Null(assignment);
         Assert.Contains("team must be available", error, StringComparison.OrdinalIgnoreCase);
@@ -161,7 +161,7 @@ public class AssignmentServiceTests : IDisposable
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
 
-        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb))).CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid, capacity: 0));
+        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb)).CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid, capacity: 0));
 
         Assert.Null(assignment);
         Assert.Contains("greater than zero", error);
@@ -173,7 +173,7 @@ public class AssignmentServiceTests : IDisposable
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
 
-        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb))).CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.Paramedic));
+        var (assignment, error) = await new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb)).CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.Paramedic));
 
         Assert.Null(assignment);
         Assert.Contains("required skill", error);
@@ -184,7 +184,7 @@ public class AssignmentServiceTests : IDisposable
     {
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
-        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)));
+        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb));
         Assert.NotNull((await service.CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid))).Assignment);
 
         var (assignment, error) = await service.CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid));
@@ -209,7 +209,7 @@ public class AssignmentServiceTests : IDisposable
         db.Vehicles.Add(vehicleTwo);
         await db.SaveChangesAsync();
 
-        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)));
+        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb));
         Assert.NotNull((await service.CreateAsync(CreateDto(team.Id, vehicleOne.Id, SkillType.FirstAid))).Assignment);
 
         var (assignment, error) = await service.CreateAsync(CreateDto(team.Id, vehicleTwo.Id, SkillType.FirstAid));
@@ -224,7 +224,7 @@ public class AssignmentServiceTests : IDisposable
         using var db = TestDbFactory.Create();
         var (firstTeam, firstVehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
         var (secondTeam, secondVehicle) = await AddTeamAsync(db, "Bravo", SkillType.FirstAid);
-        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)));
+        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb));
         var created = (await service.CreateAsync(CreateDto(firstTeam.Id, firstVehicle.Id, SkillType.FirstAid))).Assignment!;
 
         var (revised, error) = await service.ReviseAsync(created.Id, ReviseDto(secondTeam.Id, secondVehicle.Id, SkillType.FirstAid));
@@ -240,7 +240,7 @@ public class AssignmentServiceTests : IDisposable
         using var db = TestDbFactory.Create();
         var (team, vehicleOne) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
         var vehicleTwo = await AddVehicleAsync(db, team.Id, "Alpha-2");
-        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)));
+        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb));
         var created = (await service.CreateAsync(CreateDto(team.Id, vehicleOne.Id, SkillType.FirstAid))).Assignment!;
 
         var (revised, error) = await service.ReviseAsync(created.Id, ReviseDto(team.Id, vehicleTwo.Id, SkillType.FirstAid));
@@ -255,7 +255,7 @@ public class AssignmentServiceTests : IDisposable
     {
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid, SkillType.Paramedic);
-        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)));
+        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb));
         var created = (await service.CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid))).Assignment!;
 
         var (revised, error) = await service.ReviseAsync(created.Id, ReviseDto(team.Id, vehicle.Id, SkillType.Paramedic));
@@ -270,7 +270,7 @@ public class AssignmentServiceTests : IDisposable
     {
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid, capacity: 4);
-        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)));
+        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb));
         var created = (await service.CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid))).Assignment!;
 
         var (revised, error) = await service.ReviseAsync(created.Id, ReviseDto(team.Id, vehicle.Id, SkillType.FirstAid, capacity: 2));
@@ -292,7 +292,7 @@ public class AssignmentServiceTests : IDisposable
     {
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "Alpha", SkillType.FirstAid);
-        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)));
+        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb));
         var created = (await service.CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid))).Assignment!;
         var entity = await db.Assignments.FindAsync(created.Id);
         entity!.Status = AssignmentStatus.Approved;
@@ -312,7 +312,7 @@ public class AssignmentServiceTests : IDisposable
     {
         using var db = TestDbFactory.Create();
         var (team, vehicle) = await AddTeamAsync(db, "History", SkillType.FirstAid);
-        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)));
+        var service = new AssignmentService(db, new IncidentReadService(_incidentDb), new HelpRequestCandidateService(db, new HelpRequestReadService(_incidentDb)), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestResponseStatusService(_incidentDb));
         var created = (await service.CreateAsync(CreateDto(team.Id, vehicle.Id, SkillType.FirstAid))).Assignment!;
         var entity = await db.Assignments.FindAsync(created.Id);
         entity!.Status = AssignmentStatus.Rejected;
