@@ -3,6 +3,7 @@ export interface RescueHelpRequest {
   estimatedPeopleCount?: number | null;
   id: string; type: string; description: string; latitude: number | null; longitude: number | null;
   urgencyScore: number; status: string; verificationStatus: string; createdAt: string;
+  citizenName?: string | null; citizenPhoneNumber?: string | null;
 }
 export interface RescueCandidate {
   teamId: string; teamName: string; vehicleId: string; vehicleType: VehicleType;

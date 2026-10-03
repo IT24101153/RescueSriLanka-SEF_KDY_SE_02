@@ -115,7 +115,7 @@ public class ComponentDAssignmentCancellationTests
         using var factory = new ComponentDApiFactory(); var fixture = await factory.Seed();
         using var scope = factory.Services.CreateScope();
         var shared = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var help = new HelpRequest { Latitude = 7, Longitude = 80, Description = "Rescue", VerificationStatus = VerificationStatus.Verified };
+        var help = new HelpRequest { Type = HelpRequestType.Rescue, Latitude = 7, Longitude = 80, Description = "Rescue", VerificationStatus = VerificationStatus.Verified };
         shared.HelpRequests.Add(help); await shared.SaveChangesAsync();
         await factory.InDb(async db => { var team = await db.RescueTeams.SingleAsync(); team.BaseLatitude = 7.01; team.BaseLongitude = 80; await db.SaveChangesAsync(); return true; });
         using var client = factory.Client();

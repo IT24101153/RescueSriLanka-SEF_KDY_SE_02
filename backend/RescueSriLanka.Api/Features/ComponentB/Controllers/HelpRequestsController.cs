@@ -144,6 +144,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         }
 
         // Returns an existing workflow result only; it never invokes Gemini from the list screen.
+        // Also carries the workflow id/status so the review screen can offer an
+        // Approve/Reject decision on it via POST /api/agentworkflows/{id}/decision
+        // without a second round-trip to look the workflow up by help-request id.
         [HttpGet("{id}/ai-priority")]
         [Authorize]
         public async Task<ActionResult<AiPriorityResponseDto>> GetAiPriority(Guid id)
@@ -152,16 +155,29 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             if (request is null) return NotFound();
             if (!CanAccess(request)) return Forbid();
 
-            var step = await _db.AgentWorkflows
+            var workflow = await _db.AgentWorkflows
+                .Include(w => w.Steps)
                 .Where(w => w.ObjectiveType == PlannerWorkflowObjectiveType.HelpRequest && w.ObjectiveId == id)
                 .OrderByDescending(w => w.CreatedAt)
-                .SelectMany(w => w.Steps)
-                .Where(s => s.TargetAgent == PlannerAgentType.IncidentAnalysisAgent && s.ToolResultJson != null)
-                .OrderByDescending(s => s.CompletedAt)
                 .FirstOrDefaultAsync();
 
-            if (step?.ToolResultJson is null)
+            if (workflow is null)
                 return Ok(new AiPriorityResponseDto { Priority = "Analysis pending", AiAnalysisAvailable = false });
+
+            var response = new AiPriorityResponseDto
+            {
+                Priority = "Analysis pending",
+                AiAnalysisAvailable = false,
+                WorkflowId = workflow.Id,
+                WorkflowStatus = workflow.Status
+            };
+
+            var step = workflow.Steps
+                .Where(s => s.TargetAgent == PlannerAgentType.IncidentAnalysisAgent && s.ToolResultJson != null)
+                .OrderByDescending(s => s.CompletedAt)
+                .FirstOrDefault();
+
+            if (step?.ToolResultJson is null) return Ok(response);
 
             try
             {
@@ -169,15 +185,16 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
                 var root = document.RootElement;
                 var priority = root.TryGetProperty("severity", out var severity) ? severity.GetString() : null;
                 var available = root.TryGetProperty("aiAnalysisAvailable", out var aiAvailable) && aiAvailable.GetBoolean();
-                return Ok(new AiPriorityResponseDto
-                {
-                    Priority = string.IsNullOrWhiteSpace(priority) ? "Analysis pending" : priority,
-                    AiAnalysisAvailable = available
-                });
+                response.Priority = string.IsNullOrWhiteSpace(priority) ? "Analysis pending" : priority;
+                response.AiAnalysisAvailable = available;
+                response.Reasoning = available && root.TryGetProperty("aiReasoning", out var reasoning) ? reasoning.GetString() : null;
+                response.SuggestedAction = available && root.TryGetProperty("aiSuggestedAction", out var suggestedAction) ? suggestedAction.GetString() : null;
+                response.CredibilitySignal = available && root.TryGetProperty("aiCredibilitySignal", out var credibility) ? credibility.GetString() : null;
+                return Ok(response);
             }
             catch (JsonException)
             {
-                return Ok(new AiPriorityResponseDto { Priority = "Analysis pending", AiAnalysisAvailable = false });
+                return Ok(response);
             }
         }
 

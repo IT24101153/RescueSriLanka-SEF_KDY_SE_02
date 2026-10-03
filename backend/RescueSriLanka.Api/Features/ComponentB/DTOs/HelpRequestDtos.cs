@@ -57,6 +57,8 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
         public int? EstimatedPeopleCount { get; set; }
         public Guid Id { get; set; }
         public Guid CitizenId { get; set; }
+        public string? CitizenName { get; set; }
+        public string? CitizenPhoneNumber { get; set; }
         [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestType>))]
         [EnumDataType(typeof(HelpRequestType))]
         public HelpRequestType Type { get; set; }
@@ -86,11 +88,22 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
         public DateTime ChangedAt { get; set; }
     }
 
-    // A compact, citizen-safe summary of the most recent incident-analysis step.
+    // A compact summary of the most recent Planner Agent run for this request —
+    // the rule-based priority always, plus Gemini's reasoning/credibility/
+    // suggested action when that part of the run succeeded. Read-only: never
+    // triggers a new Gemini call.
     public class AiPriorityResponseDto
     {
         public string Priority { get; set; } = "Pending";
         public bool AiAnalysisAvailable { get; set; }
+        public string? Reasoning { get; set; }
+        public string? SuggestedAction { get; set; }
+        public string? CredibilitySignal { get; set; }
+
+        /// <summary>The workflow a decision would apply to — null until the
+        /// Planner Agent has run at least once for this request.</summary>
+        public Guid? WorkflowId { get; set; }
+        public PlannerWorkflowStatus? WorkflowStatus { get; set; }
     }
 
     public class AnalyzeRequestDraftDto

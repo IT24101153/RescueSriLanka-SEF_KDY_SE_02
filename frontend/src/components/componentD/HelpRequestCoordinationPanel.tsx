@@ -72,12 +72,14 @@ export default function HelpRequestCoordinationPanel({ refreshVersion, onCreated
       {!loading && !loadError && requests.map((item) => <button type="button" className="help-request-card" key={item.id} aria-pressed={item.id === requestId} disabled={busy === 'create'}
         onClick={() => { invalidate(); setRequestId(item.id); setSkill(''); setCapacity(item.estimatedPeopleCount?.toString() ?? ''); setCapacityConfirmed(false); setNotes('') }}>
         <strong>{item.type}</strong><span>{item.description}</span><span>Urgency: {item.urgencyScore} · {item.verificationStatus} · {item.status}</span>
+        <span>{item.citizenName ?? 'Citizen name unavailable'}{item.citizenPhoneNumber ? ` · ${item.citizenPhoneNumber}` : ''}</span>
         <time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
         <span>{hasBaseLocation({ baseLatitude: item.latitude, baseLongitude: item.longitude }) ? 'Location available — select to view map' : 'Location unavailable'}</span>
       </button>)}
     </section>
     {request && !loading && !loadError && <section className="panel"><h2>Help Request response plan</h2>
       <p>{request.type}: {request.description}</p>
+      <p>Reported by: {request.citizenName ?? 'Unknown citizen'}{request.citizenPhoneNumber ? ` · ${request.citizenPhoneNumber}` : ''}</p>
       <p>Approximate people affected: {request.estimatedPeopleCount ?? 'Not specified'}</p>
       <HelpRequestResponseMap request={request} candidates={result?.candidates ?? []} recommendedTeamId={result?.recommendedCandidate?.teamId} selectedTeamId={selected?.teamId} />
       <form className="assignment-form" onSubmit={(event) => { event.preventDefault(); void create() }}>

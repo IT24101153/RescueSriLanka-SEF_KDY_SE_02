@@ -29,6 +29,7 @@ public sealed class HelpRequestResponseStatusApiTests
         var shared = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var request = new HelpRequest
         {
+            Type = HelpRequestType.Rescue,
             CitizenId = Guid.Parse(ComponentDApiFactory.CoordinatorId), Description = "Rescue needed",
             Latitude = 7, Longitude = 80, VerificationStatus = VerificationStatus.Verified,
             UpdatedAt = DateTime.UtcNow.AddDays(-1), EstimatedPeopleCount = 2

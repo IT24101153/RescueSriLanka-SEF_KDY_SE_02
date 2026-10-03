@@ -97,6 +97,14 @@ builder.Services.AddScoped<IPlannerAgentService, PlannerAgentService>();
 builder.Services.AddScoped<IHelpRequestServiceForAgent, HelpRequestServiceForAgent>();
 builder.Services.AddHttpClient<IAiAnalysisService, GeminiAnalysisService>();
 
+// New help requests are triaged by the Planner Agent in the background — the
+// citizen filing one never waits on a model, and a manager's queue is
+// already-assessed by the time they open it.
+builder.Services.AddSingleton<HelpRequestAnalysisQueue>();
+builder.Services.AddSingleton<IHelpRequestAnalysisQueue>(
+    provider => provider.GetRequiredService<HelpRequestAnalysisQueue>());
+builder.Services.AddHostedService<HelpRequestAnalysisWorker>();
+
 // Component C — medical supplies, food/water stock and allocations.
 builder.Services.AddScoped<IResourceManagementService, ResourceManagementService>();
 builder.Services.AddScoped<IResourceAllocationAgent, ResourceAllocationAgent>();

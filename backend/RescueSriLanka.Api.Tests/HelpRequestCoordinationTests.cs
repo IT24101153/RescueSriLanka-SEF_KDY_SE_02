@@ -49,6 +49,23 @@ public sealed class HelpRequestCoordinationTests : IDisposable
         Assert.Equal(eligible ? 1 : 0, shared.RequestStatusHistories.Count());
     }
 
+    [Theory]
+    [InlineData(HelpRequestType.Water, false)]
+    [InlineData(HelpRequestType.Food, false)]
+    [InlineData(HelpRequestType.Medical, true)]
+    [InlineData(HelpRequestType.Rescue, true)]
+    [InlineData(HelpRequestType.Shelter, false)]
+    [InlineData(HelpRequestType.Other, false)]
+    public async Task QueueAndCreationOnlyAcceptMedicalOrRescueTypes(HelpRequestType type, bool eligible)
+    {
+        request.Type = type; await shared.SaveChangesAsync();
+        Assert.Equal(eligible ? 1 : 0, (await Candidates.GetQueueAsync()).Count);
+        var team = await AddTeam();
+        var (assignment, error) = await Assignments.CreateAsync(Proposal(team));
+        Assert.Equal(eligible, assignment is not null);
+        if (!eligible) Assert.Contains("unavailable", error);
+    }
+
     [Fact]
     public async Task MissingHelpRequestAndDualObjectivesAreRejected()
     {

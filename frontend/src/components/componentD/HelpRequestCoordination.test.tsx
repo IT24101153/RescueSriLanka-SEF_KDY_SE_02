@@ -44,6 +44,23 @@ function panel() {
   return { ...render(<HelpRequestCoordinationPanel refreshVersion={0} onCreated={onCreated} />), onCreated }
 }
 
+it('shows the citizen name and phone number in the queue card and the response plan, falling back when absent', async () => {
+  vi.mocked(api.getRescueHelpRequests).mockResolvedValue([
+    { ...request, citizenName: 'Nimal Perera', citizenPhoneNumber: '0771234567' },
+  ])
+  panel()
+  await screen.findByText('Nimal Perera · 0771234567')
+  await selectRequest()
+  expect(screen.getByText('Reported by: Nimal Perera · 0771234567')).toBeTruthy()
+  cleanup()
+
+  vi.mocked(api.getRescueHelpRequests).mockResolvedValue([request])
+  panel()
+  await screen.findByText('Citizen name unavailable')
+  await selectRequest()
+  expect(screen.getByText('Reported by: Unknown citizen')).toBeTruthy()
+})
+
 it('requires explicit skill and transport demand without mapping the request type or defaulting to one', async () => {
   panel(); await selectRequest()
   expect(screen.getByText('Approximate people affected: Not specified')).toBeTruthy()

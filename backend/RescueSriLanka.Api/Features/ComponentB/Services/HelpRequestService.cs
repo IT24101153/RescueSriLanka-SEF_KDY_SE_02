@@ -21,7 +21,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
         Task<HelpRequestResponseDto?> VerifyAsync(Guid id, Guid verifiedByUserId, VerifyHelpRequestDto dto);
     }
 
-    public class HelpRequestService(AppDbContext db) : IHelpRequestService
+    public class HelpRequestService(AppDbContext db, IHelpRequestAnalysisQueue analysisQueue) : IHelpRequestService
     {
         private readonly AppDbContext _db = db;
 
@@ -49,13 +49,18 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             _db.HelpRequests.Add(entity);
             await _db.SaveChangesAsync();
 
-            return ToDto(entity);
+            // Triage in the background so the citizen never waits on Gemini —
+            // by the time a manager opens this request, the Planner Agent's
+            // severity/reasoning is usually already sitting there to review.
+            analysisQueue.Enqueue(entity.Id);
+
+            return ToDto(entity, await GetIdentityAsync(entity.CitizenId));
         }
 
         public async Task<HelpRequestResponseDto?> GetByIdAsync(Guid id)
         {
             var entity = await _db.HelpRequests.FindAsync(id);
-            return entity is null ? null : ToDto(entity);
+            return entity is null ? null : ToDto(entity, await GetIdentityAsync(entity.CitizenId));
         }
 
         public async Task<List<HelpRequestResponseDto>> GetAllAsync()
@@ -66,13 +71,13 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 .ToListAsync();
 
             var citizenIds = entities.Select(r => r.CitizenId).Distinct().ToArray();
-            var districts = await _db.Users
+            var identities = await _db.Users
                 .AsNoTracking()
                 .Where(u => citizenIds.Contains(u.Id))
-                .ToDictionaryAsync(u => u.Id, u => u.District);
+                .ToDictionaryAsync(u => u.Id, u => (u.FullName, u.PhoneNumber, u.District));
 
             return [.. entities.Select(r =>
-                ToDto(r, districts.TryGetValue(r.CitizenId, out var d) ? d : null))];
+                ToDto(r, identities.TryGetValue(r.CitizenId, out var identity) ? identity : default))];
         }
 
         public async Task<List<HelpRequestResponseDto>> GetByCitizenAsync(Guid citizenId)
@@ -82,13 +87,21 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
-            var district = await _db.Users
-                .AsNoTracking()
-                .Where(u => u.Id == citizenId)
-                .Select(u => u.District)
-                .FirstOrDefaultAsync();
+            var identity = await GetIdentityAsync(citizenId);
 
-            return [.. entities.Select(r => ToDto(r, district))];
+            return [.. entities.Select(r => ToDto(r, identity))];
+        }
+
+        // Who filed the request — the Help Request Manager and the Rescue
+        // Coordinator both need this to actually contact the person, not just
+        // a CitizenId. A missing user degrades to nulls rather than failing.
+        private async Task<(string? FullName, string? PhoneNumber, string? District)> GetIdentityAsync(Guid citizenId)
+        {
+            var user = await _db.Users.AsNoTracking()
+                .Where(u => u.Id == citizenId)
+                .Select(u => new { u.FullName, u.PhoneNumber, u.District })
+                .FirstOrDefaultAsync();
+            return user is null ? default : (user.FullName, user.PhoneNumber, user.District);
         }
 
         public async Task<HelpRequestResponseDto?> UpdateAsync(Guid id, Guid citizenId, UpdateHelpRequestDto dto)
@@ -116,7 +129,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             entity.UrgencyScore = await CalculateUrgencyScoreAsync(entity);
             entity.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
-            return ToDto(entity);
+            return ToDto(entity, await GetIdentityAsync(entity.CitizenId));
         }
 
         public async Task<HelpRequestResponseDto?> UpdateStatusAsync(Guid id, Guid changedByUserId, UpdateHelpRequestStatusDto dto)
@@ -128,7 +141,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 entity, dto.NewStatus, changedByUserId, dto.Notes));
 
             await _db.SaveChangesAsync();
-            return ToDto(entity);
+            return ToDto(entity, await GetIdentityAsync(entity.CitizenId));
         }
 
         public async Task<HelpRequestResponseDto?> VerifyAsync(Guid id, Guid verifiedByUserId, VerifyHelpRequestDto dto)
@@ -165,7 +178,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             }
 
             await _db.SaveChangesAsync();
-            return ToDto(entity);
+            return ToDto(entity, await GetIdentityAsync(entity.CitizenId));
         }
 
         public async Task<List<StatusHistoryDto>> GetHistoryAsync(Guid id)
@@ -226,10 +239,13 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 throw new ArgumentException("Approximate number of people affected must be at least 1.", nameof(count));
         }
 
-        private static HelpRequestResponseDto ToDto(HelpRequest entity, string? district = null) => new()
+        private static HelpRequestResponseDto ToDto(
+            HelpRequest entity, (string? FullName, string? PhoneNumber, string? District) identity = default) => new()
         {
             Id = entity.Id,
             CitizenId = entity.CitizenId,
+            CitizenName = identity.FullName,
+            CitizenPhoneNumber = identity.PhoneNumber,
             Type = entity.Type,
             Description = entity.Description,
             EstimatedPeopleCount = entity.EstimatedPeopleCount,
@@ -240,7 +256,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             VerificationStatus = entity.VerificationStatus,
             VerificationNotes = entity.VerificationNotes,
             ImageUrl = entity.ImageUrl,
-            District = district,
+            District = identity.District,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt
         };

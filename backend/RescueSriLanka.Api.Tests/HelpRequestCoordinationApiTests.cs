@@ -30,7 +30,13 @@ public class HelpRequestCoordinationApiTests
         using var factory = new ComponentDApiFactory();
         using var scope = factory.Services.CreateScope();
         var shared = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var request = new HelpRequest { Description = "Please assist", Latitude = double.NaN, VerificationStatus = VerificationStatus.Verified };
+        var citizen = new RescueSriLanka.Api.Models.User
+        {
+            FullName = "Nimal Perera", Email = "nimal@example.com",
+            PasswordHash = "n/a", PhoneNumber = "0771234567"
+        };
+        shared.Users.Add(citizen);
+        var request = new HelpRequest { Type = HelpRequestType.Rescue, Description = "Please assist", Latitude = double.NaN, VerificationStatus = VerificationStatus.Verified, CitizenId = citizen.Id };
         shared.HelpRequests.AddRange(request, new HelpRequest { Description = "Unverified" }); await shared.SaveChangesAsync();
         using var client = factory.Client();
         var response = await client.GetAsync("/api/rescue/help-requests"); response.EnsureSuccessStatusCode();
@@ -39,7 +45,12 @@ public class HelpRequestCoordinationApiTests
         Assert.Equal(request.Id, item.GetProperty("id").GetGuid());
         Assert.Equal(JsonValueKind.Null, item.GetProperty("latitude").ValueKind);
         Assert.Equal(JsonValueKind.Null, item.GetProperty("estimatedPeopleCount").ValueKind);
-        Assert.Equal(new[] { "createdAt", "description", "estimatedPeopleCount", "id", "latitude", "longitude", "status", "type", "urgencyScore", "verificationStatus" }, item.EnumerateObject().Select(p => p.Name).Order());
+        // The Rescue Coordinator needs to actually reach whoever filed the
+        // request, so — unlike every other Component B field — citizen name
+        // and phone number are deliberately surfaced here.
+        Assert.Equal("Nimal Perera", item.GetProperty("citizenName").GetString());
+        Assert.Equal("0771234567", item.GetProperty("citizenPhoneNumber").GetString());
+        Assert.Equal(new[] { "citizenName", "citizenPhoneNumber", "createdAt", "description", "estimatedPeopleCount", "id", "latitude", "longitude", "status", "type", "urgencyScore", "verificationStatus" }, item.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/helprequests")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PatchAsJsonAsync($"/api/helprequests/{request.Id}/verify", new { isReal = true })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync($"/api/helprequests/{request.Id}", new {
@@ -58,7 +69,7 @@ public class HelpRequestCoordinationApiTests
         using var scope = factory.Services.CreateScope();
         var shared = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var db = scope.ServiceProvider.GetRequiredService<RescueSriLanka.Api.Features.ComponentD.Data.ComponentDDbContext>();
-        var request = new HelpRequest { Description = "Transport", EstimatedPeopleCount = 100, Latitude = 7, Longitude = 80, VerificationStatus = VerificationStatus.Verified };
+        var request = new HelpRequest { Type = HelpRequestType.Medical, Description = "Transport", EstimatedPeopleCount = 100, Latitude = 7, Longitude = 80, VerificationStatus = VerificationStatus.Verified };
         shared.HelpRequests.Add(request); await shared.SaveChangesAsync();
         var team = new RescueSriLanka.Api.Features.ComponentD.Models.RescueTeam { Name = "Nearest", BaseLatitude = 7.01, BaseLongitude = 80 };
         team.Members.Add(new() { FullName = "Medic", Phone = "0712345678", Skill = RescueSriLanka.Api.Features.ComponentD.Models.SkillType.FirstAid });

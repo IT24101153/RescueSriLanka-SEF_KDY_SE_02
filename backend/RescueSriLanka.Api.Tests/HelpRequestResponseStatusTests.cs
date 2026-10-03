@@ -82,7 +82,7 @@ public sealed class HelpRequestResponseStatusTests
         await using var fixture = new RelationalFixture(); await fixture.Init();
         var shared = fixture.Shared; var db = fixture.Response;
         var failHistory = failure != "none";
-        var request = new HelpRequest { Latitude = 7, Longitude = 80, VerificationStatus = VerificationStatus.Verified };
+        var request = new HelpRequest { Type = HelpRequestType.Rescue, Latitude = 7, Longitude = 80, VerificationStatus = VerificationStatus.Verified };
         shared.Add(request); await shared.SaveChangesAsync();
         var team = new RescueTeam { Name = "Rescue", BaseLatitude = 7, BaseLongitude = 80 };
         team.Members.Add(new TeamMember { FullName = "Medic", Phone = "0712345678", Skill = SkillType.FirstAid });

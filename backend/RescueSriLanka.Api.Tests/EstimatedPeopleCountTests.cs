@@ -59,7 +59,7 @@ public class EstimatedPeopleCountTests
     public async Task ServiceAlsoRejectsInvalidCount(int? count)
     {
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-        await Assert.ThrowsAsync<ArgumentException>(() => new HelpRequestService(db).CreateAsync(Guid.NewGuid(), new() { EstimatedPeopleCount = count }));
+        await Assert.ThrowsAsync<ArgumentException>(() => new HelpRequestService(db, NoOpHelpRequestAnalysisQueue.Instance).CreateAsync(Guid.NewGuid(), new() { EstimatedPeopleCount = count }));
         Assert.Empty(db.HelpRequests);
     }
 
@@ -69,9 +69,9 @@ public class EstimatedPeopleCountTests
     public async Task BothReadBoundariesPreserveHistoricalNullOrCount(int? count)
     {
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-        var entity = new HelpRequest { EstimatedPeopleCount = count, VerificationStatus = VerificationStatus.Verified };
+        var entity = new HelpRequest { Type = HelpRequestType.Rescue, EstimatedPeopleCount = count, VerificationStatus = VerificationStatus.Verified };
         db.HelpRequests.Add(entity); await db.SaveChangesAsync(); db.ChangeTracker.Clear();
-        Assert.Equal(count, (await new HelpRequestService(db).GetByIdAsync(entity.Id))!.EstimatedPeopleCount);
+        Assert.Equal(count, (await new HelpRequestService(db, NoOpHelpRequestAnalysisQueue.Instance).GetByIdAsync(entity.Id))!.EstimatedPeopleCount);
         db.ChangeTracker.Clear();
         Assert.Equal(count, (await new HelpRequestReadService(db).GetEligibleAsync(entity.Id))!.EstimatedPeopleCount);
         Assert.Empty(db.ChangeTracker.Entries());
