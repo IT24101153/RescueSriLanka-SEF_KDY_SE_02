@@ -6,6 +6,7 @@ using System.Security.Claims;
 using RescueSriLanka.Api.Services;
 using RescueSriLanka.Api.Features.ComponentD.DTOs;
 using RescueSriLanka.Api.Features.ComponentD.Services;
+using RescueSriLanka.Api.Services.Email;
 
 namespace RescueSriLanka.Api.Features.ComponentD.Controllers
 {
@@ -17,15 +18,18 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
         private readonly IAssignmentService _assignmentService;
         private readonly ITeamMatchingService _matchingService;
         private readonly IAssignmentSafetyValidationAgent _safetyValidationAgent;
+        private readonly IActionEmailService _emails;
 
         public AssignmentsController(
             IAssignmentService assignmentService,
             ITeamMatchingService matchingService,
-            IAssignmentSafetyValidationAgent safetyValidationAgent)
+            IAssignmentSafetyValidationAgent safetyValidationAgent,
+            IActionEmailService emails)
         {
             _assignmentService = assignmentService;
             _matchingService = matchingService;
             _safetyValidationAgent = safetyValidationAgent;
+            _emails = emails;
         }
 
         [HttpGet]
@@ -52,9 +56,9 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
         public async Task<ActionResult<AssignmentDto>> Create(CreateAssignmentDto dto)
         {
             var (created, error) = await _assignmentService.CreateAsync(dto);
-            return created is null
-                ? ValidationProblem(error)
-                : CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            if (created is null) return ValidationProblem(error);
+            await _emails.AssignmentCreatedAsync(created.Id);
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
         }
 
         [Authorize(Roles = "RescueTeam")]
@@ -96,7 +100,9 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
                 return Unauthorized(new { error = "Authenticated coordinator identity is missing." });
 
             var result = await dispatchService.DecideAsync(id, coordinatorId, dto);
-            return result.Success ? Ok(result) : Conflict(result);
+            if (!result.Success) return Conflict(result);
+            await _emails.AssignmentDecidedAsync(id, dto.Decision.ToString());
+            return Ok(result);
         }
     }
 }

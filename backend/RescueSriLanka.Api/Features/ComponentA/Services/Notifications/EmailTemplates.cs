@@ -587,7 +587,7 @@ public static class EmailTemplates
     /// Shared shell. Inline styles and a fixed-width centred block, because
     /// mail clients strip stylesheets and many still lay out with tables.
     /// </summary>
-    private static string Wrap(string heading, string accent, string bodyHtml) =>
+    internal static string Wrap(string heading, string accent, string bodyHtml) =>
         $"""
         <!doctype html>
         <html lang="en">
@@ -629,7 +629,7 @@ public static class EmailTemplates
         </html>
         """;
 
-    private static string FactTable((string Label, string Value)[] facts) =>
+    internal static string FactTable((string Label, string Value)[] facts) =>
         $"""
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
                style="margin:4px 0;border-collapse:collapse">
@@ -642,7 +642,7 @@ public static class EmailTemplates
         </table>
         """;
 
-    private static string Escape(string value) => WebUtility.HtmlEncode(value);
+    internal static string Escape(string value) => WebUtility.HtmlEncode(value);
 
     /// <summary>First name only — a warning should read like a person wrote it.</summary>
     private static string ShortName(this User user) =>

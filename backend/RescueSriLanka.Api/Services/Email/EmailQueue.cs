@@ -3,14 +3,14 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace RescueSriLanka.Api.Services.Email;
 
-public interface IResourceEmailQueue
+public interface IEmailQueue
 {
     bool TryQueue(EmailMessage message);
 }
 
-public sealed class ResourceEmailQueue(
+public sealed class EmailQueue(
     IServiceScopeFactory scopeFactory,
-    ILogger<ResourceEmailQueue> logger) : BackgroundService, IResourceEmailQueue
+    ILogger<EmailQueue> logger) : BackgroundService, IEmailQueue
 {
     private readonly Channel<EmailMessage> _messages = Channel.CreateUnbounded<EmailMessage>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });

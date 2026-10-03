@@ -5,6 +5,7 @@ using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Services;
 using RescueSriLanka.Api.Features.ComponentD.DTOs;
 using RescueSriLanka.Api.Features.ComponentD.Services;
+using RescueSriLanka.Api.Services.Email;
 
 namespace RescueSriLanka.Api.Features.ComponentD.Controllers
 {
@@ -14,10 +15,12 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
     public class DispatchesController : ControllerBase
     {
         private readonly IDispatchService _service;
+        private readonly IActionEmailService _emails;
 
-        public DispatchesController(IDispatchService service)
+        public DispatchesController(IDispatchService service, IActionEmailService emails)
         {
             _service = service;
+            _emails = emails;
         }
 
         [HttpGet]
@@ -55,6 +58,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
         {
             var (success, error, dispatch) = await _service.TransitionStatusAsync(id, dto);
             if (!success) return BadRequest(new { error });
+            await _emails.DispatchStatusChangedAsync(id, dto.NewStatus.ToString());
             return Ok(dispatch);
         }
     }

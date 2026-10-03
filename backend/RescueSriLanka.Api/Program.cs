@@ -216,12 +216,13 @@ builder.Services.AddHttpClient<ITestmailClient, TestmailClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(15));
 
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IActionEmailService, ActionEmailService>();
 
-builder.Services.AddSingleton<ResourceEmailQueue>();
-builder.Services.AddSingleton<IResourceEmailQueue>(
-    provider => provider.GetRequiredService<ResourceEmailQueue>());
+builder.Services.AddSingleton<EmailQueue>();
+builder.Services.AddSingleton<IEmailQueue>(
+    provider => provider.GetRequiredService<EmailQueue>());
 builder.Services.AddHostedService(
-    provider => provider.GetRequiredService<ResourceEmailQueue>());
+    provider => provider.GetRequiredService<EmailQueue>());
 
 // Mail goes out on a background worker: nobody filing a report or approving an
 // assessment should wait on a mail server, or fail because one is down.

@@ -7,6 +7,7 @@ using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
 using RescueSriLanka.Api.Features.ComponentA.DTOs;
 using RescueSriLanka.Api.Features.ComponentA.Models;
 using RescueSriLanka.Api.Features.ComponentA.Services;
+using RescueSriLanka.Api.Services.Email;
 
 namespace RescueSriLanka.Api.Features.ComponentA.Controllers;
 /// <summary>Component A — incidents and the live disaster map.</summary>
@@ -19,7 +20,8 @@ namespace RescueSriLanka.Api.Features.ComponentA.Controllers;
 public class IncidentsController(
     IIncidentService incidentService,
     IIncidentAnalysisAgent analysisAgent,
-    IImageStorageService imageStorage) : ControllerBase
+    IImageStorageService imageStorage,
+    IActionEmailService emails) : ControllerBase
 {
     private const string Coordinator = nameof(UserRole.EmergencyCoordinator);
 
@@ -121,6 +123,7 @@ public class IncidentsController(
         [FromBody] CreateIncidentRequest request, CancellationToken ct)
     {
         var incident = await incidentService.CreateAsync(request, CurrentUserId(), ct);
+        await emails.IncidentReportedAsync(incident.Id, ct);
         return CreatedAtAction(nameof(Get), new { id = incident.Id }, incident);
     }
 
@@ -145,6 +148,7 @@ public class IncidentsController(
         {
             var result = await incidentService.CreateWithPhotoAsync(
                 request, photo, caption, CurrentUserId(), ct);
+            await emails.IncidentReportedAsync(result.Incident.Id, ct);
             return CreatedAtAction(nameof(Get), new { id = result.Incident.Id }, result);
         }
         catch (ArgumentException ex)
@@ -162,7 +166,9 @@ public class IncidentsController(
         if (userId is null) return Unauthorized();
 
         var incident = await incidentService.UpdateStatusAsync(id, request.Status, userId.Value, ct);
-        return incident is null ? NotFound() : Ok(incident);
+        if (incident is null) return NotFound();
+        await emails.IncidentStatusChangedAsync(id, request.Status.ToString(), ct);
+        return Ok(incident);
     }
 
     /// <summary>Permanently deletes a report — for a duplicate, spam, or test
@@ -185,7 +191,9 @@ public class IncidentsController(
         if (userId is null) return Unauthorized();
 
         var incident = await incidentService.OverrideSeverityAsync(id, request.Severity, userId.Value, ct);
-        return incident is null ? NotFound() : Ok(incident);
+        if (incident is null) return NotFound();
+        await emails.IncidentSeverityOverriddenAsync(id, request.Severity.ToString(), ct);
+        return Ok(incident);
     }
 
     /// <summary>

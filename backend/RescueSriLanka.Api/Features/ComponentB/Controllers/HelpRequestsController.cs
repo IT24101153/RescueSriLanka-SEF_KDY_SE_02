@@ -12,6 +12,7 @@ using RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent;
 using RescueSriLanka.Api.Features.ComponentB.DTOs;
 using RescueSriLanka.Api.Features.ComponentB.Models;
 using RescueSriLanka.Api.Features.ComponentB.Services;
+using RescueSriLanka.Api.Services.Email;
 
 namespace RescueSriLanka.Api.Features.ComponentB.Controllers
 {
@@ -21,7 +22,8 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         IHelpRequestService service,
         IAiAnalysisService aiAnalysis,
         AppDbContext db,
-        IPlannerAgentService plannerAgent) : ControllerBase
+        IPlannerAgentService plannerAgent,
+        IActionEmailService emails) : ControllerBase
     {
         // Either coordinator may triage help requests; the web console sends
         // HelpRequestManager accounts to the Help request dashboard.
@@ -45,6 +47,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             try
             {
                 var result = await _service.CreateAsync(citizenId.Value, dto);
+                await emails.HelpRequestSubmittedAsync(result.Id);
                 return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
             catch (ArgumentException ex)
@@ -267,7 +270,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
                     NewStatus = HelpRequestStatus.Cancelled,
                     Notes = "Cancelled by requester."
                 });
-            return result is null ? NotFound() : NoContent();
+            if (result is null) return NotFound();
+            await emails.HelpRequestCancelledAsync(id);
+            return NoContent();
         }
 
         // PATCH /api/helprequests/{id}/status
@@ -283,6 +288,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             {
                 var result = await _service.UpdateStatusAsync(id, changedByUserId.Value, dto);
                 if (result is null) return NotFound();
+                await emails.HelpRequestStatusChangedAsync(id, dto.NewStatus.ToString());
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -315,6 +321,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
 
             var result = await _service.VerifyAsync(id, verifiedByUserId.Value, dto);
             if (result is null) return NotFound();
+            await emails.HelpRequestVerifiedAsync(id, dto.IsReal);
             return Ok(result);
         }
 

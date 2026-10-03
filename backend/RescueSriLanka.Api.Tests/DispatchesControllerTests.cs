@@ -36,7 +36,7 @@ namespace RescueSriLanka.Api.Tests
         private static DispatchesController CreateController(CapturingDispatchService service, params Claim[] claims)
         {
             var identity = new ClaimsIdentity(claims, claims.Length > 0 ? "test" : null);
-            return new DispatchesController(service)
+            return new DispatchesController(service, new NoOpActionEmailService())
             {
                 ControllerContext = new ControllerContext
                 {
