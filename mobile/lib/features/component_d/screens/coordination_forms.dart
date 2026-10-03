@@ -284,7 +284,7 @@ class _ResourceEditorState extends State<ResourceEditor> {
                   ),
                   _field(
                     'capacity',
-                    'Capacity',
+                    'People/Patients Capacity',
                     numeric: true,
                     validate: (v) {
                       final n = int.tryParse(v);
@@ -663,7 +663,7 @@ class _AssignmentEditorState extends State<AssignmentEditor> {
                                     (v) => DropdownMenuItem<String>(
                                       value: v['id'],
                                       child: Text(
-                                        '${v['plateNumber']} - capacity ${v['capacity']} (${v['status']})',
+                                        '${v['plateNumber']} - people/patient capacity ${v['capacity']} (${v['status']})',
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
@@ -689,7 +689,7 @@ class _AssignmentEditorState extends State<AssignmentEditor> {
                               initialValue: _capacity,
                               enabled: !_saving,
                               decoration: const InputDecoration(
-                                labelText: 'Required capacity',
+                                labelText: 'People/Patients Requiring Transport',
                               ),
                               keyboardType: TextInputType.number,
                               onChanged: (v) => _capacity = v.trim(),

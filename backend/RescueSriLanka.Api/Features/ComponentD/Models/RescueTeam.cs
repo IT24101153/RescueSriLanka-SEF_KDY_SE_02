@@ -2,10 +2,12 @@ using System.ComponentModel.DataAnnotations;
 
 namespace RescueSriLanka.Api.Features.ComponentD.Models
 {
-    public class RescueTeam
+    public class RescueTeam : IComponentDAuditable
     {
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();
+
+        public DateTime UpdatedAt { get; set; }
 
         [Required, MaxLength(150)]
         public string Name { get; set; } = string.Empty;

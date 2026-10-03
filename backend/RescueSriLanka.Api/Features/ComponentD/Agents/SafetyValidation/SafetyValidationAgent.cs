@@ -38,6 +38,9 @@ public class SafetyValidationAgent : ISafetyValidationAgent
             return new SafetyValidationResultDto(false, issues, DateTime.UtcNow);
         }
 
+        if (assignment.Status == AssignmentStatus.Cancelled)
+            return new SafetyValidationResultDto(false, ["Cancelled assignments cannot be dispatched."], DateTime.UtcNow);
+
         var team = assignment.RescueTeam;
         if (!team.Members.Any(m => m.IsAvailable && m.Skill == assignment.RequiredSkill))
             issues.Add($"No available team member with required skill '{assignment.RequiredSkill}'.");

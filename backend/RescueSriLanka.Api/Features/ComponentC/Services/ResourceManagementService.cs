@@ -78,7 +78,7 @@ public interface IResourceManagementService
 
 public class ResourceManagementService(
     AppDbContext dbContext,
-    IResourceEmailQueue? emailQueue = null,
+    IEmailQueue? emailQueue = null,
     IOptions<EmailOptions>? emailOptions = null,
     ILogger<ResourceManagementService>? logger = null) : IResourceManagementService
 {

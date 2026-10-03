@@ -17,7 +17,7 @@ public class RescueResourceCrudTests
         var team = await service.CreateAsync(new CreateRescueTeamDto("CRUD Test", null, null));
         var updatedTeam = await service.UpdateAsync(team.Id, new UpdateRescueTeamDto("CRUD Test Updated", TeamStatus.Available, null, null));
         var member = await service.AddMemberAsync(team.Id, new CreateTeamMemberDto("Member One", "+94111234567", SkillType.FirstAid));
-        var vehicle = await service.AddVehicleAsync(team.Id, new CreateVehicleDto("CRUD-1", VehicleType.Ambulance, 2));
+        var (vehicle, _) = await service.AddVehicleAsync(team.Id, new CreateVehicleDto("CRUD-1", VehicleType.Ambulance, 2));
         var updatedMember = await service.UpdateMemberAsync(team.Id, member!.Id, new UpdateTeamMemberDto("Member Two", "+94111234567", SkillType.Paramedic, true));
         var updatedVehicle = await service.UpdateVehicleAsync(team.Id, vehicle!.Id, new UpdateVehicleDto("CRUD-2", VehicleType.Boat, VehicleStatus.Available, 3));
 

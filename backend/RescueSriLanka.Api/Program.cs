@@ -90,10 +90,20 @@ builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
 
 // Component B — help requests, travel advisories and the Planner Agent.
 builder.Services.AddScoped<IHelpRequestService, HelpRequestService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IHelpRequestResponseStatusService, HelpRequestResponseStatusService>();
 builder.Services.AddScoped<ITravelAdvisoryService, TravelAdvisoryService>();
 builder.Services.AddScoped<IPlannerAgentService, PlannerAgentService>();
 builder.Services.AddScoped<IHelpRequestServiceForAgent, HelpRequestServiceForAgent>();
 builder.Services.AddHttpClient<IAiAnalysisService, GeminiAnalysisService>();
+
+// New help requests are triaged by the Planner Agent in the background — the
+// citizen filing one never waits on a model, and a manager's queue is
+// already-assessed by the time they open it.
+builder.Services.AddSingleton<HelpRequestAnalysisQueue>();
+builder.Services.AddSingleton<IHelpRequestAnalysisQueue>(
+    provider => provider.GetRequiredService<HelpRequestAnalysisQueue>());
+builder.Services.AddHostedService<HelpRequestAnalysisWorker>();
 
 // Component C — medical supplies, food/water stock and allocations.
 builder.Services.AddScoped<IResourceManagementService, ResourceManagementService>();
@@ -104,6 +114,10 @@ builder.Services.AddScoped<IResourceForecastAgent, ResourceForecastAgent>();
 builder.Services.AddDbContext<ComponentDDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddScoped<IIncidentReadService, IncidentReadService>();
+builder.Services.AddScoped<IHelpRequestReadService, HelpRequestReadService>();
+builder.Services.AddScoped<HelpRequestCandidateService>();
+builder.Services.AddScoped<IRescueRecommendationExplanation, GeminiRescueRecommendationExplanation>();
+builder.Services.AddScoped<HelpRequestRecommendationService>();
 builder.Services.AddScoped<IRescueTeamService, RescueTeamService>();
 builder.Services.AddScoped<ITeamMatchingService, TeamMatchingService>();
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
@@ -202,12 +216,13 @@ builder.Services.AddHttpClient<ITestmailClient, TestmailClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(15));
 
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IActionEmailService, ActionEmailService>();
 
-builder.Services.AddSingleton<ResourceEmailQueue>();
-builder.Services.AddSingleton<IResourceEmailQueue>(
-    provider => provider.GetRequiredService<ResourceEmailQueue>());
+builder.Services.AddSingleton<EmailQueue>();
+builder.Services.AddSingleton<IEmailQueue>(
+    provider => provider.GetRequiredService<EmailQueue>());
 builder.Services.AddHostedService(
-    provider => provider.GetRequiredService<ResourceEmailQueue>());
+    provider => provider.GetRequiredService<EmailQueue>());
 
 // Mail goes out on a background worker: nobody filing a report or approving an
 // assessment should wait on a mail server, or fail because one is down.
@@ -409,6 +424,18 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
     {
         logger.LogError(ex, "Database migration or seeding failed.");
     }
+}
+
+// Explicitly opted-in development fixtures do not depend on automatic migrations.
+if (app.Environment.IsDevelopment() && app.Configuration.GetValue("ComponentD:SeedDemoData", false))
+{
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+    await ComponentDDataSeeder.SeedAsync(
+        services.GetRequiredService<ComponentDDbContext>(),
+        services.GetRequiredService<AppDbContext>(),
+        app.Environment, app.Configuration,
+        services.GetRequiredService<ILoggerFactory>().CreateLogger("ComponentDDataSeeder"));
 }
 
 // Serves uploaded incident photos from wwwroot/uploads.

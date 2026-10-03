@@ -14,6 +14,8 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
 
         public string Description { get; set; } = string.Empty;
 
+        public int? EstimatedPeopleCount { get; set; }
+
         // Location of the request
         public double Latitude { get; set; }
         public double Longitude { get; set; }

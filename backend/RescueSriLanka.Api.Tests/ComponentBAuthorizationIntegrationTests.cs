@@ -77,6 +77,7 @@ public sealed class ComponentBAuthorizationIntegrationTests : IClassFixture<Comp
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseTestLogging();
             builder.UseSetting("Database:MigrateOnStartup", "false");
             builder.UseSetting("Jwt:Issuer", Issuer);
             builder.UseSetting("Jwt:Audience", Audience);

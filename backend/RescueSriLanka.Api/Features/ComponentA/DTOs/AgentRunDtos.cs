@@ -15,10 +15,14 @@ public record AgentRunDto
     public required bool UsedFallback { get; init; }
     public required bool Approved { get; init; }
     public DateTime? ApprovedAt { get; init; }
+    public required string Decision { get; init; }
+    public string? DecisionNote { get; init; }
+    public required int ModelAttempts { get; init; }
     public string? ErrorMessage { get; init; }
     public required int DurationMs { get; init; }
     public required DateTime StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }
+    public string? PlanJson { get; init; }
     public string? ToolCallsJson { get; init; }
     public string? OutputJson { get; init; }
 
@@ -33,10 +37,14 @@ public record AgentRunDto
         UsedFallback = run.UsedFallback,
         Approved = run.Approved,
         ApprovedAt = run.ApprovedAt,
+        Decision = run.Decision.ToString(),
+        DecisionNote = run.DecisionNote,
+        ModelAttempts = run.ModelAttempts,
         ErrorMessage = run.ErrorMessage,
         DurationMs = run.DurationMs,
         StartedAt = run.StartedAt,
         CompletedAt = run.CompletedAt,
+        PlanJson = run.PlanJson,
         ToolCallsJson = run.ToolCallsJson,
         OutputJson = run.OutputJson
     };

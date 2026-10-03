@@ -45,6 +45,7 @@ public class IncidentAnalysisAgentTests
         public string? LastPrompt { get; private set; }
         public string? LastSystemInstruction { get; private set; }
         public int Calls { get; private set; }
+        public int LastAttempts { get; set; }
 
         public bool IsConfigured => configured;
         public string ModelName => "fake-model";
@@ -438,5 +439,159 @@ public class IncidentAnalysisAgentTests
 
         Assert.Null(rainfall);
         Assert.Equal(0, handler.Calls);
+    }
+
+    // ---------- planning, delegation and failure recording ----------
+
+    [Fact]
+    public async Task Run_PersistsAStructuredPlan_DelegatedToThreeDistinctAgents()
+    {
+        await using var db = NewDb();
+        var incident = await AddIncidentAsync(db);
+
+        await NewAgent(db, new FakeLlm(() => GoldenResponse)).AnalyseAsync(incident.Id);
+
+        var run = await OnlyRunAsync(db);
+        using var plan = JsonDocument.Parse(run.PlanJson!);
+        var steps = plan.RootElement.GetProperty("steps").EnumerateArray().ToList();
+
+        Assert.Equal(
+            [AnalysisRoles.Evidence, AnalysisRoles.Severity, AnalysisRoles.Validator],
+            steps.Select(step => step.GetProperty("agent").GetString()!));
+        Assert.Equal([1, 2, 3], steps.Select(step => step.GetProperty("step").GetInt32()));
+        Assert.All(steps, step => Assert.Equal("Completed", step.GetProperty("status").GetString()));
+
+        // Only the Evidence agent holds tools (a flood with no photos: nearby + rainfall).
+        Assert.Equal(2, steps[0].GetProperty("tools").GetArrayLength());
+        Assert.Equal(0, steps[1].GetProperty("tools").GetArrayLength());
+        Assert.Equal(0, steps[2].GetProperty("tools").GetArrayLength());
+    }
+
+    [Fact]
+    public void Planner_RefusesAnIncidentWithInvalidCoordinates()
+    {
+        var input = new IncidentAnalysisInput
+        {
+            IncidentId = Guid.NewGuid(), Title = "t", Description = "d",
+            Type = IncidentType.Flood, Latitude = 123, Longitude = 79
+        };
+
+        Assert.Throws<ArgumentException>(() => new AnalysisPlannerAgent().Plan(input));
+    }
+
+    [Fact]
+    public async Task Validator_ClampsAreRecordedOnTheValidationStep()
+    {
+        await using var db = NewDb();
+        var incident = await AddIncidentAsync(db);
+        var llm = new FakeLlm(() => GoldenResponse.Replace("\"severityScore\": 75", "\"severityScore\": 400"));
+
+        var result = await NewAgent(db, llm).AnalyseAsync(incident.Id);
+
+        Assert.Equal(100, result.SeverityScore);
+        using var plan = JsonDocument.Parse((await OnlyRunAsync(db)).PlanJson!);
+        Assert.Contains("severityScore 400 clamped to 100",
+            plan.RootElement.GetProperty("steps")[2].GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task UnexpectedFailure_MarksTheRunFailed_RecordsWhy_AndTouchesNothing()
+    {
+        await using var db = NewDb();
+        var incident = await AddIncidentAsync(db);
+        // A photo on the report makes the plan call the photo store, which then fails.
+        db.IncidentImages.Add(new IncidentImage { IncidentId = incident.Id, StoragePath = "x.jpg" });
+        await db.SaveChangesAsync();
+        var agent = new IncidentAnalysisAgent(
+            db, new FakeLlm(() => GoldenResponse), NewTools(db), new ExplodingPhotos(),
+            NullLogger<IncidentAnalysisAgent>.Instance);
+
+        await Assert.ThrowsAsync<IOException>(() => agent.AnalyseAsync(incident.Id));
+
+        var run = await OnlyRunAsync(db);
+        Assert.Equal(AgentRunStatus.Failed, run.Status);
+        Assert.Contains("disk unavailable", run.ErrorMessage);
+        Assert.NotNull(run.CompletedAt);
+        Assert.Null(run.OutputJson);
+        Assert.Null((await db.Incidents.SingleAsync()).AiSeverity);
+
+        using var plan = JsonDocument.Parse(run.PlanJson!);
+        Assert.Equal("Failed", plan.RootElement.GetProperty("steps")[0].GetProperty("status").GetString());
+        Assert.Equal("Pending", plan.RootElement.GetProperty("steps")[1].GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public void Planner_AdaptsToTheIncident_AndSaysWhatItLeftOut()
+    {
+        var planner = new AnalysisPlannerAgent();
+        IncidentAnalysisInput Input(IncidentType type, int images) => new()
+        {
+            IncidentId = Guid.NewGuid(), Title = "t", Description = "d",
+            Type = type, Latitude = 6.9, Longitude = 79.8, ImageCount = images
+        };
+
+        var flood = planner.Plan(Input(IncidentType.Flood, images: 2));
+        Assert.Equal(
+            [AnalysisTools.CountNearby, AnalysisTools.Rainfall, AnalysisTools.LoadImages],
+            flood.Steps[0].Tools);
+        Assert.Empty(flood.Notes);
+
+        var fire = planner.Plan(Input(IncidentType.Fire, images: 0));
+        Assert.Equal([AnalysisTools.CountNearby], fire.Steps[0].Tools);
+        Assert.Equal(2, fire.Notes.Count);
+        Assert.Contains(fire.Notes, note => note.Contains("Rainfall"));
+        Assert.Contains(fire.Notes, note => note.Contains("photos"));
+    }
+
+    [Fact]
+    public async Task ToolsThePlanLeavesOut_AreNeverCalled_AndAreRecordedAsSkipped()
+    {
+        await using var db = NewDb();
+        var incident = new Incident
+        {
+            Title = "Warehouse fire", Description = "Smoke visible.", Type = IncidentType.Fire,
+            Severity = IncidentSeverity.Moderate, Latitude = 6.9271, Longitude = 79.8612, District = "Colombo"
+        };
+        db.Incidents.Add(incident);
+        await db.SaveChangesAsync();
+        var weather = new StubHandler(HttpStatusCode.OK, "{}");
+        var llm = new FakeLlm(() => GoldenResponse);
+        var agent = new IncidentAnalysisAgent(
+            db, llm, NewTools(db, weather), new NoPhotos(), NullLogger<IncidentAnalysisAgent>.Instance);
+
+        await agent.AnalyseAsync(incident.Id);
+
+        Assert.Equal(0, weather.Calls);
+        Assert.Contains("Rainfall in the last 48 hours: not applicable to this hazard", llm.LastPrompt);
+        using var calls = JsonDocument.Parse((await OnlyRunAsync(db)).ToolCallsJson!);
+        Assert.True(calls.RootElement.GetProperty(AnalysisTools.Rainfall).GetProperty("skipped").GetBoolean());
+        Assert.True(calls.RootElement.GetProperty(AnalysisTools.LoadImages).GetProperty("skipped").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ModelRetries_AreRecordedOnTheRunAndItsStep()
+    {
+        await using var db = NewDb();
+        var incident = await AddIncidentAsync(db);
+        var llm = new FakeLlm(() => GoldenResponse) { LastAttempts = 3 };
+
+        await NewAgent(db, llm).AnalyseAsync(incident.Id);
+
+        var run = await OnlyRunAsync(db);
+        Assert.Equal(3, run.ModelAttempts);
+        using var plan = JsonDocument.Parse(run.PlanJson!);
+        Assert.Contains("3 attempts", plan.RootElement.GetProperty("steps")[1].GetProperty("detail").GetString());
+    }
+
+    /// <summary>A photo store that fails in a way the agent does not anticipate.</summary>
+    private sealed class ExplodingPhotos : IImageStorageService
+    {
+        public Task<IncidentImage> SaveAsync(
+            Guid incidentId, IFormFile file, string? caption, Guid? userId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<(string MimeType, byte[] Data)>> LoadForAnalysisAsync(
+            Guid incidentId, int maxImages, long maxTotalBytes, CancellationToken ct = default) =>
+            throw new IOException("disk unavailable");
     }
 }

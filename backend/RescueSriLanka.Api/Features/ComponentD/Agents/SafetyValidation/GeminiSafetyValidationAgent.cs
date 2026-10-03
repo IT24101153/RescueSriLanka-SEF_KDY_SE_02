@@ -50,6 +50,9 @@ public sealed class GeminiSafetyValidationAgent : IAssignmentSafetyValidationAge
         if (context is null)
             return SafeFailure(null, assignmentId, null, "Assignment was not found.", "ASSIGNMENT_EXISTS");
 
+        if (context.AssignmentStatus == AssignmentStatus.Cancelled)
+            return SafeFailure(null, assignmentId, context.PlanVersion, "Cancelled assignments cannot start a safety review.", "ASSIGNMENT_EXISTS");
+
         var workflow = new AgentWorkflow
         {
             // The shared schema has only Incident/HelpRequest objectives. The

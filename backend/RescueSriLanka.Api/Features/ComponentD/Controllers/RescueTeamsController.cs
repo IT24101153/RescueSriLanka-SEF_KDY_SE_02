@@ -98,8 +98,9 @@ namespace RescueSriLanka.Api.Features.ComponentD.Controllers
         [HttpPost("{id:guid}/vehicles")]
         public async Task<ActionResult<VehicleDto>> AddVehicle(Guid id, CreateVehicleDto dto)
         {
-            var vehicle = await _service.AddVehicleAsync(id, dto);
-            return vehicle is null ? NotFound("Team not found.") : Ok(vehicle);
+            var (vehicle, error) = await _service.AddVehicleAsync(id, dto);
+            if (vehicle is not null) return Ok(vehicle);
+            return error == "Team not found." ? NotFound(error) : Conflict(new { error });
         }
 
         [Authorize(Roles = "RescueTeam")]

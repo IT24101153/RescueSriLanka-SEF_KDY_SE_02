@@ -642,6 +642,7 @@ function ResourceDashboard() {
             >
               {label}
               {tab === 'allocations' && helpRequests.length > 0 && <span>{helpRequests.length}</span>}
+              {tab === 'donate' && donationGroups.length > 0 && <span>{donationGroups.length}</span>}
             </button>
           ))}
         </nav>

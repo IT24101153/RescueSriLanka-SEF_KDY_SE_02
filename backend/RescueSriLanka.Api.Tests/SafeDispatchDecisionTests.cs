@@ -12,7 +12,7 @@ public class SafeDispatchDecisionTests
     [Fact]
     public async Task Approve_CommitsDispatchAndReservations_AndIsIdempotent()
     {
-        using var db = TestDbFactory.Create(); var (a, w) = await SeedAsync(db); var service = new DispatchService(db, new SafetyValidationAgent(db));
+        using var db = TestDbFactory.Create(); var (a, w) = await SeedAsync(db); var service = new DispatchService(db, new SafetyValidationAgent(db), new RejectHelpRequestResponseStatusService());
         var dto = new CoordinatorDecisionDto(w.Id, a.PlanVersion, CoordinatorDecision.APPROVE, "ok");
         var first = await service.DecideAsync(a.Id, "coordinator", dto); var second = await service.DecideAsync(a.Id, "coordinator", dto);
         if (!first.Success) throw new InvalidOperationException(first.Error);
@@ -26,7 +26,7 @@ public class SafeDispatchDecisionTests
     [Fact]
     public async Task InvalidBindingOrDecision_CreatesNoDispatch()
     {
-        using var db = TestDbFactory.Create(); var (a, w) = await SeedAsync(db); var service = new DispatchService(db, new SafetyValidationAgent(db));
+        using var db = TestDbFactory.Create(); var (a, w) = await SeedAsync(db); var service = new DispatchService(db, new SafetyValidationAgent(db), new RejectHelpRequestResponseStatusService());
         var stale = await service.DecideAsync(a.Id, "c", new(w.Id, a.PlanVersion + 1, CoordinatorDecision.APPROVE, null));
         var wrong = await service.DecideAsync(a.Id, "c", new(Guid.NewGuid(), a.PlanVersion, CoordinatorDecision.APPROVE, null));
         Assert.False(stale.Success); Assert.False(wrong.Success); Assert.Empty(db.Dispatches);
@@ -37,7 +37,7 @@ public class SafeDispatchDecisionTests
     [InlineData(CoordinatorDecision.REVISE, AssignmentStatus.Proposed, WorkflowStatus.AwaitingApproval)]
     public async Task RejectOrRevise_NeverReservesResources(CoordinatorDecision decision, AssignmentStatus status, WorkflowStatus workflowStatus)
     {
-        using var db = TestDbFactory.Create(); var (a, w) = await SeedAsync(db); var service = new DispatchService(db, new SafetyValidationAgent(db));
+        using var db = TestDbFactory.Create(); var (a, w) = await SeedAsync(db); var service = new DispatchService(db, new SafetyValidationAgent(db), new RejectHelpRequestResponseStatusService());
         var result = await service.DecideAsync(a.Id, "c", new(w.Id, a.PlanVersion, decision, null));
         Assert.True(result.Success); Assert.Empty(db.Dispatches); Assert.Equal(status, (await db.Assignments.FindAsync(a.Id))!.Status);
         Assert.Equal(workflowStatus, (await db.AgentWorkflows.FindAsync(w.Id))!.Status);
@@ -47,7 +47,7 @@ public class SafeDispatchDecisionTests
     [Fact]
     public async Task Resolved_ReleasesResourcesAndCompletesMatchingWorkflow()
     {
-        using var db = TestDbFactory.Create(); var (a, w) = await SeedAsync(db); var service = new DispatchService(db, new SafetyValidationAgent(db));
+        using var db = TestDbFactory.Create(); var (a, w) = await SeedAsync(db); var service = new DispatchService(db, new SafetyValidationAgent(db), new RejectHelpRequestResponseStatusService());
         var approved = await service.DecideAsync(a.Id, "c", new(w.Id, a.PlanVersion, CoordinatorDecision.APPROVE, null));
         var transitioned = await service.TransitionStatusAsync(approved.Dispatch!.Id, new(DispatchStatus.EnRoute, null));
         Assert.True(transitioned.Success); Assert.Equal(TeamStatus.OnMission, (await db.RescueTeams.FindAsync(a.RescueTeamId))!.Status);

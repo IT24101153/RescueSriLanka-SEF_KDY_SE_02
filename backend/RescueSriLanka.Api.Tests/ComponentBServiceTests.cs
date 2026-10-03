@@ -10,13 +10,32 @@ namespace RescueSriLanka.Api.Tests;
 public class ComponentBServiceTests
 {
     [Fact]
+    public async Task CreateAsync_EnqueuesTheNewRequestForBackgroundTriage()
+    {
+        await using var context = CreateContext();
+        var queue = new RecordingAnalysisQueue();
+        var service = new HelpRequestService(context, queue);
+
+        var created = await service.CreateAsync(Guid.NewGuid(),
+            new CreateHelpRequestDto { Type = HelpRequestType.Rescue, Description = "Trapped on roof", Latitude = 7, Longitude = 80, EstimatedPeopleCount = 2 });
+
+        Assert.Equal([created.Id], queue.Enqueued);
+    }
+
+    private sealed class RecordingAnalysisQueue : IHelpRequestAnalysisQueue
+    {
+        public List<Guid> Enqueued { get; } = [];
+        public void Enqueue(Guid helpRequestId) => Enqueued.Add(helpRequestId);
+    }
+
+    [Fact]
     public async Task UpdateStatusAsync_AllowsTheDefinedLifecycleAndRecordsHistory()
     {
         await using var context = CreateContext();
-        var request = new HelpRequest { CitizenId = Guid.NewGuid(), Type = HelpRequestType.Medical };
+        var request = new HelpRequest { CitizenId = Guid.NewGuid(), Type = HelpRequestType.Medical, EstimatedPeopleCount = 12 };
         context.HelpRequests.Add(request);
         await context.SaveChangesAsync();
-        var service = new HelpRequestService(context);
+        var service = new HelpRequestService(context, NoOpHelpRequestAnalysisQueue.Instance);
         var coordinatorId = Guid.NewGuid();
 
         await service.UpdateStatusAsync(request.Id, coordinatorId,
@@ -27,6 +46,7 @@ public class ComponentBServiceTests
             new UpdateHelpRequestStatusDto { NewStatus = HelpRequestStatus.Resolved });
 
         Assert.Equal(HelpRequestStatus.Resolved, result!.Status);
+        Assert.Equal(12, result.EstimatedPeopleCount);
         Assert.Equal(3, await context.RequestStatusHistories.CountAsync());
     }
 
@@ -37,7 +57,7 @@ public class ComponentBServiceTests
         var request = new HelpRequest { CitizenId = Guid.NewGuid(), Type = HelpRequestType.Food };
         context.HelpRequests.Add(request);
         await context.SaveChangesAsync();
-        var service = new HelpRequestService(context);
+        var service = new HelpRequestService(context, NoOpHelpRequestAnalysisQueue.Instance);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateStatusAsync(
             request.Id,
@@ -57,7 +77,7 @@ public class ComponentBServiceTests
         };
         context.HelpRequests.Add(request);
         await context.SaveChangesAsync();
-        var service = new HelpRequestService(context);
+        var service = new HelpRequestService(context, NoOpHelpRequestAnalysisQueue.Instance);
         var verifierId = Guid.NewGuid();
 
         var result = await service.VerifyAsync(request.Id, verifierId,
@@ -69,6 +89,32 @@ public class ComponentBServiceTests
         Assert.Equal(verifierId, history.ChangedByUserId);
         Assert.Equal(HelpRequestStatus.Assigned, history.OldStatus);
         Assert.Equal(HelpRequestStatus.Cancelled, history.NewStatus);
+    }
+
+    [Fact]
+    public async Task ResponseDtos_CarryTheCitizensNameAndPhoneNumber()
+    {
+        await using var context = CreateContext();
+        var citizen = new RescueSriLanka.Api.Models.User
+        {
+            FullName = "Kamala Silva", Email = "kamala@example.com",
+            PasswordHash = "n/a", PhoneNumber = "0719876543"
+        };
+        context.Users.Add(citizen);
+        var request = new HelpRequest { CitizenId = citizen.Id, Type = HelpRequestType.Medical };
+        context.HelpRequests.Add(request);
+        await context.SaveChangesAsync();
+        var service = new HelpRequestService(context, NoOpHelpRequestAnalysisQueue.Instance);
+
+        var single = await service.GetByIdAsync(request.Id);
+        var listed = Assert.Single(await service.GetAllAsync());
+        var mine = Assert.Single(await service.GetByCitizenAsync(citizen.Id));
+
+        foreach (var dto in new[] { single, listed, mine })
+        {
+            Assert.Equal("Kamala Silva", dto!.CitizenName);
+            Assert.Equal("0719876543", dto.CitizenPhoneNumber);
+        }
     }
 
     [Fact]
@@ -179,7 +225,7 @@ public class ComponentBServiceTests
     public async Task CreateHelpRequestAsync_RejectsAnUnknownRelatedIncident()
     {
         await using var context = CreateContext();
-        var service = new HelpRequestService(context);
+        var service = new HelpRequestService(context, NoOpHelpRequestAnalysisQueue.Instance);
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(() => service.CreateAsync(
             Guid.NewGuid(),
@@ -187,6 +233,7 @@ public class ComponentBServiceTests
             {
                 Type = HelpRequestType.Water,
                 Description = "Water is needed at this location.",
+                EstimatedPeopleCount = 4,
                 Latitude = 6.9271,
                 Longitude = 79.8612,
                 RelatedIncidentId = Guid.NewGuid()
@@ -210,19 +257,22 @@ public class ComponentBServiceTests
         };
         context.HelpRequests.Add(request);
         await context.SaveChangesAsync();
-        var service = new HelpRequestService(context);
+        var service = new HelpRequestService(context, NoOpHelpRequestAnalysisQueue.Instance);
 
         var updated = await service.UpdateAsync(request.Id, citizenId,
             new UpdateHelpRequestDto
             {
                 Type = HelpRequestType.Medical,
                 Description = "Medical assistance is urgently needed.",
+                EstimatedPeopleCount = 4,
                 Latitude = 7.2906,
                 Longitude = 80.6337
             });
 
         Assert.Equal(HelpRequestType.Medical, updated!.Type);
         Assert.Equal(80, updated.UrgencyScore);
+        Assert.Equal(4, updated.EstimatedPeopleCount);
+        Assert.Equal(4, (await context.HelpRequests.AsNoTracking().SingleAsync()).EstimatedPeopleCount);
 
         await service.UpdateStatusAsync(request.Id, Guid.NewGuid(),
             new UpdateHelpRequestStatusDto { NewStatus = HelpRequestStatus.Assigned });

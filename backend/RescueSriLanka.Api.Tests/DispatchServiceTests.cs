@@ -36,7 +36,7 @@ namespace RescueSriLanka.Api.Tests
         {
             var (db, assignment) = await SeedAssignmentAsync();
             var agent = new SafetyValidationAgent(db);
-            var service = new DispatchService(db, agent);
+            var service = new DispatchService(db, agent, new RejectHelpRequestResponseStatusService());
 
             var (dispatch, _, createError) = await service.CreateAsync(new CreateDispatchDto(assignment.Id, null));
             Assert.NotNull(dispatch);
@@ -54,7 +54,7 @@ namespace RescueSriLanka.Api.Tests
         {
             var (db, assignment) = await SeedAssignmentAsync();
             var agent = new SafetyValidationAgent(db);
-            var service = new DispatchService(db, agent);
+            var service = new DispatchService(db, agent, new RejectHelpRequestResponseStatusService());
 
             var (dispatch, _, _) = await service.CreateAsync(new CreateDispatchDto(assignment.Id, null));
             await service.ApproveAsync(dispatch!.Id, "coordinator-1", new ApproveDispatchDto(true, null));
@@ -72,7 +72,7 @@ namespace RescueSriLanka.Api.Tests
         {
             var (db, assignment) = await SeedAssignmentAsync();
             var agent = new SafetyValidationAgent(db);
-            var service = new DispatchService(db, agent);
+            var service = new DispatchService(db, agent, new RejectHelpRequestResponseStatusService());
 
             var (dispatch, _, _) = await service.CreateAsync(new CreateDispatchDto(assignment.Id, null));
             await service.ApproveAsync(dispatch!.Id, "coordinator-1", new ApproveDispatchDto(true, null));
@@ -89,7 +89,7 @@ namespace RescueSriLanka.Api.Tests
         {
             var (db, assignment) = await SeedAssignmentAsync();
             var agent = new SafetyValidationAgent(db);
-            var service = new DispatchService(db, agent);
+            var service = new DispatchService(db, agent, new RejectHelpRequestResponseStatusService());
 
             var (dispatch, _, _) = await service.CreateAsync(new CreateDispatchDto(assignment.Id, null));
             var afterReject = await service.ApproveAsync(dispatch!.Id, "coordinator-1", new ApproveDispatchDto(false, "Not safe"));
@@ -108,7 +108,7 @@ namespace RescueSriLanka.Api.Tests
         {
             var (db, assignment) = await SeedAssignmentAsync();
             var agent = new SafetyValidationAgent(db);
-            var service = new DispatchService(db, agent);
+            var service = new DispatchService(db, agent, new RejectHelpRequestResponseStatusService());
 
             var (dispatch, _, _) = await service.CreateAsync(new CreateDispatchDto(assignment.Id, null));
             await service.ApproveAsync(dispatch!.Id, "coordinator-1", new ApproveDispatchDto(true, null));
@@ -132,7 +132,7 @@ namespace RescueSriLanka.Api.Tests
         {
             var (db, assignment) = await SeedAssignmentAsync();
             var agent = new SafetyValidationAgent(db);
-            var service = new DispatchService(db, agent);
+            var service = new DispatchService(db, agent, new RejectHelpRequestResponseStatusService());
 
             var (firstDispatch, _, _) = await service.CreateAsync(new CreateDispatchDto(assignment.Id, null));
             await service.ApproveAsync(firstDispatch!.Id, "coordinator-1", new ApproveDispatchDto(false, "Team reassigned"));
@@ -154,7 +154,7 @@ namespace RescueSriLanka.Api.Tests
         {
             var (db, assignment) = await SeedAssignmentAsync();
             var agent = new SafetyValidationAgent(db);
-            var service = new DispatchService(db, agent);
+            var service = new DispatchService(db, agent, new RejectHelpRequestResponseStatusService());
 
             await service.CreateAsync(new CreateDispatchDto(assignment.Id, null));
 
@@ -171,7 +171,7 @@ namespace RescueSriLanka.Api.Tests
         {
             var (db, assignment) = await SeedAssignmentAsync();
             var agent = new SafetyValidationAgent(db);
-            var service = new DispatchService(db, agent);
+            var service = new DispatchService(db, agent, new RejectHelpRequestResponseStatusService());
 
             var (dispatch, _, _) = await service.CreateAsync(new CreateDispatchDto(assignment.Id, null));
             await service.ApproveAsync(dispatch!.Id, "coordinator-1", new ApproveDispatchDto(true, null));
@@ -191,7 +191,7 @@ namespace RescueSriLanka.Api.Tests
         {
             var db = TestDbFactory.Create();
             var agent = new SafetyValidationAgent(db);
-            var service = new DispatchService(db, agent);
+            var service = new DispatchService(db, agent, new RejectHelpRequestResponseStatusService());
 
             var (dispatch, _, error) = await service.CreateAsync(new CreateDispatchDto(Guid.NewGuid(), null));
 
@@ -203,7 +203,7 @@ namespace RescueSriLanka.Api.Tests
         public async Task FailedSafetyValidationDoesNotCreateDispatch()
         {
             var (db, assignment) = await SeedAssignmentAsync();
-            var service = new DispatchService(db, new FailingSafetyValidationAgent());
+            var service = new DispatchService(db, new FailingSafetyValidationAgent(), new RejectHelpRequestResponseStatusService());
 
             var (dispatch, validation, error) = await service.CreateAsync(new CreateDispatchDto(assignment.Id, null));
 
@@ -217,7 +217,7 @@ namespace RescueSriLanka.Api.Tests
         public async Task ResolvedDispatchCannotTransitionAgain()
         {
             var (db, assignment) = await SeedAssignmentAsync();
-            var service = new DispatchService(db, new SafetyValidationAgent(db));
+            var service = new DispatchService(db, new SafetyValidationAgent(db), new RejectHelpRequestResponseStatusService());
 
             var (dispatch, _, _) = await service.CreateAsync(new CreateDispatchDto(assignment.Id, null));
             await service.ApproveAsync(dispatch!.Id, "coordinator-1", new ApproveDispatchDto(true, null));

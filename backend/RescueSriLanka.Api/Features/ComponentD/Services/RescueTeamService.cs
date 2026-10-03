@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Models;
@@ -21,7 +22,7 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
         Task<(TeamMemberDto? Member, string? Error)> UpdateMemberAsync(Guid teamId, Guid memberId, UpdateTeamMemberDto dto);
         Task<(bool Success, string? Error)> DeleteMemberAsync(Guid teamId, Guid memberId);
 
-        Task<VehicleDto?> AddVehicleAsync(Guid teamId, CreateVehicleDto dto);
+        Task<(VehicleDto? Vehicle, string? Error)> AddVehicleAsync(Guid teamId, CreateVehicleDto dto);
         Task<(bool Success, string? Error)> SetVehicleStatusAsync(Guid teamId, Guid vehicleId, VehicleStatus status);
         Task<(VehicleDto? Vehicle, string? Error)> UpdateVehicleAsync(Guid teamId, Guid vehicleId, UpdateVehicleDto dto);
         Task<(bool Success, string? Error)> DeleteVehicleAsync(Guid teamId, Guid vehicleId);
@@ -30,6 +31,19 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
     public class RescueTeamService : IRescueTeamService
     {
         private readonly ComponentDDbContext _db;
+        private const string DuplicatePlateMessage = "A vehicle with this registration number already exists.";
+        private static string NormalizePlate(string plate) => plate.Trim().ToUpperInvariant();
+
+        private async Task<bool> SaveVehicleAsync(Vehicle vehicle)
+        {
+            try { await _db.SaveChangesAsync(); return true; }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+                { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_Vehicles_PlateNumber" })
+            {
+                _db.Entry(vehicle).State = EntityState.Detached;
+                return false;
+            }
+        }
 
         public RescueTeamService(ComponentDDbContext db)
         {
@@ -165,23 +179,25 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
             _db.TeamMembers.Remove(member); await _db.SaveChangesAsync(); return (true, null);
         }
 
-        public async Task<VehicleDto?> AddVehicleAsync(Guid teamId, CreateVehicleDto dto)
+        public async Task<(VehicleDto? Vehicle, string? Error)> AddVehicleAsync(Guid teamId, CreateVehicleDto dto)
         {
             var team = await _db.RescueTeams.FindAsync(teamId);
-            if (team is null) return null;
+            if (team is null) return (null, "Team not found.");
+            var plate = NormalizePlate(dto.PlateNumber);
+            if (await _db.Vehicles.AnyAsync(v => v.PlateNumber == plate)) return (null, DuplicatePlateMessage);
 
             var vehicle = new Vehicle
             {
                 RescueTeamId = teamId,
-                PlateNumber = dto.PlateNumber,
+                PlateNumber = plate,
                 Type = dto.Type,
                 Capacity = dto.Capacity
             };
 
             _db.Vehicles.Add(vehicle);
-            await _db.SaveChangesAsync();
+            if (!await SaveVehicleAsync(vehicle)) return (null, DuplicatePlateMessage);
 
-            return new VehicleDto(vehicle.Id, vehicle.PlateNumber, vehicle.Type, vehicle.Status, vehicle.Capacity);
+            return (new VehicleDto(vehicle.Id, vehicle.PlateNumber, vehicle.Type, vehicle.Status, vehicle.Capacity), null);
         }
 
         public async Task<(bool Success, string? Error)> SetVehicleStatusAsync(Guid teamId, Guid vehicleId, VehicleStatus status)
@@ -204,8 +220,10 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
             var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == vehicleId && v.RescueTeamId == teamId);
             if (vehicle is null) return (null, "Vehicle not found.");
             if (vehicle.Status == VehicleStatus.InUse) return (null, "An in-use vehicle cannot be changed.");
-            vehicle.PlateNumber = dto.PlateNumber; vehicle.Type = dto.Type; vehicle.Status = dto.Status; vehicle.Capacity = dto.Capacity;
-            await _db.SaveChangesAsync();
+            var plate = NormalizePlate(dto.PlateNumber);
+            if (await _db.Vehicles.AnyAsync(v => v.Id != vehicleId && v.PlateNumber == plate)) return (null, DuplicatePlateMessage);
+            vehicle.PlateNumber = plate; vehicle.Type = dto.Type; vehicle.Status = dto.Status; vehicle.Capacity = dto.Capacity;
+            if (!await SaveVehicleAsync(vehicle)) return (null, DuplicatePlateMessage);
             return (new VehicleDto(vehicle.Id, vehicle.PlateNumber, vehicle.Type, vehicle.Status, vehicle.Capacity), null);
         }
 
@@ -222,7 +240,12 @@ namespace RescueSriLanka.Api.Features.ComponentD.Services
         private async Task<bool> IsTeamOperationallyReservedAsync(Guid teamId)
         {
             var status = await _db.RescueTeams.Where(t => t.Id == teamId).Select(t => (TeamStatus?)t.Status).FirstOrDefaultAsync();
-            return status == TeamStatus.OnMission || await _db.Assignments.AnyAsync(a => a.RescueTeamId == teamId && a.Status != AssignmentStatus.Rejected);
+            // A dispatch owns the execution lifecycle; terminal history does not reserve resources.
+            // Without a dispatch, preserve the existing non-rejected planning reservation.
+            return status == TeamStatus.OnMission || await _db.Assignments.AnyAsync(a =>
+                a.RescueTeamId == teamId && (a.Dispatch == null
+                    ? a.Status != AssignmentStatus.Rejected && a.Status != AssignmentStatus.Cancelled
+                    : a.Dispatch.Status != DispatchStatus.Resolved && a.Dispatch.Status != DispatchStatus.Cancelled));
         }
 
         private static RescueTeamDto ToDto(RescueTeam t) => new(

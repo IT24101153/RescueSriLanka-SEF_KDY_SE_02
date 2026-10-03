@@ -5,6 +5,7 @@ using RescueSriLanka.Api.Features.ComponentC.DTOs;
 using RescueSriLanka.Api.Features.ComponentC.Services;
 using RescueSriLanka.Api.Features.ComponentC.Agents.ResourceAllocationAgent;
 using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Services.Email;
 
 namespace RescueSriLanka.Api.Features.ComponentC.Controllers;
 
@@ -13,7 +14,8 @@ namespace RescueSriLanka.Api.Features.ComponentC.Controllers;
 public class ResourcesController(
     IResourceManagementService resourceService,
     IResourceAllocationAgent allocationAgent,
-    IResourceForecastAgent forecastAgent) : ControllerBase
+    IResourceForecastAgent forecastAgent,
+    IActionEmailService emails) : ControllerBase
 {
     // Changing stock and allocations is staff work. Inventory reads are open,
     // while request and donation history requires an account and is ownership-scoped.
@@ -244,6 +246,7 @@ public class ResourcesController(
                 ? parsedUserId
                 : (Guid?)null;
             var helpRequest = await resourceService.CreateHelpRequestAsync(request, userId, cancellationToken);
+            await emails.ResourceRequestSubmittedAsync(helpRequest.Id, cancellationToken);
             return Created($"api/resources/help-requests/{helpRequest.Id}", helpRequest);
         }
         catch (ArgumentException exception)
@@ -266,6 +269,8 @@ public class ResourcesController(
         try
         {
             var requests = await resourceService.CreateHelpRequestsBatchAsync(request, userId, cancellationToken);
+            foreach (var item in requests)
+                await emails.ResourceRequestSubmittedAsync(item.Id, cancellationToken);
             return Ok(requests);
         }
         catch (ArgumentException exception)
@@ -284,9 +289,10 @@ public class ResourcesController(
         try
         {
             var helpRequest = await resourceService.UpdateHelpRequestStatusAsync(id, request, cancellationToken);
-            return helpRequest is null
-                ? NotFound(new { error = "Help request was not found." })
-                : Ok(helpRequest);
+            if (helpRequest is null)
+                return NotFound(new { error = "Help request was not found." });
+            await emails.ResourceRequestStatusChangedAsync(id, request.Status, cancellationToken);
+            return Ok(helpRequest);
         }
         catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
         catch (InvalidOperationException exception) { return Conflict(new { error = exception.Message }); }
@@ -321,6 +327,7 @@ public class ResourcesController(
                 ? parsedUserId
                 : (Guid?)null;
             var donation = await resourceService.CreateDonationAsync(request, userId, cancellationToken);
+            await emails.DonationSubmittedAsync(donation.Id, cancellationToken);
             return Created($"api/resources/donations/{donation.Id}", donation);
         }
         catch (ArgumentException exception)
@@ -343,6 +350,8 @@ public class ResourcesController(
         try
         {
             var donations = await resourceService.CreateDonationsBatchAsync(request, userId, cancellationToken);
+            foreach (var item in donations)
+                await emails.DonationSubmittedAsync(item.Id, cancellationToken);
             return Ok(donations);
         }
         catch (ArgumentException exception)
@@ -361,9 +370,10 @@ public class ResourcesController(
         try
         {
             var donation = await resourceService.UpdateDonationStatusAsync(id, request, cancellationToken);
-            return donation is null
-                ? NotFound(new { error = "Donation was not found." })
-                : Ok(donation);
+            if (donation is null)
+                return NotFound(new { error = "Donation was not found." });
+            await emails.DonationStatusChangedAsync(id, request.Status, cancellationToken);
+            return Ok(donation);
         }
         catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
         catch (InvalidOperationException exception) { return Conflict(new { error = exception.Message }); }
@@ -380,9 +390,11 @@ public class ResourcesController(
         {
             var donations = await resourceService.UpdateDonationBatchStatusAsync(
                 submissionId, request, cancellationToken);
-            return donations is null
-                ? NotFound(new { error = "Donation submission was not found." })
-                : Ok(donations);
+            if (donations is null)
+                return NotFound(new { error = "Donation submission was not found." });
+            foreach (var item in donations)
+                await emails.DonationStatusChangedAsync(item.Id, request.Status, cancellationToken);
+            return Ok(donations);
         }
         catch (ArgumentException exception) { return BadRequest(new { error = exception.Message }); }
         catch (InvalidOperationException exception) { return Conflict(new { error = exception.Message }); }

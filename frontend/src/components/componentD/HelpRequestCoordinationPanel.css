@@ -1,0 +1,10 @@
+.help-coordination { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(320px, 2fr); gap: 1rem; }
+.help-coordination > .panel { min-width: 0; padding: 1rem; }
+.help-request-card { display: grid; gap: .4rem; width: 100%; text-align: left; margin: .6rem 0; padding: .8rem; background: transparent; color: inherit; border: 1px solid #94a3b8; border-radius: .5rem; overflow-wrap: anywhere; }
+.help-request-card[aria-pressed=true] { border: 2px solid #15803d; }
+.help-response-map { height: 320px; width: 100%; z-index: 0; }
+.help-coordination dl { display: grid; grid-template-columns: minmax(100px, 1fr) 2fr; gap: .4rem; }
+.help-coordination dd { margin: 0; overflow-wrap: anywhere; }
+.help-coordination select { max-width: 100%; }
+.response-objective-tabs { display: flex; gap: .6rem; margin: 1rem 0; }
+@media (max-width: 850px) { .help-coordination { grid-template-columns: 1fr; } }

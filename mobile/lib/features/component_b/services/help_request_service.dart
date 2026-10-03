@@ -32,6 +32,7 @@ class HelpRequest {
   final String id;
   final int type;
   final String description;
+  final int? estimatedPeopleCount;
   final double latitude;
   final double longitude;
   final int urgencyScore;
@@ -45,6 +46,7 @@ class HelpRequest {
     required this.id,
     required this.type,
     required this.description,
+    this.estimatedPeopleCount,
     required this.latitude,
     required this.longitude,
     required this.urgencyScore,
@@ -59,6 +61,7 @@ class HelpRequest {
     id: json['id'],
     type: json['type'],
     description: json['description'],
+    estimatedPeopleCount: json['estimatedPeopleCount'] as int?,
     latitude: (json['latitude'] as num).toDouble(),
     longitude: (json['longitude'] as num).toDouble(),
     urgencyScore: json['urgencyScore'],
@@ -128,6 +131,7 @@ class HelpRequestLoadResult {
 
 class HelpRequestService {
   static Future<HelpRequest?> submit({
+    required int estimatedPeopleCount,
     required int type,
     required String description,
     required double latitude,
@@ -137,6 +141,7 @@ class HelpRequestService {
     final res = await HelpRequestApi.post('/api/HelpRequests', {
       'type': type,
       'description': description,
+      'estimatedPeopleCount': estimatedPeopleCount,
       'latitude': latitude,
       'longitude': longitude,
       'relatedIncidentId': null,
@@ -228,11 +233,13 @@ class HelpRequestService {
   }
 
   static Future<bool> update({
+    required int estimatedPeopleCount,
     required HelpRequest request,
     required int type,
     required String description,
   }) async {
     final res = await HelpRequestApi.put('/api/HelpRequests/${request.id}', {
+      'estimatedPeopleCount': estimatedPeopleCount,
       'type': type,
       'description': description,
       'latitude': request.latitude,

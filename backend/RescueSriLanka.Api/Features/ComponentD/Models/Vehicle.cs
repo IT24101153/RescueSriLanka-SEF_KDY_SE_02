@@ -3,10 +3,13 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace RescueSriLanka.Api.Features.ComponentD.Models
 {
-    public class Vehicle
+    public class Vehicle : IComponentDAuditable
     {
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
 
         [Required, MaxLength(20)]
         public string PlateNumber { get; set; } = string.Empty;

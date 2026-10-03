@@ -333,7 +333,7 @@ class _AiSafetyReviewScreenState extends State<AiSafetyReviewScreen> {
                     assignment['requiredSkill'],
                   ),
                   CoordinationField(
-                    'Required capacity',
+                    'People/Patients Requiring Transport',
                     assignment['requiredCapacity'],
                   ),
                   CoordinationField('Plan version', assignment['planVersion']),

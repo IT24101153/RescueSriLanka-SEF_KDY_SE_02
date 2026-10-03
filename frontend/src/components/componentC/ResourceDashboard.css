@@ -61,7 +61,8 @@ button { font: inherit; cursor: pointer; }
 .app-shell { display: block; min-height: 0; }
 .main-content { width: 100%; max-width: none; margin: 0; padding: 0; }
 .main-content .eyebrow { letter-spacing: 0; }
-.resource-page-tabs { display: flex; gap: 4px; margin: 0 0 32px; overflow-x: auto; border-bottom: 1px solid #e4e8ee; }
+.resource-page-tabs { display: flex; gap: 4px; margin: 0 0 32px; overflow-x: auto; border-bottom: 1px solid #e4e8ee; scrollbar-width: none; }
+.resource-page-tabs::-webkit-scrollbar { display: none; }
 .resource-page-tab { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 12px 14px; background: transparent; color: #5b6675; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .resource-page-tab:hover { color: #0b0e13; background: #fafafa; }
 .resource-page-tab.is-active { border-bottom-color: #faa71b; color: #0b0e13; }

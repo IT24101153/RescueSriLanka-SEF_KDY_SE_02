@@ -12,6 +12,9 @@ public interface ILlmClient
     /// <summary>Model identifier, recorded on each agent run for auditability.</summary>
     string ModelName { get; }
 
+    /// <summary>How many requests the last <see cref="GenerateAsync"/> made (retries included); 0 before any call.</summary>
+    int LastAttempts => 0;
+
     /// <summary>
     /// Sends a prompt and returns the raw text response. When
     /// <paramref name="jsonSchema"/> is supplied the provider is asked to

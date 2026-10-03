@@ -7,10 +7,13 @@ namespace RescueSriLanka.Api.Features.ComponentD.Models
     // One Dispatch per Assignment. Timestamps double as a lightweight audit
     // trail; swap for a separate DispatchStatusHistory table later if the
     // rubric's observability requirement calls for more granular logging.
-    public class Dispatch
+    public class Dispatch : IComponentDAuditable
     {
         [Key]
         public Guid Id { get; set; } = Guid.NewGuid();
+
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
 
         public Guid AssignmentId { get; set; }
 

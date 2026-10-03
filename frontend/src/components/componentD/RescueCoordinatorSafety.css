@@ -1,17 +1,12 @@
-.safety-result ul li {
-  display: block;
-  font-size: 13px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.safety-result ul li strong {
-  display: inline-block;
-  min-width: 42px;
-  margin-right: 8px;
-}
-
-.decision-actions .btn:disabled {
-  opacity: .55;
-  cursor: not-allowed;
-}
+/* Safety presentation: recommendation and human decision remain distinct. */
+.rescue-dashboard .safety-result { display: grid; gap: 18px; }
+.rescue-dashboard .safety-result ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.rescue-dashboard .safety-result li { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.rescue-dashboard .safety-result li strong { display: inline-block; margin-right: 8px; font-size: 11px; }
+.rescue-dashboard .safety-result [data-result="pass"] { border-left: 3px solid var(--safe); background: var(--safe-soft); }
+.rescue-dashboard .safety-result [data-result="pass"] strong { color: var(--safe-ink); }
+.rescue-dashboard .safety-result [data-result="fail"] { border-left: 3px solid var(--critical); background: var(--critical-soft); }
+.rescue-dashboard .safety-result [data-result="fail"] strong { color: var(--critical-ink); }
+.rescue-dashboard .safety-note { padding: 14px; border: 1px solid var(--accent-ring); border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--text-strong); font-size: 13px; line-height: 1.6; }
+.rescue-dashboard .decision-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); }
+.rescue-dashboard .decision-actions button { flex: 1 1 130px; }

@@ -487,11 +487,14 @@
 .hr-request-image-link { display: block; width: fit-content; max-width: 100%; margin: 0 0 1.4rem; color: #a35e00; font-size: .78rem; font-weight: 600; text-decoration: none; }
 .hr-request-image { display: block; width: min(100%, 520px); max-height: 300px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); margin-bottom: .45rem; }
 
-.hr-ai-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 1rem; background: rgba(18, 24, 32, .48); }
-.hr-ai-dialog { width: min(100%, 560px); max-height: min(80vh, 680px); overflow: auto; padding: 1.4rem; border-radius: 14px; background: white; box-shadow: 0 20px 60px rgba(0, 0, 0, .26); }
-.hr-ai-dialog-head { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 1.1rem; }
-.hr-ai-dialog-head p { margin: .35rem 0 0; color: var(--muted); font-size: .84rem; line-height: 1.4; }
-.hr-ai-close { width: 2rem; height: 2rem; border: 0; border-radius: 50%; background: var(--line); color: var(--ink); font-size: 1.35rem; cursor: pointer; }
+.hr-ai-panel { margin: 0 0 1.4rem; padding: 1rem 1.1rem; border-radius: 12px; background: #f7f8fa; border: 1px solid var(--line); }
+.hr-ai-panel-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.hr-ai-pending { color: var(--muted); font-size: .8rem; line-height: 1.4; }
 .hr-ai-result { padding: .85rem 0; border-top: 1px solid var(--line); }
 .hr-ai-result span { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .hr-ai-result p { margin: .35rem 0 0; color: var(--ink); font-size: .91rem; line-height: 1.45; }
+
+.hr-ai-decision { padding: .85rem 0 0; border-top: 1px solid var(--line); margin-top: .85rem; }
+.hr-ai-decision > span { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.hr-ai-decision-actions { display: flex; gap: .5rem; margin-top: .6rem; }
+.hr-ai-decided { margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; font-weight: 600; }

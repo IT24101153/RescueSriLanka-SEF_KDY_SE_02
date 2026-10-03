@@ -112,6 +112,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.ToTable("agent_runs");
 
             entity.Property(run => run.Status).HasConversion<string>().HasMaxLength(40);
+            entity.Property(run => run.Decision).HasConversion<string>().HasMaxLength(20)
+                .HasDefaultValue(AgentRunDecision.Pending);
+
+            // The decision is written with "WHERE ApprovedAt IS NULL", so two
+            // coordinators deciding at once cannot both win.
+            entity.Property(run => run.ApprovedAt).IsConcurrencyToken();
 
             entity.HasIndex(run => run.AgentName);
             entity.HasIndex(run => run.IncidentId);
@@ -165,6 +171,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.ToTable(table =>
             {
                 table.HasCheckConstraint("CK_HelpRequests_UrgencyScore", "\"UrgencyScore\" >= 0 AND \"UrgencyScore\" <= 100");
+                table.HasCheckConstraint("CK_HelpRequests_EstimatedPeopleCount", "\"EstimatedPeopleCount\" IS NULL OR \"EstimatedPeopleCount\" >= 1");
                 table.HasCheckConstraint("CK_HelpRequests_Latitude", "\"Latitude\" >= -90 AND \"Latitude\" <= 90");
                 table.HasCheckConstraint("CK_HelpRequests_Longitude", "\"Longitude\" >= -180 AND \"Longitude\" <= 180");
             });

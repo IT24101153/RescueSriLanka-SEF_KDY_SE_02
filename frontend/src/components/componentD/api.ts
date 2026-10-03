@@ -1,7 +1,15 @@
 import { apiFetch } from '../../shared/api/client'
+import type { Incident } from '../componentA/types'
+import type { RescueHelpRequest, RescueRecommendation, SkillType } from './types'
+
+export const getRescueHelpRequests = (signal?: AbortSignal) => apiFetch<RescueHelpRequest[]>('/api/rescue/help-requests', { signal })
+export const recommendRescueTeam = (id: string, requiredSkill: SkillType, requiredCapacity: number, signal?: AbortSignal) =>
+  apiFetch<RescueRecommendation>(`/api/rescue/help-requests/${id}/recommend-team`, { method: 'POST', body: JSON.stringify({ requiredSkill, requiredCapacity }), signal })
 import type { AssignmentDto, CreateAssignmentRequest, CreateRescueTeamRequest, CreateTeamMemberRequest, CreateVehicleRequest, ReviseAssignmentRequest, SafetyValidationWorkflowResultDto, CoordinatorDecisionRequest, CoordinatorDecisionResultDto, DispatchDto, DispatchStatus, MatchRequest, RescueTeamDto, TeamMatchResultDto, TeamMemberDto, UpdateTeamMemberRequest, UpdateVehicleRequest, VehicleDto } from './types'
 
 export const getRescueTeams = (signal?: AbortSignal) => apiFetch<RescueTeamDto[]>('/api/rescueteams', { signal })
+export const getActiveIncidents = (signal?: AbortSignal) => apiFetch<Incident[]>('/api/incidents?activeOnly=true', { signal })
+export const getIncident = (id: string, signal?: AbortSignal) => apiFetch<Incident>(`/api/incidents/${id}`, { signal })
 export const getAssignments = (signal?: AbortSignal) => apiFetch<AssignmentDto[]>('/api/assignments', { signal })
 export const getDispatches = (signal?: AbortSignal) => apiFetch<DispatchDto[]>('/api/dispatches', { signal })
 export const createRescueTeam = (request: CreateRescueTeamRequest) => apiFetch<RescueTeamDto>('/api/rescueteams', { method: 'POST', body: JSON.stringify(request) })
@@ -19,3 +27,5 @@ export const reviseAssignment = (id: string, request: ReviseAssignmentRequest) =
 export const validateAssignment = (id: string) => apiFetch<SafetyValidationWorkflowResultDto>(`/api/assignments/${id}/validate`, { method: 'POST' })
 export const decideAssignment = (id: string, request: CoordinatorDecisionRequest) => apiFetch<CoordinatorDecisionResultDto>(`/api/assignments/${id}/decision`, { method: 'POST', body: JSON.stringify(request) })
 export const transitionDispatch = (id: string, newStatus: DispatchStatus) => apiFetch<DispatchDto>(`/api/dispatches/${id}/status`, { method: 'PATCH', body: JSON.stringify({ newStatus }) })
+
+export const cancelAssignment = (id: string) => apiFetch<AssignmentDto>(`/api/assignments/${id}/cancel`, { method: 'POST' })

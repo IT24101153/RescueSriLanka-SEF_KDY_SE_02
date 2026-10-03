@@ -12,6 +12,8 @@ type UrgencyTier = "danger" | "caution" | "safe";
 interface HelpRequestDto {
   id: string;
   citizenId: string;
+  citizenName: string | null;
+  citizenPhoneNumber: string | null;
   type: number;
   description: string;
   latitude: number;
@@ -38,10 +40,16 @@ function urgencyTier(score: number): UrgencyTier {
   return "safe";
 }
 
-interface AiAnalysisDto {
-  reasoning: string;
-  credibilitySignal: string;
-  suggestedAction: string;
+type WorkflowStatus = "Planning" | "AwaitingApproval" | "Approved" | "Rejected" | "Executing" | "Completed" | "Failed";
+
+interface AiAssessmentDto {
+  priority: string;
+  aiAnalysisAvailable: boolean;
+  reasoning: string | null;
+  suggestedAction: string | null;
+  credibilitySignal: string | null;
+  workflowId: string | null;
+  workflowStatus: WorkflowStatus | null;
 }
 
 function canTransition(current: number, next: number): boolean {
@@ -86,9 +94,11 @@ export default function HelpRequestsReview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
-  const [aiReview, setAiReview] = useState<AiAnalysisDto | null>(null);
+  const [aiReview, setAiReview] = useState<AiAssessmentDto | null>(null);
   const [aiReviewing, setAiReviewing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState(false);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -128,15 +138,32 @@ export default function HelpRequestsReview() {
     }
   }, []);
 
+  // Read-only — never calls Gemini. Picks up whatever the Planner Agent
+  // already produced in the background when the request was submitted, so
+  // the manager sees an assessment without pressing anything.
+  const loadAiAssessment = useCallback(async (id: string | null) => {
+    if (!id) {
+      setAiReview(null);
+      return;
+    }
+    try {
+      const res = await authFetch(`/api/HelpRequests/${id}/ai-priority`);
+      if (!res.ok) throw new Error();
+      setAiReview(await res.json());
+    } catch {
+      setAiReview(null);
+    }
+  }, []);
+
   useEffect(() => {
     loadRequests();
   }, [loadRequests]);
 
   useEffect(() => {
     loadHistory(selectedId);
-    setAiReview(null);
+    loadAiAssessment(selectedId);
     setAiError(null);
-  }, [selectedId, loadHistory]);
+  }, [selectedId, loadHistory, loadAiAssessment]);
 
   const filteredRequests = requests
     .filter((request) =>
@@ -195,6 +222,8 @@ export default function HelpRequestsReview() {
     }
   }
 
+  // Forces a fresh Planner Agent run — mainly useful when the background
+  // triage hasn't completed yet or failed (e.g. Gemini was briefly down).
   async function runAiReview() {
     if (!selected) return;
     setAiReviewing(true);
@@ -204,11 +233,36 @@ export default function HelpRequestsReview() {
         method: "POST",
       });
       if (!res.ok) throw new Error();
-      setAiReview(await res.json());
+      await loadAiAssessment(selected.id);
     } catch {
       setAiError("AI review is unavailable. You can still verify and triage this request manually.");
     } finally {
       setAiReviewing(false);
+    }
+  }
+
+  // Approves or rejects the Planner Agent's plan itself — distinct from
+  // Verify/Reject above, which judges whether the report is genuine. This
+  // only records a decision on the workflow; it does not change the help
+  // request's own status, which Component D's dispatch flow owns.
+  async function decidePlan(approved: boolean) {
+    if (!selected || !aiReview?.workflowId) return;
+    setDeciding(true);
+    setDecisionError(null);
+    try {
+      const res = await authFetch(`/api/agentworkflows/${aiReview.workflowId}/decision`, {
+        method: "POST",
+        body: JSON.stringify({
+          approved,
+          notes: approved ? "Approved by Help Request Manager" : "Rejected by Help Request Manager",
+        }),
+      });
+      if (!res.ok) throw new Error();
+      await loadAiAssessment(selected.id);
+    } catch {
+      setDecisionError("Could not record the decision. Try again.");
+    } finally {
+      setDeciding(false);
     }
   }
 
@@ -298,14 +352,53 @@ export default function HelpRequestsReview() {
               </div>
 
               <p className="hr-detail-desc">{selected.description}</p>
+              <p className="hr-detail-citizen">
+                Reported by: {selected.citizenName ?? 'Unknown citizen'}
+                {selected.citizenPhoneNumber ? ` · ${selected.citizenPhoneNumber}` : ''}
+              </p>
 
               <div className="hr-actions">
-                <span className="hr-actions-label">AI review</span>
+                <span className="hr-actions-label">AI assessment</span>
                 <button className="hr-segment" disabled={aiReviewing} onClick={runAiReview}>
-                    {aiReviewing ? "Reviewing…" : "Run AI review"}
+                    {aiReviewing ? "Reviewing…" : aiReview?.aiAnalysisAvailable ? "Re-run AI review" : "Run AI review"}
                 </button>
                 {aiError && <p className="hr-banner">{aiError}</p>}
               </div>
+
+              {aiReview && (
+                <div className="hr-ai-panel">
+                  <div className="hr-ai-panel-head">
+                    <span className={`hr-pill hr-pill--${urgencyTier(selected.urgencyScore)}`}>Priority: {aiReview.priority}</span>
+                    {!aiReview.aiAnalysisAvailable && (
+                      <span className="hr-ai-pending">Gemini reasoning isn't available for this run — priority above is the rule-based score only.</span>
+                    )}
+                  </div>
+                  {aiReview.aiAnalysisAvailable && (
+                    <>
+                      <div className="hr-ai-result"><span>Assessment</span><p>{aiReview.reasoning}</p></div>
+                      <div className="hr-ai-result"><span>Credibility signal</span><p>{aiReview.credibilitySignal}</p></div>
+                      <div className="hr-ai-result"><span>Suggested action</span><p>{aiReview.suggestedAction}</p></div>
+                    </>
+                  )}
+                  {aiReview.workflowStatus === "AwaitingApproval" && (
+                    <div className="hr-ai-decision">
+                      <span>Decide on this plan</span>
+                      <div className="hr-ai-decision-actions">
+                        <button type="button" className="hr-verify-btn hr-verify-btn--real" disabled={deciding} onClick={() => decidePlan(true)}>
+                          <CheckIcon /> Approve plan
+                        </button>
+                        <button type="button" className="hr-verify-btn hr-verify-btn--fake" disabled={deciding} onClick={() => decidePlan(false)}>
+                          <XIcon /> Reject plan
+                        </button>
+                      </div>
+                      {decisionError && <p className="hr-banner">{decisionError}</p>}
+                    </div>
+                  )}
+                  {(aiReview.workflowStatus === "Approved" || aiReview.workflowStatus === "Rejected") && (
+                    <p className="hr-ai-decided">Plan {aiReview.workflowStatus === "Approved" ? "approved" : "rejected"}.</p>
+                  )}
+                </div>
+              )}
 
               {selected.imageUrl && (
                 <a className="hr-request-image-link" href={selected.imageUrl} target="_blank" rel="noreferrer">
@@ -392,22 +485,6 @@ export default function HelpRequestsReview() {
           )}
         </div>
       </div>
-      {aiReview && (
-        <div className="hr-ai-backdrop" role="presentation" onClick={() => setAiReview(null)}>
-          <section className="hr-ai-dialog" role="dialog" aria-modal="true" aria-label="AI request review" onClick={(event) => event.stopPropagation()}>
-            <div className="hr-ai-dialog-head">
-              <div>
-                <span className="hr-actions-label">AI review</span>
-                <p>Advisory support only — the coordinator makes the final decision.</p>
-              </div>
-              <button className="hr-ai-close" onClick={() => setAiReview(null)} aria-label="Close AI review">×</button>
-            </div>
-            <div className="hr-ai-result"><span>Assessment</span><p>{aiReview.reasoning}</p></div>
-            <div className="hr-ai-result"><span>Credibility signal</span><p>{aiReview.credibilitySignal}</p></div>
-            <div className="hr-ai-result"><span>Suggested action</span><p>{aiReview.suggestedAction}</p></div>
-          </section>
-        </div>
-      )}
     </div>
   );
 }
