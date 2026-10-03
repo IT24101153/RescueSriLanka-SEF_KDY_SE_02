@@ -337,8 +337,7 @@ public static class EmailTemplates
           ToName = user.FullName,
           Subject = subject,
           HtmlBody = html,
-          TextBody = text,
-          BypassTestRedirect = true
+          TextBody = text
         };
       }
 
@@ -394,8 +393,7 @@ public static class EmailTemplates
           ToName = user.FullName,
           Subject = subject,
           HtmlBody = html,
-          TextBody = text,
-          BypassTestRedirect = true
+          TextBody = text
         };
       }
 

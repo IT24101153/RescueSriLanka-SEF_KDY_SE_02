@@ -39,10 +39,11 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 return null;
             }
 
-            var model = _config["GoogleAi:Model"] ?? "gemini-1.5-flash";
+            var model = _config["GoogleAi:Model"] ?? "gemini-3-flash-preview";
             var maxOutputTokens = _config.GetValue<int?>("GoogleAi:MaxOutputTokens") ?? 512;
 
-            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
+            // The key travels in a header, not the URL, so it never lands in request logs.
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent";
 
             var prompt = $$"""
                 You are assisting an emergency response coordinator in Sri Lanka.
@@ -60,6 +61,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 }
                 """;
 
+            var requested = _config.GetValue<int?>("GoogleAi:ThinkingBudget") ?? 128;
+            var thinkingBudget = requested < 0 ? -1 : Math.Max(requested, 128);
+
             var requestBody = new
             {
                 contents = new[]
@@ -68,13 +72,17 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
                 },
                 generationConfig = new
                 {
-                    maxOutputTokens
+                    maxOutputTokens,
+                    // Same budget rule as Component A's client: thinking counts against the output limit.
+                    thinkingConfig = new { thinkingBudget }
                 }
             };
 
             try
             {
-                var response = await _http.PostAsJsonAsync(url, requestBody);
+                using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(requestBody) };
+                request.Headers.Add("x-goog-api-key", apiKey);
+                using var response = await _http.SendAsync(request);
                 if (!response.IsSuccessStatusCode) return null;
 
                 var json = await response.Content.ReadFromJsonAsync<JsonElement>();

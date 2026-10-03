@@ -8,11 +8,13 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Features.ComponentA.Services;
 using RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent;
 using RescueSriLanka.Api.Features.ComponentB.DTOs;
 using RescueSriLanka.Api.Features.ComponentB.Models;
 using RescueSriLanka.Api.Features.ComponentB.Services;
 using RescueSriLanka.Api.Services.Email;
+using RescueSriLanka.Api.Services.Storage;
 
 namespace RescueSriLanka.Api.Features.ComponentB.Controllers
 {
@@ -23,7 +25,8 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         IAiAnalysisService aiAnalysis,
         AppDbContext db,
         IPlannerAgentService plannerAgent,
-        IActionEmailService emails) : ControllerBase
+        IActionEmailService emails,
+        IImageStore images) : ControllerBase
     {
         // Either coordinator may triage help requests; the web console sends
         // HelpRequestManager accounts to the Help request dashboard.
@@ -34,11 +37,12 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         private readonly IAiAnalysisService _aiAnalysis = aiAnalysis;
         private readonly AppDbContext _db = db;
         private readonly IPlannerAgentService _plannerAgent = plannerAgent;
+        private readonly IImageStore _images = images;
 
         // POST /api/helprequests
         // Citizen/tourist submits a new help request (Flutter app). Requires login.
         [HttpPost]
-        [Authorize]
+        [Authorize(Roles = nameof(UserRole.Citizen))]
         public async Task<ActionResult<HelpRequestResponseDto>> Create([FromBody] CreateHelpRequestDto dto)
         {
             var citizenId = GetUserId();
@@ -56,6 +60,38 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             }
         }
 
+        // POST /api/helprequests/photo
+        // A citizen's photo for a help request. It is uploaded to Cloudinary and the
+        // URL comes back for the request to carry in ImageUrl; the API keeps no copy.
+        [HttpPost("photo")]
+        [Authorize(Roles = nameof(UserRole.Citizen))]
+        public async Task<ActionResult<HelpRequestPhotoResponseDto>> UploadPhoto(IFormFile? photo, CancellationToken ct)
+        {
+            var citizenId = GetUserId();
+            if (citizenId is null) return Unauthorized();
+
+            if (photo is null)
+            {
+                return BadRequest(new { message = "Attach the photo as the form field 'photo'." });
+            }
+
+            try
+            {
+                ImageStorageService.Validate(photo);
+                var stored = await _images.SaveAsync(citizenId.Value, "helprequests", photo, ct);
+                return Ok(new HelpRequestPhotoResponseDto { Url = stored.Location });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                // The store refused the upload — report it rather than return a URL that points at nothing.
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+            }
+        }
+
         // GET /api/helprequests
         // Coordinator's review screen (React) — all requests, most urgent first
         [HttpGet]
@@ -69,7 +105,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         // GET /api/helprequests/mine
         // Citizen's own tracking screen (Flutter) — only their own requests
         [HttpGet("mine")]
-        [Authorize]
+        [Authorize(Roles = nameof(UserRole.Citizen))]
         public async Task<ActionResult<List<HelpRequestResponseDto>>> GetMine()
         {
             var citizenId = GetUserId();
@@ -221,7 +257,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         // PUT /api/helprequests/{id}
         // The requester can correct a pending, unverified request before triage starts.
         [HttpPut("{id}")]
-        [Authorize]
+        [Authorize(Roles = nameof(UserRole.Citizen))]
         public async Task<ActionResult<HelpRequestResponseDto>> Update(Guid id, [FromBody] UpdateHelpRequestDto dto)
         {
             var citizenId = GetUserId();
@@ -250,7 +286,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         // Requests are never hard-deleted: DELETE safely changes a pending request to Cancelled
         // and keeps the audit trail required for emergency coordination.
         [HttpDelete("{id}")]
-        [Authorize]
+        [Authorize(Roles = nameof(UserRole.Citizen))]
         public async Task<IActionResult> Delete(Guid id)
         {
             var citizenId = GetUserId();

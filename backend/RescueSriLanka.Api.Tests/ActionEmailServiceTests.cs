@@ -14,6 +14,7 @@ public sealed class ActionEmailServiceTests : IDisposable
     private readonly AppDbContext db = new(new DbContextOptionsBuilder<AppDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
     private readonly RecordingQueue queue = new();
+    private readonly RecordingPushNotificationService pushes = new();
 
     public void Dispose() => db.Dispose();
 
@@ -21,6 +22,7 @@ public sealed class ActionEmailServiceTests : IDisposable
         db,
         TestDbFactory.Create(),
         queue,
+        pushes,
         Options.Create(new EmailOptions { Enabled = enabled }),
         NullLogger<ActionEmailService>.Instance);
 
@@ -101,9 +103,25 @@ public sealed class ActionEmailServiceTests : IDisposable
 
         await Service().HelpRequestSubmittedAsync(request.Id);
 
-        var html = Assert.Single(queue.Sent.Where(m => m.ToAddress == citizen.Email)).HtmlBody;
+        var html = Assert.Single(queue.Sent, m => m.ToAddress == citizen.Email).HtmlBody;
         Assert.DoesNotContain("<script>alert(1)</script>", html);
         Assert.Contains("&lt;script&gt;", html);
+    }
+
+    [Fact]
+    public async Task HelpRequestStatusChange_IsPushedToTheCitizenEvenWithEmailSwitchedOff()
+    {
+        var citizen = await AddUser("citizen@example.com", UserRole.Citizen, notifications: false);
+        var request = new HelpRequest { CitizenId = citizen.Id, Type = HelpRequestType.Water, Description = "No water" };
+        db.HelpRequests.Add(request);
+        await db.SaveChangesAsync();
+
+        await Service().HelpRequestStatusChangedAsync(request.Id, "In Progress");
+
+        var (userIds, message) = Assert.Single(pushes.Calls);
+        Assert.Equal([citizen.Id], userIds);
+        Assert.Equal("Help request update", message.Title);
+        Assert.Empty(queue.Sent);
     }
 
     private sealed class RecordingQueue : IEmailQueue

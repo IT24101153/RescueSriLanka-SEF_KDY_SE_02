@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Features.ComponentB.Models;
 
 namespace RescueSriLanka.Api.Features.ComponentB.DTOs
@@ -24,7 +25,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
         [Range(-180, 180)]
         public double Longitude { get; set; }
         public Guid? RelatedIncidentId { get; set; }
-        [Url, StringLength(2048)]
+        [HttpUrl, StringLength(2048)]
         public string? ImageUrl { get; set; }
     }
 
@@ -41,6 +42,12 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
     // A citizen may correct a request only while it is still pending triage.
     public class UpdateHelpRequestDto : CreateHelpRequestDto
     {
+    }
+
+    // What the photo upload returns: the Cloudinary URL the request then carries in ImageUrl
+    public class HelpRequestPhotoResponseDto
+    {
+        public string Url { get; set; } = string.Empty;
     }
 
     // What the admin sends when verifying a citizen report as real or fake

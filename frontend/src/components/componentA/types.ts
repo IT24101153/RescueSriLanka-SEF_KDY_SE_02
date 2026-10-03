@@ -25,7 +25,7 @@ export const SEVERITY_ORDER: IncidentSeverity[] = [
 export type IncidentImage = {
   id: string
   incidentId: string
-  /** Absolute (Cloudinary) or API-relative (local disk) — resolve before use. */
+  /** Absolute Cloudinary URL. */
   url: string
   fileName: string | null
   contentType: string | null

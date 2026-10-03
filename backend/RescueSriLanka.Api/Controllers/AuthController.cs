@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using RescueSriLanka.Api.DTOs.Auth;
+using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services;
 
 namespace RescueSriLanka.Api.Controllers;
@@ -11,19 +12,34 @@ namespace RescueSriLanka.Api.Controllers;
 [Route("api/[controller]")]
 public class AuthController(IAuthService authService) : ControllerBase
 {
-    /// <summary>Exchanges email and password for a JWT.</summary>
+    /// <summary>Citizen sign-in for the mobile app. Staff accounts are refused here.</summary>
     [HttpPost("login")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<AuthResponse>> Login(
+    public Task<ActionResult<AuthResponse>> Login(
         [FromBody] LoginRequest request,
-        CancellationToken cancellationToken)
-    {
-        var result = await authService.LoginAsync(request, cancellationToken);
+        CancellationToken cancellationToken) =>
+        SignInAsync(request, LoginClient.CitizenApp, cancellationToken);
 
-        // Deliberately vague: never reveal whether the email exists.
+    /// <summary>Staff sign-in for the web portal. Citizen accounts are refused here.</summary>
+    [HttpPost("portal/login")]
+    [EnableRateLimiting("auth")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public Task<ActionResult<AuthResponse>> PortalLogin(
+        [FromBody] LoginRequest request,
+        CancellationToken cancellationToken) =>
+        SignInAsync(request, LoginClient.StaffPortal, cancellationToken);
+
+    private async Task<ActionResult<AuthResponse>> SignInAsync(
+        LoginRequest request, LoginClient client, CancellationToken cancellationToken)
+    {
+        var result = await authService.LoginAsync(request, client, cancellationToken);
+
+        // Deliberately vague: never reveal whether the email exists or which kind of account it is.
         return result is null
             ? Unauthorized(new { message = "Invalid email or password." })
             : Ok(result);
@@ -33,20 +49,17 @@ public class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("register")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<AuthResponse>> Register(
+    public async Task<IActionResult> Register(
         [FromBody] RegisterRequest request,
         CancellationToken cancellationToken)
     {
         try
         {
-            var result = await authService.RegisterCitizenAsync(request, cancellationToken);
-
-            return result is null
-                ? Conflict(new { message = "An account with that email already exists." })
-                : Ok(result);
+            // The same answer whether or not the address was already registered, so sign-up cannot be used to find accounts.
+            await authService.RegisterCitizenAsync(request, cancellationToken);
+            return Accepted(new { message = "If this email can be registered, the account is ready. Sign in with your email and password." });
         }
         catch (ArgumentException ex)
         {

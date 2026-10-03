@@ -8,6 +8,8 @@ using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentB.DTOs;
 using RescueSriLanka.Api.Features.ComponentB.Models;
 using RescueSriLanka.Api.Features.ComponentB.Services;
+using RescueSriLanka.Api.Features.ComponentD.Data;
+using RescueSriLanka.Api.Services.Email;
 
 namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 {
@@ -22,25 +24,32 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
     // builds the structured multi-step plan, and delegates to the other three agents."
     // Owner: Student B, per the Proposal's risk mitigation note (explicitly documented here).
     //
-    // Step execution: each step below runs REAL logic against data Student B actually owns.
-    // Where a step conceptually belongs to another student's agent (A/C/D), the logic here
-    // is a clearly-marked placeholder using a small reference dataset — swap for a real HTTP
-    // call to that agent's endpoint once the team's tool contracts are confirmed (see the
-    // Agentic AI Contract Questions document). The Safety Validation step is NOT a placeholder —
-    // it's real, working deterministic validation against this project's own data.
-    public class PlannerAgentService(AppDbContext db, IHelpRequestServiceForAgent helpRequestLookup, IAiAnalysisService aiAnalysis) : IPlannerAgentService
+    // The three steps:
+    //   1. Analysis: the rule-based severity, plus an assessment in which the model calls
+    //      read-only tools (nearby incidents, available teams, open requests) before it gives
+    //      its verdict. The verdict is recorded; it does not set the severity.
+    //   2. Logistics: the nearest available rescue team with a recorded base, from Component D's records.
+    //   3. Validation: the duplicate-dispatch and terminal-status checks, and a check that any team the
+    //      model suggested was actually returned by a tool. An unverified suggestion is dropped.
+    //
+    // Approval is the one place this planner acts. Approving a plan with a recommended team moves the
+    // help request to Assigned, through B's own transition rules and history, and tells the citizen.
+    // Rejecting, or approving with no team, changes nothing. Nothing is dispatched here; Component D's
+    // assignment flow still owns that.
+    public class PlannerAgentService(
+        AppDbContext db,
+        ComponentDDbContext componentD,
+        IHelpRequestServiceForAgent helpRequestLookup,
+        IRequestAssessmentAgent assessment,
+        IActionEmailService emails) : IPlannerAgentService
     {
         private readonly AppDbContext _db = db;
+        private readonly ComponentDDbContext _componentD = componentD;
         private readonly IHelpRequestServiceForAgent _helpRequestLookup = helpRequestLookup;
-        private readonly IAiAnalysisService _aiAnalysis = aiAnalysis;
+        private readonly IRequestAssessmentAgent _assessment = assessment;
+        private readonly IActionEmailService _emails = emails;
 
-        // PLACEHOLDER reference dataset for the Resource & Logistics step.
-        private static readonly (string Name, double Lat, double Lng)[] KnownFacilities =
-        [
-            ("Colombo National Hospital", 6.9214, 79.8621),
-            ("Kalutara District Hospital", 6.5854, 79.9607),
-            ("Ratnapura General Hospital", 6.6828, 80.4012),
-        ];
+        private const double NearbyRadiusKm = AssessmentTools.DefaultRadiusKm;
 
         public async Task<AgentWorkflowResponseDto> TriggerAsync(TriggerWorkflowDto dto)
         {
@@ -99,7 +108,6 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             _db.AgentWorkflows.Add(workflow);
             await _db.SaveChangesAsync();
 
-            // Execute each step with real logic (see class-level note on placeholders vs real logic).
             await ExecuteStepsAsync(workflow, dto);
 
             await _db.SaveChangesAsync();
@@ -116,36 +124,48 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             var step2 = workflow.Steps.First(s => s.StepNumber == 2);
             var step3 = workflow.Steps.First(s => s.StepNumber == 3);
 
-            // ---- Step 1: Incident Analysis — REAL rule-based classification + real Gemini AI reasoning ----
+            string? scoreSeverity = null;
+            RequestAssessment? verdict = null;
+
+            // ---- Step 1: Analysis — score-based severity, the model's assessment with its tool trace ----
             if (request is not null)
             {
-                string severity = request.UrgencyScore >= 70 ? "High" : request.UrgencyScore >= 40 ? "Medium" : "Low";
+                scoreSeverity = request.UrgencyScore >= 70 ? "High" : request.UrgencyScore >= 40 ? "Medium" : "Low";
                 string zone = request.UrgencyScore >= 70 ? "Danger" : request.UrgencyScore >= 40 ? "Caution" : "Safe";
 
-                // Real Gemini call — adds human-readable reasoning and a credibility
-                // signal on top of the deterministic score. If the AI call fails or
-                // no key is configured, we still have the rule-based result above,
-                // so the workflow degrades gracefully rather than breaking.
-                AiAnalysisResult? aiResult;
+                int nearbyIncidents = await AssessmentTools.CountNearbyActiveIncidentsAsync(
+                    _db, request.Latitude, request.Longitude, NearbyRadiusKm);
+
                 try
                 {
-                    aiResult = await _aiAnalysis.AnalyzeHelpRequestAsync(
-                        request.Type.ToString(), request.Description, request.UrgencyScore);
+                    verdict = await _assessment.AssessAsync(request);
                 }
-                catch
+                catch (Exception exception) when (exception is not OperationCanceledException)
                 {
-                    aiResult = null;
+                    // The agent handles model failures itself. Anything else still must not stop the plan.
+                    verdict = RequestAssessment.Unavailable($"The assessment failed: {exception.Message}", []);
                 }
 
                 step1.ToolResultJson = JsonSerializer.Serialize(new
                 {
-                    severity,
+                    severity = scoreSeverity,
                     zone,
                     basedOnUrgencyScore = request.UrgencyScore,
-                    aiReasoning = aiResult?.Reasoning,
-                    aiCredibilitySignal = aiResult?.CredibilitySignal,
-                    aiSuggestedAction = aiResult?.SuggestedAction,
-                    aiAnalysisAvailable = aiResult is not null
+                    nearbyActiveIncidents = nearbyIncidents,
+                    nearbyRadiusKm = NearbyRadiusKm,
+                    aiReasoning = verdict.Reasoning,
+                    aiCredibilitySignal = verdict.Credibility,
+                    aiSuggestedAction = verdict.RecommendedAction,
+                    aiAnalysisAvailable = verdict.ModelAvailable && verdict.Reasoning is not null,
+                    modelPriority = verdict.Priority,
+                    modelUnavailableReason = verdict.UnavailableReason,
+                    suggestedTeam = verdict.SuggestedTeam,
+                    toolCalls = verdict.ToolCalls.Select(call => new
+                    {
+                        tool = call.Tool,
+                        outcome = call.Outcome,
+                        arguments = call.Arguments
+                    })
                 });
                 step1.Status = PlannerStepStatus.Completed;
                 step1.CompletedAt = DateTime.UtcNow;
@@ -155,28 +175,44 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                 step1.Status = PlannerStepStatus.Failed;
             }
 
-            // ---- Step 2: Resource & Logistics — PLACEHOLDER facility dataset ----
+            // ---- Step 2: Logistics — nearest available rescue team with a recorded base ----
+            string? nearestTeamName = null;
             if (request is not null)
             {
-                var nearest = KnownFacilities
-                    .Select(f => new
-                    {
-                        f.Name,
-                        DistanceKm = HaversineDistanceMeters(request.Latitude, request.Longitude, f.Lat, f.Lng) / 1000.0
-                    })
-                    .OrderBy(f => f.DistanceKm)
-                    .First();
-
-                double etaMinutes = (nearest.DistanceKm / 40.0) * 60.0; // assumes ~40km/h average response speed
-
-                step2.ToolResultJson = JsonSerializer.Serialize(new
+                try
                 {
-                    nearestFacility = nearest.Name,
-                    distanceKm = Math.Round(nearest.DistanceKm, 1),
-                    estimatedEtaMinutes = Math.Round(etaMinutes, 0),
-                    note = "PLACEHOLDER facility dataset."
-                });
-                step2.Status = PlannerStepStatus.Completed;
+                    var search = await AssessmentTools.SearchAvailableTeamsAsync(
+                        _componentD, request.Latitude, request.Longitude, max: 1);
+                    var nearest = search.Nearest.FirstOrDefault();
+                    nearestTeamName = nearest?.Name;
+
+                    object logistics = nearest is null
+                        ? new
+                        {
+                            found = false,
+                            reason = "No available rescue team has a recorded base location.",
+                            teamsConsidered = search.Considered
+                        }
+                        : new
+                        {
+                            found = true,
+                            nearestTeam = nearest.Name,
+                            straightLineDistanceKm = nearest.DistanceKm,
+                            estimatedEtaMinutes = nearest.EstimatedEtaMinutes,
+                            etaBasis = $"Straight-line distance at an assumed {AssessmentTools.AssumedResponseSpeedKmh} km/h; road routing is not used.",
+                            teamsConsidered = search.Considered
+                        };
+
+                    step2.ToolResultJson = JsonSerializer.Serialize(logistics);
+                    step2.Status = PlannerStepStatus.Completed;
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    // The lookup reads another component's records. If it fails, the step says so,
+                    // and the coordinator sees it before approving anything.
+                    step2.ToolResultJson = JsonSerializer.Serialize(new { found = false, error = exception.Message });
+                    step2.Status = PlannerStepStatus.Failed;
+                }
                 step2.CompletedAt = DateTime.UtcNow;
             }
             else
@@ -184,9 +220,8 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                 step2.Status = PlannerStepStatus.Failed;
             }
 
-            // ---- Step 3: Safety Validation — REAL deterministic check ----
-            // Prevents double-dispatch: fails if another workflow for the same objective
-            // is already awaiting approval or approved.
+            // ---- Step 3: Validation — deterministic checks, and the team the plan will recommend ----
+            // Prevents double-dispatch: fails if another workflow for the same objective is already awaiting approval or approved.
             bool duplicateActiveWorkflow = await _db.AgentWorkflows.AnyAsync(w =>
                 w.Id != workflow.Id &&
                 w.ObjectiveId == workflow.ObjectiveId &&
@@ -198,16 +233,33 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 
             bool passed = !duplicateActiveWorkflow && requestStillActionable;
 
+            // The model's suggestion counts only if a tool actually returned that team in this run.
+            string? suggestedTeam = verdict?.SuggestedTeam;
+            bool suggestionVerified = suggestedTeam is not null
+                && verdict is not null
+                && verdict.TeamsOffered.Contains(suggestedTeam, StringComparer.Ordinal);
+
+            string? recommendedTeam = suggestionVerified ? suggestedTeam : nearestTeamName;
+            string recommendedTeamSource = suggestionVerified
+                ? "model, checked against the team records"
+                : nearestTeamName is not null ? "nearest available team (rule)" : "none";
+
             step3.ValidationResultJson = JsonSerializer.Serialize(new
             {
                 passed,
                 duplicateActiveWorkflow,
-                requestStillActionable
+                requestStillActionable,
+                recommendedTeam,
+                recommendedTeamSource,
+                suggestionRejected = suggestedTeam is not null && !suggestionVerified ? suggestedTeam : null,
+                modelPriority = verdict?.Priority,
+                priorityAgreesWithScore = verdict?.Priority is { } priority && scoreSeverity is not null
+                    ? AgreesWithScore(priority, scoreSeverity)
+                    : (bool?)null
             });
             step3.Status = passed ? PlannerStepStatus.Completed : PlannerStepStatus.Failed;
             step3.CompletedAt = DateTime.UtcNow;
 
-            // Overall workflow outcome, based on real validation result.
             if (!passed)
             {
                 workflow.Status = PlannerWorkflowStatus.Failed;
@@ -261,35 +313,76 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                     reason = dto.Notes ?? "Rejected by coordinator",
                     at = DateTime.UtcNow
                 });
+
+                await _db.SaveChangesAsync();
+                return ToDto(workflow);
+            }
+
+            // Approval acts only when there is a team to recommend and the request is still waiting for one.
+            var recommendedTeam = RecommendedTeamFrom(workflow);
+            var request = await _db.HelpRequests.FindAsync(workflow.ObjectiveId);
+
+            object outcome;
+            bool assigned = false;
+            if (request is { Status: HelpRequestStatus.Pending } && recommendedTeam is not null)
+            {
+                _db.RequestStatusHistories.Add(HelpRequestStatusTransition.Apply(
+                    request,
+                    HelpRequestStatus.Assigned,
+                    coordinatorUserId,
+                    $"Plan approved by a coordinator. Recommended team: {recommendedTeam} (not yet dispatched)."));
+                assigned = true;
+
+                outcome = new
+                {
+                    outcome = "approved",
+                    helpRequestStatus = HelpRequestStatus.Assigned.ToString(),
+                    recommendedTeam,
+                    approvedAt = DateTime.UtcNow
+                };
             }
             else
             {
-                workflow.FinalOutcomeJson = JsonSerializer.Serialize(new
+                outcome = new
                 {
                     outcome = "approved",
+                    helpRequestStatus = request?.Status.ToString() ?? "Missing",
+                    note = recommendedTeam is null
+                        ? "No team was recommended, so the request was left as it is."
+                        : "The request is no longer pending, so its status was left as it is.",
                     approvedAt = DateTime.UtcNow
-                });
+                };
             }
 
+            workflow.FinalOutcomeJson = JsonSerializer.Serialize(outcome);
             await _db.SaveChangesAsync();
+
+            if (assigned)
+            {
+                // The citizen hears about the change through the same path as any other status change.
+                await _emails.HelpRequestStatusChangedAsync(request!.Id, HelpRequestStatus.Assigned.ToString());
+            }
+
             return ToDto(workflow);
         }
 
-        private static double HaversineDistanceMeters(double lat1, double lon1, double lat2, double lon2)
+        private static string? RecommendedTeamFrom(AgentWorkflow workflow)
         {
-            const double earthRadiusMeters = 6371000;
-            double dLat = DegreesToRadians(lat2 - lat1);
-            double dLon = DegreesToRadians(lon2 - lon1);
+            var validation = workflow.Steps.FirstOrDefault(s => s.StepNumber == 3)?.ValidationResultJson;
+            if (validation is null) return null;
 
-            double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                       Math.Cos(DegreesToRadians(lat1)) * Math.Cos(DegreesToRadians(lat2)) *
-                       Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-
-            double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-            return earthRadiusMeters * c;
+            using var document = JsonDocument.Parse(validation);
+            return document.RootElement.TryGetProperty("recommendedTeam", out var team) && team.ValueKind == JsonValueKind.String
+                ? team.GetString()
+                : null;
         }
 
-        private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
+        // A critical rating is the top of the same scale as a high score, so it agrees with "High".
+        private static bool AgreesWithScore(string modelPriority, string scoreSeverity)
+        {
+            var normalised = modelPriority.Equals("Critical", StringComparison.OrdinalIgnoreCase) ? "High" : modelPriority;
+            return string.Equals(normalised, scoreSeverity, StringComparison.OrdinalIgnoreCase);
+        }
 
         private static AgentWorkflowResponseDto ToDto(AgentWorkflow w) => new()
         {

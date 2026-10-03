@@ -103,7 +103,7 @@ public sealed class HelpRequestAiPriorityTests
     private static HelpRequestsController BuildController(AppDbContext db, Guid citizenId, Guid requestId)
     {
         var controller = new HelpRequestsController(
-            new FakeHelpRequestService(citizenId, requestId), new UnusedAiAnalysisService(), db, new UnusedPlannerAgentService(), new NoOpActionEmailService())
+            new FakeHelpRequestService(citizenId, requestId), new UnusedAiAnalysisService(), db, new UnusedPlannerAgentService(), new NoOpActionEmailService(), new NoOpImageStore())
         {
             ControllerContext = new ControllerContext
             {

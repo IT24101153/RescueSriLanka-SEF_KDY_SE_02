@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../features/component_a/services/api_client.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
+import '../../core/password_rules.dart';
+import '../../core/input_rules.dart';
 
 /// Citizen self-registration, posting to /api/auth/register.
 ///
@@ -160,14 +162,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     controller: _name,
                     textCapitalization: TextCapitalization.words,
                     textInputAction: TextInputAction.next,
+                    inputFormatters: nameInputFormatters,
                     decoration: const InputDecoration(
                       labelText: 'Full name',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.person_outline),
                     ),
-                    validator: (value) => (value?.trim() ?? '').isEmpty
-                        ? 'Enter your name.'
-                        : null,
+                    validator: (value) => validatePersonName(value),
                   ),
                   const SizedBox(height: 14),
                   TextFormField(
@@ -193,6 +194,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     controller: _phone,
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.next,
+                    inputFormatters: phoneInputFormatters,
+                    validator: (value) => validateSriLankaPhone(value),
                     decoration: const InputDecoration(
                       labelText: 'Phone number (optional)',
                       border: OutlineInputBorder(),
@@ -219,7 +222,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       prefixIcon: const Icon(Icons.lock_outline),
                       // The API enforces eight characters; say so before the
                       // server has to.
-                      helperText: 'At least 8 characters',
+                      helperText: passwordRuleMessage,
                       suffixIcon: IconButton(
                         icon: Icon(_obscure
                             ? Icons.visibility_outlined
@@ -228,8 +231,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         tooltip: _obscure ? 'Show password' : 'Hide password',
                       ),
                     ),
-                    validator: (value) => (value ?? '').length < 8
-                        ? 'Use at least 8 characters.'
+                    validator: (value) => !isStrongEnoughPassword(value ?? '')
+                        ? passwordRuleMessage
                         : null,
                   ),
                   const SizedBox(height: 14),

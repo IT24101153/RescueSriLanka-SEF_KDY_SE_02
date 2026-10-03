@@ -5,7 +5,7 @@ import { clearSession, storeSession } from '../../shared/auth/session'
 afterEach(() => { vi.unstubAllGlobals(); clearSession() })
 
 it('uses the authenticated client for read-only incident list and detail requests', async () => {
-  storeSession({ token: 'test-token', expiresAt: '2099-01-01T00:00:00Z', user: { id: 'user', fullName: 'Rescue', email: 'test@example.test', role: 'RescueTeam' } }, false)
+  storeSession({ token: 'test-token', expiresAt: '2099-01-01T00:00:00Z', user: { id: 'user', fullName: 'Rescue', email: 'test@example.test', role: 'RescueTeam' } })
   const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify([]), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
   await getActiveIncidents()

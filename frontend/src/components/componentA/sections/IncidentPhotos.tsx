@@ -7,9 +7,8 @@ type IncidentPhotosProps = {
 }
 
 /**
- * Cloudinary hands back an absolute https URL; the local-disk fallback stores a
- * site-relative path served by the API. Both reach this component, so resolve
- * rather than assuming either one.
+ * Photos are stored on Cloudinary, so the URL is already absolute. Anything
+ * older that is still site-relative is resolved against the API host.
  */
 function resolve(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `${API_BASE}${url}`

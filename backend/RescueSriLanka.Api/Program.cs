@@ -1,9 +1,10 @@
+using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using System.Text.Json.Serialization;
-using CloudinaryDotNet;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Options;
 using RescueSriLanka.Api.Services;
 using RescueSriLanka.Api.Services.Email;
 using RescueSriLanka.Api.Services.Llm;
+using RescueSriLanka.Api.Services.Push;
 using RescueSriLanka.Api.Services.Storage;
 using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
 using RescueSriLanka.Api.Features.ComponentA.Data;
@@ -73,6 +75,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("auth", http => RateLimitPartition.GetFixedWindowLimiter(
         http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+    // Anonymous submission forms: a generous per-IP limit, enough for a family but not for a script.
+    options.AddPolicy("public", http => RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
     options.AddPolicy("ai", http => RateLimitPartition.GetFixedWindowLimiter(
         http.User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -94,6 +100,11 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IHelpRequestResponseStatusService, HelpRequestResponseStatusService>();
 builder.Services.AddScoped<ITravelAdvisoryService, TravelAdvisoryService>();
 builder.Services.AddScoped<IPlannerAgentService, PlannerAgentService>();
+
+// Component B — the assessment model calls read-only tools itself before it gives its verdict.
+builder.Services.AddHttpClient<IPlanningModel, GeminiPlanningModel>(client =>
+    client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddScoped<IRequestAssessmentAgent, RequestAssessmentAgent>();
 builder.Services.AddScoped<IHelpRequestServiceForAgent, HelpRequestServiceForAgent>();
 builder.Services.AddHttpClient<IAiAnalysisService, GeminiAnalysisService>();
 
@@ -132,47 +143,16 @@ builder.Services.AddHttpClient<IDispatchRecommendationAgent, GeminiDispatchRecom
 builder.Services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
 
 // ---------------------------------------------------------------- photo storage
-// Cloudinary when credentials are present, local disk otherwise. A deployed
-// container's disk does not survive a restart, so uploads written there would
-// disappear — but requiring an account to run the project locally would be
-// worse, hence the fallback rather than a hard failure.
-var cloudinarySection = builder.Configuration.GetSection("Cloudinary");
-var cloudName = cloudinarySection["CloudName"];
-var cloudinaryApiKey = cloudinarySection["ApiKey"];
-var cloudinaryApiSecret = cloudinarySection["ApiSecret"];
+// Every photo — incident, profile and help-request — is uploaded to Cloudinary
+// through the API, and nothing is kept on the API's own disk. The account is
+// needed only to upload, so the API still starts without it.
+builder.Services.Configure<CloudinaryOptions>(
+    builder.Configuration.GetSection(CloudinaryOptions.SectionName));
 
-if (!string.IsNullOrWhiteSpace(cloudName) &&
-    !string.IsNullOrWhiteSpace(cloudinaryApiKey) &&
-    !string.IsNullOrWhiteSpace(cloudinaryApiSecret))
-{
-    builder.Services.AddSingleton(
-        new Cloudinary(new Account(cloudName, cloudinaryApiKey, cloudinaryApiSecret))
-        {
-            Api = { Secure = true }
-        });
+builder.Services.AddHttpClient(nameof(CloudinaryImageStore), client =>
+    client.Timeout = TimeSpan.FromSeconds(20));
 
-    builder.Services.AddHttpClient(nameof(CloudinaryImageStore), client =>
-        client.Timeout = TimeSpan.FromSeconds(20));
-
-    builder.Services.AddScoped<IImageStore, CloudinaryImageStore>();
-}
-else
-{
-    builder.Services.AddScoped<IImageStore, LocalDiskImageStore>();
-}
-
-// Some Cloudinary settings but not all is a mistake, not a choice — photos
-// would quietly land on local disk instead. Say which one is missing.
-var missingCloudinary = new[]
-    {
-        ("CloudName", cloudName),
-        ("ApiKey", cloudinaryApiKey),
-        ("ApiSecret", cloudinaryApiSecret)
-    }
-    .Where(setting => string.IsNullOrWhiteSpace(setting.Item2))
-    .Select(setting => $"Cloudinary:{setting.Item1}")
-    .ToList();
-var cloudinaryHalfConfigured = missingCloudinary.Count is > 0 and < 3;
+builder.Services.AddScoped<IImageStore, CloudinaryImageStore>();
 
 // ---------------------------------------------------------------- email
 // Two notifications: a receipt to whoever files a report, and a district-wide
@@ -230,6 +210,35 @@ builder.Services.AddSingleton<NotificationQueue>();
 builder.Services.AddSingleton<INotificationQueue>(
     provider => provider.GetRequiredService<NotificationQueue>());
 builder.Services.AddHostedService<NotificationWorker>();
+
+// ---------------------------------------------------------------- push notifications
+// The same events that send email also push to the phone app, for citizens who
+// have turned push on there. Firebase delivers them. Until a service account is
+// configured they are logged instead, so the feature runs for anyone who clones
+// the repository.
+builder.Services.Configure<PushOptions>(builder.Configuration.GetSection(PushOptions.SectionName));
+
+builder.Services.AddHttpClient(nameof(FcmPushSender), client =>
+    client.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddSingleton<IFcmAccessTokens, FcmAccessTokens>();
+builder.Services.AddScoped<FcmPushSender>();
+builder.Services.AddScoped<LoggingPushSender>();
+builder.Services.AddScoped<IPushSender>(provider =>
+{
+    var pushOptions = provider.GetRequiredService<IOptions<PushOptions>>().Value;
+
+    return pushOptions.Fcm.IsConfigured
+        ? provider.GetRequiredService<FcmPushSender>()
+        : provider.GetRequiredService<LoggingPushSender>();
+});
+builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+
+// Sends run on a background worker, like email: no request waits on Firebase.
+builder.Services.AddSingleton<PushQueue>();
+builder.Services.AddSingleton<IPushQueue>(
+    provider => provider.GetRequiredService<PushQueue>());
+builder.Services.AddHostedService(
+    provider => provider.GetRequiredService<PushQueue>());
 
 // ---------------------------------------------------------------- agentic AI
 // The agents depend on ILlmClient, never on a concrete provider. Google AI
@@ -324,7 +333,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Paste the token returned by /api/auth/login."
+        Description = "Paste the token returned by /api/auth/login (citizens) or /api/auth/portal/login (staff)."
     });
     options.AddSecurityRequirement(_ => new OpenApiSecurityRequirement
     {
@@ -332,9 +341,23 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+// Behind a hosting proxy every request arrives from the proxy's address, which would put all users in one
+// rate-limit bucket. Only addresses listed in configuration may set forwarded headers.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+    foreach (var address in builder.Configuration.GetSection("Proxy:TrustedAddresses").Get<string[]>() ?? [])
+    {
+        if (IPAddress.TryParse(address, out var ip)) options.KnownProxies.Add(ip);
+    }
+});
+
 var app = builder.Build();
 
 // First in the pipeline, so it can catch whatever happens downstream of it.
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
 // Which photo backend is live should never be a guess when a demo misbehaves.
@@ -343,15 +366,14 @@ using (var startupScope = app.Services.CreateScope())
     var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
 
     startupLogger.LogInformation(
-        "Incident photos are stored via {Store}.",
+        "Photos are stored via {Store}.",
         startupScope.ServiceProvider.GetRequiredService<IImageStore>().Name);
 
-    if (cloudinaryHalfConfigured)
+    if (!startupScope.ServiceProvider.GetRequiredService<IOptions<CloudinaryOptions>>().Value.IsConfigured)
     {
         startupLogger.LogWarning(
-            "Cloudinary is only partly configured — {Missing} is empty — so photos are "
-            + "going to local disk instead. Fill it in to upload to Cloudinary.",
-            string.Join(", ", missingCloudinary));
+            "Cloudinary is not configured — photo uploads will fail until "
+            + "Cloudinary:CloudName, ApiKey and ApiSecret are set.");
     }
 
     var llm = startupScope.ServiceProvider.GetRequiredService<ILlmClient>();
@@ -367,17 +389,32 @@ using (var startupScope = app.Services.CreateScope())
         emailOptions.Enabled ? "ON" : "OFF",
         startupScope.ServiceProvider.GetRequiredService<IEmailSender>().Name,
         emailOptions.MinimumWarningSeverity);
+
+    var pushOptions = startupScope.ServiceProvider.GetRequiredService<IOptions<PushOptions>>().Value;
+    startupLogger.LogInformation(
+        "Push notifications {State} via {Transport}.",
+        pushOptions.Enabled ? "ON" : "OFF",
+        startupScope.ServiceProvider.GetRequiredService<IPushSender>().Name);
+
+    if (!pushOptions.Fcm.IsConfigured)
+    {
+        startupLogger.LogWarning(
+            "Firebase is not configured, so push notifications are logged, not sent. "
+            + "Set Push:Fcm:ProjectId and Push:Fcm:CredentialsFile to deliver them.");
+    }
 }
 
 // ---------------------------------------------------------------- start-up
-// Swagger stays on in production: the deployed Swagger URL is a required
-// submission item, and every endpoint behind it still demands a token.
-app.UseSwagger();
-app.UseSwaggerUI(options =>
+// Swagger is for development. Deployments can switch it on with Swagger:Enabled.
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue("Swagger:Enabled", false))
 {
-    options.SwaggerEndpoint("/swagger/v1/swagger.json", "RescueSriLanka API v1");
-    options.RoutePrefix = "swagger";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "RescueSriLanka API v1");
+        options.RoutePrefix = "swagger";
+    });
+}
 
 // The deployed database starts empty, so migrations and the demo accounts run
 // wherever the API starts. Set Database:MigrateOnStartup=false to skip them.
@@ -396,10 +433,15 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
         // Component D's rescue tables have their own migration history.
         await services.GetRequiredService<ComponentDDbContext>().Database.MigrateAsync();
 
-        await DbSeeder.SeedAsync(
-            db,
-            services.GetRequiredService<IPasswordHasher<User>>(),
-            logger);
+        // The placeholder staff logins share a password published in this repository,
+        // so they are created only when a deployment asks for them.
+        if (app.Configuration.GetValue("Database:SeedPlaceholderStaff", false))
+        {
+            await DbSeeder.SeedAsync(
+                db,
+                services.GetRequiredService<IPasswordHasher<User>>(),
+                logger);
+        }
 
         // Component B sample records are isolated to local development and are
         // explicitly marked as fixtures; production data stays operator-entered.
@@ -411,7 +453,11 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
         }
 
         // Component C supplies and stock for the resource screens.
-        await ResourceDataSeeder.SeedAsync(db);
+        // Sample stock for the resource screens. Off by default so a shared database holds only real data.
+        if (app.Configuration.GetValue("Database:SeedSampleStock", false))
+        {
+            await ResourceDataSeeder.SeedAsync(db);
+        }
 
         // Sample incidents for the map/dashboard — off via configuration.
         if (app.Configuration.GetValue("SeedSampleIncidents", false))
@@ -437,9 +483,6 @@ if (app.Environment.IsDevelopment() && app.Configuration.GetValue("ComponentD:Se
         app.Environment, app.Configuration,
         services.GetRequiredService<ILoggerFactory>().CreateLogger("ComponentDDataSeeder"));
 }
-
-// Serves uploaded incident photos from wwwroot/uploads.
-app.UseStaticFiles();
 
 app.UseCors(CorsPolicy);
 app.UseAuthentication();

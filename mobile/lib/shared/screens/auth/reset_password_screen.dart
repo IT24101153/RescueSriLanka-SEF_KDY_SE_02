@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
 import 'forgot_password_screen.dart';
+import '../../core/password_rules.dart';
 
 /// Final step of the forgot-password flow: spends the token from
 /// [VerifyOtpScreen] to set a new password.
@@ -111,7 +112,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       labelText: 'New password',
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.lock_outline),
-                      helperText: 'At least 8 characters',
+                      helperText: passwordRuleMessage,
                       suffixIcon: IconButton(
                         icon: Icon(_obscure
                             ? Icons.visibility_outlined
@@ -120,8 +121,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                         tooltip: _obscure ? 'Show password' : 'Hide password',
                       ),
                     ),
-                    validator: (value) => (value ?? '').length < 8
-                        ? 'Use at least 8 characters.'
+                    validator: (value) => !isStrongEnoughPassword(value ?? '')
+                        ? passwordRuleMessage
                         : null,
                   ),
                   const SizedBox(height: 14),

@@ -12,6 +12,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Needed by flutter_local_notifications: newer Java APIs on older Android versions.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -46,4 +48,15 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// Firebase needs android/app/google-services.json from the Firebase console. The
+// plugin is applied only when that file exists, so the app still builds without
+// it. Push is then unavailable, and the rest of the app works as before.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

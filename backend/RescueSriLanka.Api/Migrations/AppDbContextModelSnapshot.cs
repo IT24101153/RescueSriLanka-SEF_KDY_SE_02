@@ -538,6 +538,7 @@ namespace RescueSriLanka.Api.Migrations
                         .HasColumnType("character varying(1000)");
 
                     b.Property<decimal>("QuantityOnHand")
+                        .IsConcurrencyToken()
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
@@ -635,6 +636,7 @@ namespace RescueSriLanka.Api.Migrations
                         .HasColumnType("numeric(12,2)");
 
                     b.Property<decimal>("QuantityOnHand")
+                        .IsConcurrencyToken()
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
@@ -725,6 +727,7 @@ namespace RescueSriLanka.Api.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<decimal>("QuantityOnHand")
+                        .IsConcurrencyToken()
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
 
@@ -761,6 +764,7 @@ namespace RescueSriLanka.Api.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<int>("QuantityOnHand")
+                        .IsConcurrencyToken()
                         .HasColumnType("integer");
 
                     b.Property<string>("Unit")
@@ -905,6 +909,41 @@ namespace RescueSriLanka.Api.Migrations
                     b.ToTable("agent_runs", (string)null);
                 });
 
+            modelBuilder.Entity("RescueSriLanka.Api.Models.DeviceToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("device_tokens", (string)null);
+                });
+
             modelBuilder.Entity("RescueSriLanka.Api.Models.PasswordResetCode", b =>
                 {
                     b.Property<Guid>("Id")
@@ -992,6 +1031,9 @@ namespace RescueSriLanka.Api.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<bool>("PushNotificationsEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -1065,6 +1107,17 @@ namespace RescueSriLanka.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("HelpRequest");
+                });
+
+            modelBuilder.Entity("RescueSriLanka.Api.Models.DeviceToken", b =>
+                {
+                    b.HasOne("RescueSriLanka.Api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("RescueSriLanka.Api.Models.PasswordResetCode", b =>

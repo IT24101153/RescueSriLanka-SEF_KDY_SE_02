@@ -47,7 +47,7 @@ public class IncidentReadTests
     {
         await using var db = CreateDb();
         var incident = CreateIncident(false);
-        incident.Images.Add(new IncidentImage { StoragePath = "/uploads/test.jpg", SizeBytes = 123 });
+        incident.Images.Add(new IncidentImage { StoragePath = "https://res.cloudinary.com/demo/image/upload/test.jpg", SizeBytes = 123 });
         db.Incidents.Add(incident);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
@@ -55,7 +55,7 @@ public class IncidentReadTests
         Assert.NotNull(dto);
         Assert.Equal(incident.Id, dto!.Id);
         Assert.Equal(1, dto.ImageCount);
-        Assert.Equal("/uploads/test.jpg", Assert.Single(dto.Images).Url);
+        Assert.Equal("https://res.cloudinary.com/demo/image/upload/test.jpg", Assert.Single(dto.Images).Url);
         Assert.Empty(db.ChangeTracker.Entries());
     }
 

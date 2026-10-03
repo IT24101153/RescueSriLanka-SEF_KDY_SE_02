@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Models;
 
 namespace RescueSriLanka.Api.DTOs.Auth;
@@ -15,16 +16,16 @@ public record LoginRequest
 
 public record RegisterRequest
 {
-    [Required, MaxLength(150)]
+    [Required, MaxLength(150), PersonName]
     public required string FullName { get; init; }
 
     [Required, EmailAddress, MaxLength(256)]
     public required string Email { get; init; }
 
-    [Required, MinLength(8), MaxLength(128)]
+    [Required, MinLength(10), MaxLength(128), RegularExpression(@"^(?=.*[A-Za-z])(?=.*\d).+$", ErrorMessage = "Use at least 10 characters, including a letter and a number.")]
     public required string Password { get; init; }
 
-    [Phone, MaxLength(20)]
+    [SriLankaPhone]
     public string? PhoneNumber { get; init; }
 
     /// <summary>
@@ -61,6 +62,12 @@ public record UpdatePreferencesRequest
     public JsonElement District { get; init; }
 
     public bool? EmailNotificationsEnabled { get; init; }
+
+    /// <summary>
+    /// Turns push notifications to this account on or off. Each phone is
+    /// registered separately, through the push devices endpoint.
+    /// </summary>
+    public bool? PushNotificationsEnabled { get; init; }
 
     /// <summary>
     /// Same three-state shape as <see cref="District"/> and for the same reason:
@@ -100,7 +107,7 @@ public record ResetPasswordRequest
     [Required]
     public required string ResetToken { get; init; }
 
-    [Required, MinLength(8), MaxLength(128)]
+    [Required, MinLength(10), MaxLength(128), RegularExpression(@"^(?=.*[A-Za-z])(?=.*\d).+$", ErrorMessage = "Use at least 10 characters, including a letter and a number.")]
     public required string NewPassword { get; init; }
 }
 
@@ -121,6 +128,8 @@ public record UserDto
 
     public required bool EmailNotificationsEnabled { get; init; }
 
+    public bool PushNotificationsEnabled { get; init; }
+
     public static UserDto FromUser(User user) => new()
     {
         Id = user.Id,
@@ -130,7 +139,8 @@ public record UserDto
         PhoneNumber = user.PhoneNumber,
         District = user.District,
         PhotoUrl = user.PhotoUrl,
-        EmailNotificationsEnabled = user.EmailNotificationsEnabled
+        EmailNotificationsEnabled = user.EmailNotificationsEnabled,
+        PushNotificationsEnabled = user.PushNotificationsEnabled
     };
 }
 

@@ -2,19 +2,20 @@ using System.ComponentModel.DataAnnotations;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Features.ComponentD.Models;
 
+using RescueSriLanka.Api.DTOs;
 namespace RescueSriLanka.Api.Features.ComponentD.DTOs
 {
     // ---- RescueTeam ----
     public record CreateRescueTeamDto(
         [param: Required, MaxLength(150)] string Name,
-        double? BaseLatitude,
-        double? BaseLongitude);
+        [param: Range(-90, 90)] double? BaseLatitude,
+        [param: Range(-180, 180)] double? BaseLongitude);
 
     public record UpdateRescueTeamDto(
         [param: Required, MaxLength(150)] string Name,
         TeamStatus Status,
-        double? BaseLatitude,
-        double? BaseLongitude);
+        [param: Range(-90, 90)] double? BaseLatitude,
+        [param: Range(-180, 180)] double? BaseLongitude);
 
     public record RescueTeamDto(
         Guid Id,
@@ -27,20 +28,16 @@ namespace RescueSriLanka.Api.Features.ComponentD.DTOs
 
     // ---- TeamMember ----
     public record CreateTeamMemberDto(
-        [param: Required, MaxLength(150)] string FullName,
-        // Lenient on purpose — digits, spaces, +, - only, 7 to 15 chars.
-        // Deliberately not locked to one country's format.
-        [param: Required, RegularExpression(@"^[0-9+\-\s]{7,15}$",
-            ErrorMessage = "Phone must be 7-15 characters: digits, spaces, + or - only.")]
+        [param: Required, MaxLength(150), PersonName] string FullName,
+        [param: Required, SriLankaPhone]
         string Phone,
         SkillType Skill);
 
     public record UpdateTeamMemberAvailabilityDto(bool IsAvailable);
 
     public record UpdateTeamMemberDto(
-        [param: Required, MaxLength(150)] string FullName,
-        [param: Required, RegularExpression(@"^[0-9+\-\s]{7,15}$",
-            ErrorMessage = "Phone must be 7-15 characters: digits, spaces, + or - only.")]
+        [param: Required, MaxLength(150), PersonName] string FullName,
+        [param: Required, SriLankaPhone]
         string Phone,
         SkillType Skill,
         bool IsAvailable);

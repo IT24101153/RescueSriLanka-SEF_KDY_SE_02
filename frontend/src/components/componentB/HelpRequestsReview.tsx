@@ -34,6 +34,17 @@ interface StatusHistoryDto {
   changedAt: string;
 }
 
+// A citizen supplies the photo link, so only web addresses are ever rendered as a link or an image source.
+function webPhotoUrl(url: string | null): string | null {
+  if (!url) return null
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : null
+  } catch {
+    return null
+  }
+}
+
 function urgencyTier(score: number): UrgencyTier {
   if (score >= 70) return "danger";
   if (score >= 40) return "caution";
@@ -400,9 +411,9 @@ export default function HelpRequestsReview() {
                 </div>
               )}
 
-              {selected.imageUrl && (
-                <a className="hr-request-image-link" href={selected.imageUrl} target="_blank" rel="noreferrer">
-                  <img className="hr-request-image" src={selected.imageUrl} alt="Photo submitted with this help request" />
+              {webPhotoUrl(selected.imageUrl) && (
+                <a className="hr-request-image-link" href={webPhotoUrl(selected.imageUrl)!} target="_blank" rel="noreferrer">
+                  <img className="hr-request-image" src={webPhotoUrl(selected.imageUrl)!} alt="Photo submitted with this help request" />
                   <span>Open full-size photo</span>
                 </a>
               )}

@@ -5,7 +5,7 @@ import { storeSession, clearSession } from '../../shared/auth/session'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); clearSession() })
 function mount() {
-  storeSession({ token: 'test-only', expiresAt: '2099-01-01T00:00:00Z', user: { id: 'test', fullName: 'Test', email: 'test@example.test', role: 'RescueTeam' } }, false)
+  storeSession({ token: 'test-only', expiresAt: '2099-01-01T00:00:00Z', user: { id: 'test', fullName: 'Test', email: 'test@example.test', role: 'RescueTeam' } })
   render(<ResourceManagementPanel teams={[{ id: 'team', name: 'Test team', status: 'Available', baseLatitude: null, baseLongitude: null, members: [], vehicles: [] }]} refresh={vi.fn()} />)
 }
 it('explains individual registrations and labels carrying capacity', () => {

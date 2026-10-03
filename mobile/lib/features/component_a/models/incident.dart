@@ -6,8 +6,7 @@ class IncidentPhoto {
 
   final String id;
 
-  /// As the API stores it: absolute for Cloudinary, site-relative for the
-  /// local-disk store. Use [resolvedUrl] to load it.
+  /// As the API stores it: an absolute Cloudinary URL. Use [resolvedUrl] to load it.
   final String url;
   final String? caption;
 

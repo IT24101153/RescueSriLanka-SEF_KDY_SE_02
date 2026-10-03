@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import '../../../features/component_a/services/api_client.dart';
 import '../../services/auth_service.dart';
+import '../../services/firebase_push.dart';
+import '../../services/push_notifications.dart';
+import '../../core/input_rules.dart';
 
 /// Profile → the editable fields: phone number, home district, and whether to
 /// be emailed about them.
@@ -143,10 +146,12 @@ class _ProfileEditFormState extends State<ProfileEditForm> {
             controller: _phone,
             enabled: !_saving,
             keyboardType: TextInputType.phone,
+            inputFormatters: phoneInputFormatters,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               isDense: true,
               hintText: 'Not set',
+              errorText: _phone.text.trim().isEmpty ? null : validateSriLankaPhone(_phone.text),
               prefixIcon: Icon(Icons.phone_outlined, size: 19),
               border: OutlineInputBorder(),
             ),
@@ -222,6 +227,9 @@ class _ProfileEditFormState extends State<ProfileEditForm> {
               ],
             ),
           ],
+
+          const SizedBox(height: 6),
+          _PushNotificationsTile(auth: widget.auth),
 
           const SizedBox(height: 14),
           FilledButton(
@@ -341,6 +349,60 @@ class _ErrorRow extends StatelessWidget {
           child: const Text('Try again'),
         ),
       ],
+    );
+  }
+}
+
+/// Turns push notifications on or off for this phone. It saves straight away
+/// rather than with the form's Save button, because it also has to ask for
+/// permission and register the phone.
+class _PushNotificationsTile extends StatefulWidget {
+  const _PushNotificationsTile({required this.auth});
+
+  final AuthService auth;
+
+  @override
+  State<_PushNotificationsTile> createState() => _PushNotificationsTileState();
+}
+
+class _PushNotificationsTileState extends State<_PushNotificationsTile> {
+  bool _busy = false;
+
+  Future<void> _toggle(bool enabled) async {
+    setState(() => _busy = true);
+
+    final change = await setPushEnabled(widget.auth, pushTokens, enabled);
+
+    if (!mounted) return;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(change.message)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.auth,
+      builder: (context, _) => SwitchListTile.adaptive(
+        value: widget.auth.pushEnabled,
+        onChanged: _busy ? null : _toggle,
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        activeThumbColor: AppColors.brand,
+        title: const Text(
+          'Push notifications',
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            color: AppColors.ink,
+          ),
+        ),
+        subtitle: const Text(
+          'Alerts on this phone for area warnings, and updates on your reports and requests.',
+          style: TextStyle(fontSize: 12),
+        ),
+      ),
     );
   }
 }

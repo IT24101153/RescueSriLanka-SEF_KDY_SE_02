@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 
+import 'dart:async';
+
 import 'shared/core/theme.dart';
 import 'shared/services/auth_service.dart';
+import 'shared/services/firebase_push.dart';
+import 'shared/services/push_notifications.dart';
 import 'shared/screens/splash_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializePush();
   runApp(const RescueSriLankaApp());
 }
 
@@ -20,16 +26,23 @@ class _RescueSriLankaAppState extends State<RescueSriLankaApp> {
   /// and the token survives tab switches and navigation.
   final AuthService _auth = AuthService();
 
+  StreamSubscription<String>? _tokenRefreshes;
+
   @override
   void initState() {
     super.initState();
+    // Before sign-out, remove this phone from the account, while the token still works.
+    _auth.beforeSignOut = () => releasePushDevice(_auth, pushTokens);
+
     // Reads any stored token back while the splash screen is showing, so a
     // returning user is already signed in by the time the map appears.
-    _auth.restore();
+    _auth.restore().then((_) => resumePush(_auth, pushTokens));
+    _tokenRefreshes = keepTokenCurrent(_auth, pushTokens);
   }
 
   @override
   void dispose() {
+    _tokenRefreshes?.cancel();
     _auth.dispose();
     super.dispose();
   }

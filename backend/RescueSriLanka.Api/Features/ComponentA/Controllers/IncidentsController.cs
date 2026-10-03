@@ -24,6 +24,7 @@ public class IncidentsController(
     IActionEmailService emails) : ControllerBase
 {
     private const string Coordinator = nameof(UserRole.EmergencyCoordinator);
+    private const string Citizen = nameof(UserRole.Citizen);
 
     /// <summary>
     /// Filtered incident list for the admin table. Sorting and paging are
@@ -71,6 +72,7 @@ public class IncidentsController(
     /// shows the same list on the Mac, the APK, or a new phone.
     /// </summary>
     [HttpGet("mine")]
+    [Authorize(Roles = Citizen)]
     public async Task<ActionResult<IReadOnlyList<IncidentDto>>> Mine(CancellationToken ct)
     {
         var userId = CurrentUserId();
@@ -117,8 +119,9 @@ public class IncidentsController(
     public async Task<ActionResult<DashboardStatisticsDto>> Statistics(CancellationToken ct) =>
         Ok(await incidentService.GetStatisticsAsync(ct));
 
-    /// <summary>Report an incident. Any signed-in user, including citizens.</summary>
+    /// <summary>Report an incident. Citizens only; staff do not file reports.</summary>
     [HttpPost]
+    [Authorize(Roles = Citizen)]
     public async Task<ActionResult<IncidentDto>> Create(
         [FromBody] CreateIncidentRequest request, CancellationToken ct)
     {
@@ -134,6 +137,7 @@ public class IncidentsController(
     /// it graded the report blind.
     /// </summary>
     [HttpPost("with-photo")]
+    [Authorize(Roles = Citizen)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(10 * 1024 * 1024)]
     [ProducesResponseType(typeof(CreateIncidentResponse), StatusCodes.Status201Created)]
@@ -165,7 +169,16 @@ public class IncidentsController(
         var userId = CurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var incident = await incidentService.UpdateStatusAsync(id, request.Status, userId.Value, ct);
+        IncidentDto? incident;
+        try
+        {
+            incident = await incidentService.UpdateStatusAsync(id, request.Status, userId.Value, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+
         if (incident is null) return NotFound();
         await emails.IncidentStatusChangedAsync(id, request.Status.ToString(), ct);
         return Ok(incident);
@@ -207,9 +220,14 @@ public class IncidentsController(
     public async Task<ActionResult<IncidentImageDto>> UploadImage(
         Guid id, IFormFile file, [FromForm] string? caption, CancellationToken ct)
     {
-        if (await incidentService.GetAsync(id, ct) is null)
+        var (exists, reporterId) = await incidentService.GetReporterAsync(id, ct);
+        if (!exists) return NotFound();
+
+        // Photos go on a report by the person who filed it, or by a coordinator reviewing it.
+        var uploaderId = CurrentUserId();
+        if (!User.IsInRole(Coordinator) && (reporterId is null || uploaderId != reporterId))
         {
-            return NotFound();
+            return Forbid();
         }
 
         try

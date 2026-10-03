@@ -34,15 +34,20 @@ public class User
     public string? District { get; set; }
 
     /// <summary>
-    /// Where the profile photo lives — an absolute Cloudinary URL or a
-    /// site-relative path under wwwroot, whichever <see cref="Services.Storage.IImageStore"/>
-    /// is active. Null until they upload one.
+    /// Where the profile photo lives — an absolute Cloudinary URL, uploaded through
+    /// <see cref="Services.Storage.IImageStore"/>. Null until they upload one.
     /// </summary>
     [MaxLength(1024)]
     public string? PhotoUrl { get; set; }
 
     /// <summary>Opt-out switch for every email this platform sends them.</summary>
     public bool EmailNotificationsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Opt-in switch for push notifications to the phone app. Off until the
+    /// citizen turns it on there, which also registers the phone's device token.
+    /// </summary>
+    public bool PushNotificationsEnabled { get; set; }
 
     public bool IsActive { get; set; } = true;
 

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Features.ComponentC.DTOs;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Models;
@@ -347,7 +348,7 @@ public class ResourceManagementService(
             Id = Guid.NewGuid(),
             UserId = userId,
             RequesterName = requesterName,
-            ContactNumber = contactNumber,
+            ContactNumber = PhoneNumbers.Normalize(contactNumber) ?? contactNumber,
             NeedType = request.NeedType.Trim(),
             Description = request.Description.Trim(),
             Latitude = request.Latitude is null ? null : (double?)request.Latitude,
@@ -476,7 +477,7 @@ public class ResourceManagementService(
             Id = Guid.NewGuid(),
             UserId = userId,
             DonorName = donorName,
-            ContactNumber = contactNumber,
+            ContactNumber = PhoneNumbers.Normalize(contactNumber) ?? contactNumber,
             DonationType = request.DonationType.Trim(),
             Quantity = request.Quantity,
             Unit = request.Unit.Trim(),
@@ -847,12 +848,17 @@ public class ResourceManagementService(
             throw new ArgumentException("Allocation quantity must be greater than zero.");
         }
 
+        if (request.ResourceId == Guid.Empty)
+        {
+            throw new ArgumentException("Choose the resource to allocate.");
+        }
+
         var resourceType = NormalizeResourceType(request.ResourceType);
         var allocation = new ResourceAllocation
         {
             Id = Guid.NewGuid(),
             ResourceType = resourceType,
-            ResourceId = request.ResourceId != Guid.Empty ? request.ResourceId : Guid.NewGuid(),
+            ResourceId = request.ResourceId,
             Quantity = request.Quantity,
             HelpRequestId = request.HelpRequestId,
             IncidentId = request.IncidentId
@@ -888,7 +894,7 @@ public class ResourceManagementService(
 
             dispatchRecipient = await FindUserForHelpRequestAsync(helpRequest, cancellationToken);
         }
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveStockChangeAsync(cancellationToken);
         if (dispatchRecipient is not null)
         {
             QueueDispatchedEmail(dispatchRecipient, resourceType, request.Quantity);
@@ -990,11 +996,42 @@ public class ResourceManagementService(
                     stock.UpdatedAtUtc = DateTime.UtcNow;
                 }
                 break;
+            case "donatedsupply":
+                var donated = await dbContext.DonatedSupplies.SingleOrDefaultAsync(item => item.Id == allocation.ResourceId, cancellationToken);
+                if (donated is not null)
+                {
+                    donated.QuantityOnHand += allocation.Quantity;
+                    donated.IsActive = true;
+                    donated.UpdatedAtUtc = DateTime.UtcNow;
+                }
+                break;
+            case "managedsupply":
+                var managed = await dbContext.ManagedSupplies.SingleOrDefaultAsync(item => item.Id == allocation.ResourceId, cancellationToken);
+                if (managed is not null)
+                {
+                    managed.QuantityOnHand += allocation.Quantity;
+                    managed.IsActive = true;
+                    managed.UpdatedAtUtc = DateTime.UtcNow;
+                }
+                break;
         }
 
         allocation.Status = "Released";
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await SaveStockChangeAsync(cancellationToken);
         return ToResponse(allocation);
+    }
+
+    // A concurrent change to the same stock row surfaces as a conflict the caller can retry, not a silent overwrite.
+    private async Task SaveStockChangeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new InvalidOperationException("Stock changed while this was being saved. Please try again.");
+        }
     }
 
     private async Task AllocateMedicalSupplyAsync(AllocateResourceRequest request, CancellationToken cancellationToken)
@@ -1008,6 +1045,11 @@ public class ResourceManagementService(
             item => item.Id == request.ResourceId && item.IsActive,
             cancellationToken)
             ?? throw new KeyNotFoundException("Medical supply was not found.");
+
+        if (request.Quantity != decimal.Truncate(request.Quantity))
+        {
+            throw new ArgumentException("Medical supplies are counted in whole units.");
+        }
 
         if (supply.QuantityOnHand < request.Quantity)
         {

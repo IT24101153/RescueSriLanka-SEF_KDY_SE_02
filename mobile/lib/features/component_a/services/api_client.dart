@@ -148,9 +148,7 @@ class ApiClient {
       timeout: _timeout,
     );
 
-    return Incident.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
-    );
+    return _parseIncident(response.body);
   }
 
   /// Files a report and its photo in one request.
@@ -212,10 +210,14 @@ class ApiClient {
     );
 
     final response = await _send(request, timeout: _uploadTimeout);
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final body = _parseObject(response.body);
+    final incident = body['incident'];
+    if (incident is! Map<String, dynamic>) {
+      throw ApiException('The server sent a response the app could not read.');
+    }
 
     return (
-      incident: Incident.fromJson(body['incident'] as Map<String, dynamic>),
+      incident: _parseIncident(jsonEncode(incident)),
       photoError: body['photoError'] as String?,
     );
   }
@@ -223,6 +225,24 @@ class ApiClient {
   // ---------------------------------------------------------------- plumbing
 
   Uri _uri(String path) => Uri.parse('${AppConfig.apiBaseUrl}$path');
+
+  static Map<String, dynamic> _parseObject(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } on FormatException {
+      // Reported below, the same as any other malformed body.
+    }
+    throw ApiException('The server sent a response the app could not read.');
+  }
+
+  static Incident _parseIncident(String body) {
+    try {
+      return Incident.fromJson(_parseObject(body));
+    } on TypeError {
+      throw ApiException('The server sent a response the app could not read.');
+    }
+  }
 
   Future<dynamic> _getJson(String path) async {
     http.Response response;

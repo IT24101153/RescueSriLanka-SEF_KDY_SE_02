@@ -16,8 +16,8 @@ public interface IImageStorageService
 
 /// <summary>
 /// Validation and bookkeeping for incident photos. Where the bytes go is the
-/// <see cref="IImageStore"/>'s business — Cloudinary when it is configured,
-/// local disk otherwise — so the rules below hold whichever backend is active.
+/// <see cref="IImageStore"/>'s business — Cloudinary — so the rules below hold
+/// whichever store is registered.
 /// </summary>
 public class ImageStorageService(
     AppDbContext db,
@@ -84,8 +84,26 @@ public class ImageStorageService(
                 $"Unsupported image type '{file.ContentType}'. Allowed: {string.Join(", ", AllowedTypes)}.");
         }
 
+        // The declared type is whatever the client says; the file's own header has to agree with it.
+        using var stream = file.OpenReadStream();
+        var header = new byte[12];
+        var read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
+        if (!HasImageSignature(header.AsSpan(0, read), contentType))
+        {
+            throw new ArgumentException("The file is not a valid image.");
+        }
+
         return contentType;
     }
+
+    private static bool HasImageSignature(ReadOnlySpan<byte> header, string contentType) => contentType switch
+    {
+        "image/jpeg" => header.Length >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+        "image/png" => header.Length >= 8 && header[..8].SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }),
+        "image/webp" => header.Length >= 12 && header[..4].SequenceEqual("RIFF"u8) && header[8..12].SequenceEqual("WEBP"u8),
+        "image/heic" => header.Length >= 12 && header[4..8].SequenceEqual("ftyp"u8),
+        _ => false
+    };
 
     public async Task<IReadOnlyList<(string MimeType, byte[] Data)>> LoadForAnalysisAsync(
         Guid incidentId, int maxImages, long maxTotalBytes, CancellationToken ct = default)

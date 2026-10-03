@@ -31,7 +31,6 @@ type LoginPageProps = {
 export default function LoginPage({ onSignedIn }: LoginPageProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -77,7 +76,7 @@ export default function LoginPage({ onSignedIn }: LoginPageProps) {
         )
         return
       }
-      storeSession(result.session, remember)
+      storeSession(result.session)
       onSignedIn(result.session)
     } finally {
       setSubmitting(false)
@@ -210,18 +209,6 @@ export default function LoginPage({ onSignedIn }: LoginPageProps) {
                   {errors.password}
                 </span>
               )}
-            </div>
-
-            <div className="form__row">
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                  disabled={submitting}
-                />
-                <span>Keep me signed in</span>
-              </label>
             </div>
 
             <button className="btn" type="submit" disabled={submitting}>

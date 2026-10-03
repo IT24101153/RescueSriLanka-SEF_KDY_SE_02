@@ -15,7 +15,7 @@ export type User = {
   phoneNumber?: string | null
 }
 
-/** Shape of AuthResponse returned by POST /api/auth/login. */
+/** Shape of AuthResponse returned by POST /api/auth/portal/login. */
 export type Session = {
   token: string
   expiresAt: string
@@ -33,8 +33,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 }
 
 export function getSession(): Session | null {
-  const raw =
-    localStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem(STORAGE_KEY)
+  const raw = sessionStorage.getItem(STORAGE_KEY)
   if (!raw) return null
 
   try {
@@ -51,13 +50,16 @@ export function getSession(): Session | null {
   }
 }
 
-/** "Keep me signed in" decides whether the session survives a browser restart. */
-export function storeSession(session: Session, remember: boolean): void {
-  const store = remember ? localStorage : sessionStorage
-  store.setItem(STORAGE_KEY, JSON.stringify(session))
+/**
+ * Kept in sessionStorage only: it ends with the tab, and never sits in localStorage where it would outlive
+ * the visit. Browser storage is still readable by script, so this narrows exposure rather than removing it.
+ */
+export function storeSession(session: Session): void {
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session))
 }
 
 export function clearSession(): void {
+  // An older build kept a copy in localStorage; remove it so it cannot resurface.
   localStorage.removeItem(STORAGE_KEY)
   sessionStorage.removeItem(STORAGE_KEY)
 }

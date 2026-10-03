@@ -18,6 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<PasswordResetCode> PasswordResetCodes => Set<PasswordResetCode>();
+    public DbSet<DeviceToken> DeviceTokens => Set<DeviceToken>();
 
     // ---- Component A — Incident & Disaster Map ----
     public DbSet<Incident> Incidents => Set<Incident>();
@@ -66,6 +67,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(user => user.Role)
                 .HasConversion<string>()
                 .HasMaxLength(40);
+        });
+
+        modelBuilder.Entity<DeviceToken>(entity =>
+        {
+            entity.ToTable("device_tokens");
+
+            // A token identifies one phone, so it is registered once, however often the app repeats itself.
+            entity.HasIndex(device => device.Token).IsUnique();
+
+            // Every push asks "which phones belong to these people?" — this is the index that question runs on.
+            entity.HasIndex(device => device.UserId);
+
+            entity.HasOne(device => device.User)
+                .WithMany()
+                .HasForeignKey(device => device.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PasswordResetCode>(entity =>
@@ -258,6 +275,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             entity.Property(supply => supply.Name).HasMaxLength(200).IsRequired();
             entity.Property(supply => supply.Unit).HasMaxLength(50).IsRequired();
+            // An allocation that read an older quantity fails its UPDATE instead of overwriting the newer one.
+            entity.Property(supply => supply.QuantityOnHand).IsConcurrencyToken();
             entity.Ignore(supply => supply.IsLowStock);
         });
 
@@ -267,6 +286,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(stock => stock.Unit).HasMaxLength(50).IsRequired();
             entity.Property(stock => stock.QuantityOnHand).HasPrecision(12, 2);
             entity.Property(stock => stock.LowStockThreshold).HasPrecision(12, 2);
+            entity.Property(stock => stock.QuantityOnHand).IsConcurrencyToken();
             entity.Ignore(stock => stock.IsLowStock);
         });
 
@@ -310,6 +330,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<DonatedSupply>(entity =>
         {
+            entity.Property(supply => supply.QuantityOnHand).IsConcurrencyToken();
+
             entity.Property(supply => supply.Name).HasMaxLength(80).IsRequired();
             entity.Property(supply => supply.DonorName).HasMaxLength(160).IsRequired();
             entity.Property(supply => supply.QuantityOnHand).HasPrecision(12, 2);
@@ -321,6 +343,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<ManagedSupply>(entity =>
         {
+            entity.Property(supply => supply.QuantityOnHand).IsConcurrencyToken();
+
             entity.Property(supply => supply.Category).HasMaxLength(40).IsRequired();
             entity.Property(supply => supply.Name).HasMaxLength(100).IsRequired();
             entity.Property(supply => supply.Unit).HasMaxLength(40).IsRequired();

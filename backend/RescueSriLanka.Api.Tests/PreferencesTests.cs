@@ -260,13 +260,14 @@ public class PreferencesTests
         using var db = NewDb();
         var queue = new RecordingQueue();
 
-        var response = await NewService(db, queue)
+        var created = await NewService(db, queue)
             .RegisterCitizenAsync(NewRegistration("  nuwara-eliya "));
 
-        Assert.NotNull(response);
-        Assert.Equal("Nuwara Eliya", response.User.District);
+        Assert.True(created);
+        var user = Assert.Single(db.Users);
+        Assert.Equal("Nuwara Eliya", user.District);
         Assert.Equal(
-            new NotificationJob(NotificationKind.Welcome, response.User.Id),
+            new NotificationJob(NotificationKind.Welcome, user.Id),
             Assert.Single(queue.Jobs));
     }
 

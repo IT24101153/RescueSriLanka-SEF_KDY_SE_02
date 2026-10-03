@@ -6,6 +6,7 @@ using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 using RescueSriLanka.Api.Features.ComponentD.Data;
 using RescueSriLanka.Api.Features.ComponentD.Models;
 using RescueSriLanka.Api.Models;
+using RescueSriLanka.Api.Services.Push;
 
 namespace RescueSriLanka.Api.Services.Email;
 
@@ -36,6 +37,7 @@ public sealed class ActionEmailService(
     AppDbContext db,
     ComponentDDbContext componentD,
     IEmailQueue queue,
+    IPushNotificationService push,
     IOptions<EmailOptions> options,
     ILogger<ActionEmailService> logger) : IActionEmailService
 {
@@ -368,6 +370,10 @@ public sealed class ActionEmailService(
         CancellationToken ct)
     {
         if (userId is null) return;
+
+        // Push and email are separate opt-ins, so each is checked on its own: a
+        // citizen who has switched off one still hears through the other.
+        await push.SendToUsersAsync([userId.Value], new PushMessage(heading, intro), ct);
 
         var citizen = await db.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive && u.EmailNotificationsEnabled, ct);

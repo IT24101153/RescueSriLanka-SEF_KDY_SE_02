@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/config.dart';
 import '../models/auth.dart';
+import 'push_notifications.dart';
 
 /// Result of a sign-in or registration attempt. The API deliberately keeps its
 /// failure messages vague, and so does this.
@@ -48,7 +49,7 @@ class VerifyCodeResult {
 /// handful of listeners, and nothing here justifies another dependency.
 /// Reading the map needs no session at all — only reporting does — so the app
 /// starts signed out and stays usable that way.
-class AuthService extends ChangeNotifier {
+class AuthService extends ChangeNotifier implements PushDeviceRegistry {
   AuthService({http.Client? client, FlutterSecureStorage? secureStorage})
     : _client = client ?? http.Client(),
       _secureStorage = secureStorage ?? const FlutterSecureStorage();
@@ -65,7 +66,15 @@ class AuthService extends ChangeNotifier {
 
   AuthSession? get session => _session;
   AuthUser? get user => _session?.user;
+  @override
   bool get isSignedIn => _session != null;
+
+  @override
+  bool get pushEnabled => user?.pushNotificationsEnabled ?? false;
+
+  /// Runs before the session is dropped, so it can still authorise a request.
+  /// The push module uses it to remove this phone from the account.
+  Future<void> Function()? beforeSignOut;
 
   /// True until the stored token has been read back at start-up, so the UI can
   /// avoid flashing "signed out" at someone who is in fact signed in.
@@ -122,16 +131,45 @@ class AuthService extends ChangeNotifier {
     required String password,
     String? phoneNumber,
     String? district,
-  }) => _authenticate('/api/auth/register', {
-    'fullName': fullName.trim(),
-    'email': email.trim(),
-    'password': password,
-    if (phoneNumber != null && phoneNumber.trim().isNotEmpty)
-      'phoneNumber': phoneNumber.trim(),
-    // Sent with the account itself so the welcome email can already name
-    // the district, and list any warnings in force there.
-    'district': ?district,
-  });
+  }) async {
+    http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/auth/register'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'fullName': fullName.trim(),
+              'email': email.trim(),
+              'password': password,
+              if (phoneNumber != null && phoneNumber.trim().isNotEmpty)
+                'phoneNumber': phoneNumber.trim(),
+              // Sent with the account itself so the welcome email can already name
+              // the district, and list any warnings in force there.
+              'district': ?district,
+            }),
+          )
+          .timeout(_timeout);
+    } catch (_) {
+      return AuthResult.failure(
+        'Cannot reach the server at ${AppConfig.apiBaseUrl}.\n'
+        'Check that the API is running and the address is right for this device.',
+      );
+    }
+
+    if (response.statusCode == 400) {
+      return AuthResult.failure(
+        _readMessage(response.body) ?? 'Please check the details and try again.',
+      );
+    }
+    if (response.statusCode != 202 && response.statusCode != 200) {
+      return AuthResult.failure('Sign-up failed (HTTP ${response.statusCode}).');
+    }
+
+    // The API answers the same way whether or not the address already has an account, so the app
+    // signs in with the same details to tell the two apart.
+    return signIn(email: email, password: password);
+  }
 
   /// Asks the API to email a one-time code for a forgotten password. Always
   /// reports success on a 200 — the API deliberately never says whether the
@@ -246,6 +284,7 @@ class AuthService extends ChangeNotifier {
     String? district,
     bool clearDistrict = false,
     bool? emailNotificationsEnabled,
+    bool? pushNotificationsEnabled,
     String? phoneNumber,
     bool clearPhoneNumber = false,
   }) async {
@@ -257,6 +296,7 @@ class AuthService extends ChangeNotifier {
     final body = <String, dynamic>{
       if (clearDistrict) 'district': null else 'district': ?district,
       'emailNotificationsEnabled': ?emailNotificationsEnabled,
+      'pushNotificationsEnabled': ?pushNotificationsEnabled,
       if (clearPhoneNumber)
         'phoneNumber': null
       else
@@ -384,7 +424,66 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  @override
+  Future<bool> setPushPreference(bool enabled) async {
+    final result = await updatePreferences(pushNotificationsEnabled: enabled);
+    return result.ok;
+  }
+
+  /// Adds this phone's push token to the signed-in account.
+  @override
+  Future<bool> registerPushDevice(String token, String platform) async {
+    final current = _session;
+    if (current == null) return false;
+
+    try {
+      final response = await _client
+          .put(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/push/devices'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ${current.token}',
+            },
+            body: jsonEncode({'token': token, 'platform': platform}),
+          )
+          .timeout(_timeout);
+      return response.statusCode == 204;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Removes this phone's push token from the signed-in account.
+  @override
+  Future<bool> unregisterPushDevice(String token) async {
+    final current = _session;
+    if (current == null) return false;
+
+    try {
+      final response = await _client
+          .delete(
+            Uri.parse(
+              '${AppConfig.apiBaseUrl}/api/push/devices?token=${Uri.encodeQueryComponent(token)}',
+            ),
+            headers: {'Authorization': 'Bearer ${current.token}'},
+          )
+          .timeout(_timeout);
+      return response.statusCode == 204;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> signOut() async {
+    // Done first, while the token still works. A failure here must not keep
+    // the person signed in, so it is ignored.
+    final beforeLeaving = beforeSignOut;
+    if (beforeLeaving != null && _session != null) {
+      try {
+        await beforeLeaving().timeout(_timeout);
+      } catch (_) {}
+    }
+
     _session = null;
     notifyListeners();
 
@@ -392,6 +491,10 @@ class AuthService extends ChangeNotifier {
       await _secureStorage.delete(key: _storageKey);
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_storageKey); // Remove any leftover legacy copy.
+      // Cached report lists belong to the account that made them; a signed-out phone keeps none.
+      for (final key in prefs.getKeys().where((key) => key.startsWith('rsl.myReports.')).toList()) {
+        await prefs.remove(key);
+      }
     } catch (_) {
       // The in-memory session is already gone, which is what matters.
     }

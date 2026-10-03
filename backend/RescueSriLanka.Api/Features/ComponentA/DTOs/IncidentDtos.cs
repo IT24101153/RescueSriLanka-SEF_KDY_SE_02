@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Features.ComponentA.Models;
 
 namespace RescueSriLanka.Api.Features.ComponentA.DTOs;
@@ -96,7 +97,7 @@ public record CreateIncidentRequest
     [Range(50, 50000)]
     public int AffectedRadiusMeters { get; init; } = 1000;
 
-    [MaxLength(100)]
+    [MaxLength(100), SriLankaDistrict]
     public string? District { get; init; }
 
     [MaxLength(300)]

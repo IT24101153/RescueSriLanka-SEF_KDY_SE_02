@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using RescueSriLanka.Api.Features.ComponentC.DTOs;
 using RescueSriLanka.Api.Features.ComponentC.Services;
 using RescueSriLanka.Api.Features.ComponentC.Agents.ResourceAllocationAgent;
@@ -236,6 +237,7 @@ public class ResourcesController(
     }
 
     [HttpPost("help-requests")]
+    [EnableRateLimiting("public")]
     public async Task<IActionResult> CreateHelpRequest(
         CreateHelpRequestRequest request,
         CancellationToken cancellationToken)
@@ -255,7 +257,7 @@ public class ResourcesController(
         }
     }
 
-    [Authorize]
+    [Authorize(Roles = nameof(UserRole.Citizen))]
     [HttpPost("help-requests/batch")]
     public async Task<IActionResult> CreateHelpRequestsBatch(
         CreateHelpRequestsBatchRequest request,
@@ -317,6 +319,7 @@ public class ResourcesController(
         Ok(await resourceService.GetDonatedSuppliesAsync(cancellationToken));
 
     [HttpPost("donations")]
+    [EnableRateLimiting("public")]
     public async Task<IActionResult> CreateDonation(
         CreateDonationRequest request,
         CancellationToken cancellationToken)
@@ -336,7 +339,7 @@ public class ResourcesController(
         }
     }
 
-    [Authorize]
+    [Authorize(Roles = nameof(UserRole.Citizen))]
     [HttpPost("donations/batch")]
     public async Task<IActionResult> CreateDonationsBatch(
         CreateDonationsBatchRequest request,

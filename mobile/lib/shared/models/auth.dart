@@ -11,6 +11,7 @@ class AuthUser {
     this.district,
     this.photoUrl,
     this.emailNotificationsEnabled = true,
+    this.pushNotificationsEnabled = false,
   });
 
   final String id;
@@ -29,9 +30,12 @@ class AuthUser {
 
   final bool emailNotificationsEnabled;
 
-  /// [photoUrl] resolved against the API host — the local-disk store returns a
-  /// site-relative path, Cloudinary an absolute one, so only the former needs
-  /// the prefix.
+  /// Whether push notifications are on for this account. Off until the person
+  /// turns them on in the profile, which also registers the phone.
+  final bool pushNotificationsEnabled;
+
+  /// [photoUrl] as a loadable URL. Photos are on Cloudinary, so it is already
+  /// absolute; a site-relative value could only be a pre-Cloudinary upload.
   String? get resolvedPhotoUrl {
     final url = photoUrl;
     if (url == null || url.isEmpty) return null;
@@ -53,6 +57,8 @@ class AuthUser {
         // build does not read as opted out.
         emailNotificationsEnabled:
             json['emailNotificationsEnabled'] as bool? ?? true,
+        pushNotificationsEnabled:
+            json['pushNotificationsEnabled'] as bool? ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -64,6 +70,7 @@ class AuthUser {
         'district': district,
         'photoUrl': photoUrl,
         'emailNotificationsEnabled': emailNotificationsEnabled,
+        'pushNotificationsEnabled': pushNotificationsEnabled,
       };
 }
 

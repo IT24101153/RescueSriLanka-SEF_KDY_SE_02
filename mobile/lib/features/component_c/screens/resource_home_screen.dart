@@ -7,6 +7,7 @@ import '../../../shared/models/auth.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/widgets/app_ui.dart';
 import '../services/resource_api.dart';
+import '../../../shared/core/input_rules.dart';
 
 /// The Resources tab: ask the resource team for supplies, or offer some.
 ///
@@ -154,8 +155,7 @@ const _resourceCategories = <String, List<String>>{
   'Other': ['Other'],
 };
 
-bool _hasValidResourcePhone(String? value) =>
-  RegExp(r'^\d{10}$').hasMatch(value?.trim() ?? '');
+bool _hasValidResourcePhone(String? value) => normalizeSriLankaPhone(value) != null;
 
 class _ResourceItemDraft {
   String category = 'Food';
@@ -304,6 +304,7 @@ class _ResourceItemEditor extends StatelessWidget {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
+                    inputFormatters: decimalInputFormatters,
                     decoration: const InputDecoration(
                       labelText: 'Quantity',
                       border: OutlineInputBorder(),

@@ -6,6 +6,7 @@ using RescueSriLanka.Api.DTOs.Auth;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentA.Services;
 using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
+using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services.Email;
 using RescueSriLanka.Api.Services.Storage;
@@ -14,13 +15,13 @@ namespace RescueSriLanka.Api.Services;
 
 public interface IAuthService
 {
-    Task<AuthResponse?> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default);
+    Task<AuthResponse?> LoginAsync(LoginRequest request, LoginClient client, CancellationToken cancellationToken = default);
 
     /// <returns>
     /// null when the email is taken. Throws <see cref="ArgumentException"/> when
     /// the district is not one of Sri Lanka's.
     /// </returns>
-    Task<AuthResponse?> RegisterCitizenAsync(RegisterRequest request, CancellationToken cancellationToken = default);
+    Task<bool> RegisterCitizenAsync(RegisterRequest request, CancellationToken cancellationToken = default);
     Task<User?> FindByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <returns>
@@ -52,6 +53,24 @@ public interface IAuthService
     Task<bool> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);
 }
 
+/// <summary>Which front end is asking to sign someone in. Citizens use the
+/// mobile app; staff use the web portal. Each only accepts its own accounts.</summary>
+public enum LoginClient
+{
+    CitizenApp,
+    StaffPortal
+}
+
+public static class LoginClientRules
+{
+    public static bool Accepts(this LoginClient client, UserRole role) => client switch
+    {
+        LoginClient.CitizenApp => role == UserRole.Citizen,
+        LoginClient.StaffPortal => role != UserRole.Citizen,
+        _ => false
+    };
+}
+
 public class AuthService(
     AppDbContext db,
     IJwtTokenService tokenService,
@@ -67,11 +86,13 @@ public class AuthService(
     private static readonly TimeSpan OtpValidity = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ResetTokenValidity = TimeSpan.FromMinutes(10);
     private const int MaxOtpAttempts = 5;
+    private const int MaxCodesPerHour = 3;
 
 
     /// <returns>null when the credentials are wrong or the account is disabled.</returns>
     public async Task<AuthResponse?> LoginAsync(
         LoginRequest request,
+        LoginClient client,
         CancellationToken cancellationToken = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
@@ -85,13 +106,7 @@ public class AuthService(
             passwordHasher.HashPassword(
                 new User { FullName = "-", Email = "-", PasswordHash = "-" },
                 request.Password);
-            logger.LogInformation("Login failed: no account for {Email}", email);
-            return null;
-        }
-
-        if (!user.IsActive)
-        {
-            logger.LogInformation("Login blocked: account {Email} is disabled", email);
+            logger.LogInformation("Login failed: no matching account");
             return null;
         }
 
@@ -100,7 +115,22 @@ public class AuthService(
 
         if (verification == PasswordVerificationResult.Failed)
         {
-            logger.LogInformation("Login failed: bad password for {Email}", email);
+            logger.LogInformation("Login failed: bad password for account {UserId}", user.Id);
+            return null;
+        }
+
+        // Checked after the password, so a disabled account costs the same time as any other.
+        if (!user.IsActive)
+        {
+            logger.LogInformation("Login blocked: account {UserId} is disabled", user.Id);
+            return null;
+        }
+
+        // Checked after the password, and answered with the same null, so the
+        // response never reveals which kind of account the email belongs to.
+        if (!client.Accepts(user.Role))
+        {
+            logger.LogInformation("Login refused: {Role} account {UserId} used the {Client} sign-in", user.Role, user.Id, client);
             return null;
         }
 
@@ -118,7 +148,7 @@ public class AuthService(
 
     /// <summary>Self-registration from the Flutter app. Always creates a Citizen —
     /// staff roles are provisioned by an administrator, never self-selected.</summary>
-    public async Task<AuthResponse?> RegisterCitizenAsync(
+    public async Task<bool> RegisterCitizenAsync(
         RegisterRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -126,7 +156,7 @@ public class AuthService(
 
         if (await db.Users.AnyAsync(u => u.Email == email, cancellationToken))
         {
-            return null;
+            return false;
         }
 
         // Stored canonically for the same reason as in UpdatePreferencesAsync:
@@ -144,22 +174,30 @@ public class AuthService(
             FullName = request.FullName.Trim(),
             Email = email,
             PasswordHash = string.Empty,
-            PhoneNumber = request.PhoneNumber,
+            PhoneNumber = PhoneNumbers.Normalize(request.PhoneNumber),
             District = district,
             Role = UserRole.Citizen
         };
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
 
         db.Users.Add(user);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Two sign-ups for the same address raced past the check above.
+            db.ChangeTracker.Clear();
+            return false;
+        }
 
-        logger.LogInformation(
-            "Registered citizen {Email} in {District}", email, district ?? "(no district)");
+        logger.LogInformation("Registered citizen {UserId} in {District}", user.Id, district ?? "(no district)");
 
         // Queued, not awaited: a slow mail server must not slow sign-up down.
         notificationQueue.Enqueue(new NotificationJob(NotificationKind.Welcome, user.Id));
 
-        return BuildResponse(user);
+        return true;
     }
 
     public Task<User?> FindByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
@@ -211,6 +249,11 @@ public class AuthService(
             user.EmailNotificationsEnabled = enabled;
         }
 
+        if (request.PushNotificationsEnabled is bool pushEnabled)
+        {
+            user.PushNotificationsEnabled = pushEnabled;
+        }
+
         // Same omitted/null/string shape as District above.
         switch (request.PhoneNumber.ValueKind)
         {
@@ -223,7 +266,10 @@ public class AuthService(
 
             case JsonValueKind.String:
                 var phone = request.PhoneNumber.GetString();
-                user.PhoneNumber = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
+                user.PhoneNumber = string.IsNullOrWhiteSpace(phone)
+                    ? null
+                    : PhoneNumbers.Normalize(phone)
+                      ?? throw new ArgumentException("Enter a 10-digit Sri Lankan phone number, such as 0771234567.");
                 break;
 
             default:
@@ -234,9 +280,10 @@ public class AuthService(
         await db.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "Updated notification settings for {Email}: district {District}, email {State}",
-            user.Email, user.District ?? "(none)",
-            user.EmailNotificationsEnabled ? "on" : "off");
+            "Updated notification settings for {UserId}: district {District}, email {Email}, push {Push}",
+            user.Id, user.District ?? "(none)",
+            user.EmailNotificationsEnabled ? "on" : "off",
+            user.PushNotificationsEnabled ? "on" : "off");
 
         // A new district may already be under warning, and those warnings went
         // out before this person subscribed. The notification service sends
@@ -266,7 +313,7 @@ public class AuthService(
         await db.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "Updated profile photo for {Email} via {Store}", user.Email, imageStore.Name);
+            "Updated profile photo for {UserId} via {Store}", user.Id, imageStore.Name);
 
         return user;
     }
@@ -280,17 +327,30 @@ public class AuthService(
 
         if (user is null)
         {
-            logger.LogInformation(
-                "Password reset requested for {Email}, which has no active account.", email);
+            logger.LogInformation("Password reset requested for an address with no active account.");
             return;
         }
 
-        // A fresh request retires whatever came before it — only one code
-        // should ever be live for an account at a time.
+        // Limits per account, not per code: a fresh code would otherwise restart the guess counter.
+        var since = DateTime.UtcNow.AddHours(-1);
+        var recent = await db.PasswordResetCodes
+            .Where(c => c.UserId == user.Id && c.CreatedAt >= since)
+            .ToListAsync(cancellationToken);
+        if (recent.Count >= MaxCodesPerHour || recent.Sum(c => c.Attempts) >= MaxOtpAttempts)
+        {
+            logger.LogInformation("Password reset throttled for account {UserId}.", user.Id);
+            return;
+        }
+
+        // A fresh request retires whatever came before it — only one code should be live at a time. The
+        // retired rows stay, so the hourly limits above can still count them.
         var stale = await db.PasswordResetCodes
             .Where(c => c.UserId == user.Id && c.ConsumedAt == null)
             .ToListAsync(cancellationToken);
-        db.PasswordResetCodes.RemoveRange(stale);
+        foreach (var retired in stale)
+        {
+            retired.ConsumedAt = DateTime.UtcNow;
+        }
 
         var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
 
@@ -316,7 +376,7 @@ public class AuthService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to send password reset code to {Email}", email);
+            logger.LogError(ex, "Failed to send password reset code for account {UserId}", user.Id);
         }
     }
 
@@ -327,6 +387,11 @@ public class AuthService(
         var user = await db.Users.FirstOrDefaultAsync(
             u => u.Email == email && u.IsActive, cancellationToken);
         if (user is null) return null;
+
+        var attemptsInWindow = await db.PasswordResetCodes
+            .Where(c => c.UserId == user.Id && c.CreatedAt >= DateTime.UtcNow.AddHours(-1))
+            .SumAsync(c => c.Attempts, cancellationToken);
+        if (attemptsInWindow >= MaxOtpAttempts) return null;
 
         var record = await db.PasswordResetCodes
             .Where(c => c.UserId == user.Id && c.ConsumedAt == null && c.VerifiedAt == null)
@@ -388,7 +453,7 @@ public class AuthService(
 
         await db.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("Password reset completed for {Email}", email);
+        logger.LogInformation("Password reset completed for account {UserId}", user.Id);
         return true;
     }
 

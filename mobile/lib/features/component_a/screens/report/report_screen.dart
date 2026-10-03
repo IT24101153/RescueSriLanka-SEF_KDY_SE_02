@@ -19,6 +19,7 @@ import '../../../../shared/widgets/app_ui.dart';
 import 'location_picker_screen.dart';
 import 'my_reports_view.dart';
 import 'report_visuals.dart';
+import '../../../../shared/core/input_rules.dart';
 
 /// Whether the floating glass tab bar sits over the bottom of the screen.
 bool get _isIOS => defaultTargetPlatform == TargetPlatform.iOS;
@@ -764,6 +765,7 @@ class _ReportScreenState extends State<ReportScreen> {
                       TextFormField(
                         controller: _people,
                         keyboardType: TextInputType.number,
+                        inputFormatters: digitsInputFormatters,
                         decoration: _fieldDecoration(
                           'People affected (optional)',
                           hint: 'A rough estimate is fine',

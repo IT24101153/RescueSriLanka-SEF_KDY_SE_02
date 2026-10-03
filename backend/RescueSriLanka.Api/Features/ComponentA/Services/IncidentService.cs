@@ -1,3 +1,4 @@
+using RescueSriLanka.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentA.DTOs;
@@ -26,6 +27,9 @@ public interface IIncidentService
         CancellationToken ct = default);
 
     Task<IncidentDto?> GetAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Whether the incident exists, and who filed it.</summary>
+    Task<(bool Exists, Guid? ReporterId)> GetReporterAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
     /// One report as a given viewer may see it: staff and the person who
@@ -82,6 +86,17 @@ public class IncidentService(
     IImageStorageService imageStorage,
     ILogger<IncidentService> logger) : IIncidentService
 {
+    // Where a coordinator may take an incident next. Reported reports are verified or rejected; a rejected
+    // report can still be revisited and verified later.
+    private static readonly Dictionary<IncidentStatus, IncidentStatus[]> AllowedStatusTransitions = new()
+    {
+        [IncidentStatus.Reported] = [IncidentStatus.Verified, IncidentStatus.Rejected],
+        [IncidentStatus.Verified] = [IncidentStatus.InProgress, IncidentStatus.Resolved, IncidentStatus.Rejected],
+        [IncidentStatus.InProgress] = [IncidentStatus.Verified, IncidentStatus.Resolved, IncidentStatus.Rejected],
+        [IncidentStatus.Resolved] = [IncidentStatus.InProgress],
+        [IncidentStatus.Rejected] = [IncidentStatus.Verified],
+    };
+
     public async Task<IncidentQueryResult> QueryAsync(
         IncidentStatus? status, IncidentSeverity? severity, IncidentType? type,
         string? district, bool activeOnly,
@@ -139,6 +154,16 @@ public class IncidentService(
         return new IncidentQueryResult(
             [.. incidents.Select(incident => IncidentDto.FromIncident(incident))],
             totalCount);
+    }
+
+    public async Task<(bool Exists, Guid? ReporterId)> GetReporterAsync(Guid id, CancellationToken ct = default)
+    {
+        var reporter = await db.Incidents.AsNoTracking()
+            .Where(incident => incident.Id == id)
+            .Select(incident => new { incident.ReportedByUserId })
+            .FirstOrDefaultAsync(ct);
+
+        return reporter is null ? (false, null) : (true, reporter.ReportedByUserId);
     }
 
     public async Task<IncidentDto?> GetAsync(Guid id, CancellationToken ct = default)
@@ -263,7 +288,7 @@ public class IncidentService(
             Latitude = request.Latitude,
             Longitude = request.Longitude,
             AffectedRadiusMeters = request.AffectedRadiusMeters,
-            District = request.District?.Trim(),
+            District = SriLankaDistricts.Normalise(request.District),
             AddressText = request.AddressText?.Trim(),
             EstimatedAffectedPeople = request.EstimatedAffectedPeople,
             ReportedByUserId = reportedByUserId
@@ -307,6 +332,12 @@ public class IncidentService(
             .FirstOrDefaultAsync(entity => entity.Id == id, ct);
 
         if (incident is null) return null;
+
+        if (incident.Status != status && !AllowedStatusTransitions[incident.Status].Contains(status))
+        {
+            throw new InvalidOperationException(
+                $"An incident cannot move from {incident.Status} to {status}.");
+        }
 
         incident.Status = status;
         incident.UpdatedAt = DateTime.UtcNow;

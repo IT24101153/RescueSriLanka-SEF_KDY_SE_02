@@ -24,6 +24,9 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   intl: ^0.20.2
   liquid_glass_easy: ^4.3.4
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
+  flutter_local_notifications: ^22.3.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

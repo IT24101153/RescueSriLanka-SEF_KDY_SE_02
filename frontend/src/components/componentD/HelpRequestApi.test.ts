@@ -5,7 +5,7 @@ import { clearSession, storeSession } from '../../shared/auth/session'
 afterEach(() => { vi.unstubAllGlobals(); clearSession() })
 
 it('uses authenticated coordination endpoints and sends only explicit recommendation inputs', async () => {
-  storeSession({ token: 'test-token', expiresAt: '2099-01-01T00:00:00Z', user: { id: 'user', fullName: 'Rescue', email: 'test@example.test', role: 'RescueTeam' } }, false)
+  storeSession({ token: 'test-token', expiresAt: '2099-01-01T00:00:00Z', user: { id: 'user', fullName: 'Rescue', email: 'test@example.test', role: 'RescueTeam' } })
   const fetch = vi.fn().mockImplementation(async () => new Response(JSON.stringify([]), { status: 200 }))
   vi.stubGlobal('fetch', fetch)
   const controller = new AbortController()

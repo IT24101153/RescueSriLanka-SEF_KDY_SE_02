@@ -2,8 +2,8 @@ namespace RescueSriLanka.Api.Services.Storage;
 
 /// <summary>
 /// Where an uploaded photo ended up. <paramref name="Location"/> is what gets
-/// persisted on the IncidentImage row and handed back to the clients — either
-/// an absolute https URL (Cloudinary) or a site-relative path (local disk).
+/// persisted on the row and handed back to the clients — an absolute https URL
+/// on Cloudinary.
 /// </summary>
 public record StoredImage(string Location, string? PublicId);
 
@@ -12,18 +12,18 @@ public record StoredImage(string Location, string? PublicId);
 /// so the validation and database rules are written once and the destination can
 /// change underneath them.
 ///
-/// Two implementations ship: Cloudinary for anything deployed (a container's
-/// disk does not survive a restart, so uploads written there disappear), and
-/// local disk as the no-credentials fallback for development.
+/// Cloudinary is the only implementation. Photos are never written to the API's
+/// own disk: a container's disk does not survive a restart, and serving them from
+/// the API would make every image request pass through it.
 /// </summary>
 public interface IImageStore
 {
-    /// <summary>Shown in logs and health output so the active backend is never a guess.</summary>
+    /// <summary>Shown in logs so the active backend is never a guess.</summary>
     string Name { get; }
 
     /// <summary>
-    /// <paramref name="category"/> groups photos that belong together on disk or
-    /// in Cloudinary (e.g. "incidents", "avatars") — <paramref name="ownerId"/> is
+    /// <paramref name="category"/> groups photos that belong together in Cloudinary
+    /// (e.g. "incidents", "avatars", "helprequests") — <paramref name="ownerId"/> is
     /// the incident or user the photo is for.
     /// </summary>
     Task<StoredImage> SaveAsync(

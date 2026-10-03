@@ -4,6 +4,7 @@ using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentA.Models;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services.Email;
+using RescueSriLanka.Api.Services.Push;
 
 namespace RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
 public interface INotificationService
@@ -39,10 +40,14 @@ public interface INotificationService
 /// confirmed the risk, because an email to a whole district is not something to
 /// hand to an unreviewed report. And a warning goes out once per incident, no
 /// matter how many times verification and approval fire.
+///
+/// Email and push are separate channels with separate opt-ins. Each is checked on
+/// its own, so turning one off never silences the other.
 /// </summary>
 public class NotificationService(
     AppDbContext db,
     IEmailSender sender,
+    IPushNotificationService push,
     IOptions<EmailOptions> options,
     ILogger<NotificationService> logger) : INotificationService
 {
@@ -50,8 +55,6 @@ public class NotificationService(
 
     public async Task<int> SendReportReceivedAsync(Guid incidentId, CancellationToken ct = default)
     {
-        if (!_options.Enabled) return 0;
-
         var incident = await db.Incidents.AsNoTracking()
             .FirstOrDefaultAsync(entity => entity.Id == incidentId, ct);
 
@@ -64,7 +67,17 @@ public class NotificationService(
         var reporter = await db.Users.AsNoTracking()
             .FirstOrDefaultAsync(user => user.Id == reporterId, ct);
 
-        if (reporter is null || !reporter.IsActive || !reporter.EmailNotificationsEnabled)
+        if (reporter is null || !reporter.IsActive)
+        {
+            return 0;
+        }
+
+        await push.SendToUsersAsync(
+            [reporterId],
+            new PushMessage("Report received", $"Thank you. We have received your report: {incident.Title}."),
+            ct);
+
+        if (!_options.Enabled || !reporter.EmailNotificationsEnabled)
         {
             return 0;
         }
@@ -75,7 +88,7 @@ public class NotificationService(
 
     public async Task<int> SendDistrictWarningAsync(Guid incidentId, CancellationToken ct = default)
     {
-        if (!_options.Enabled) return 0;
+        if (!_options.Enabled && !push.Enabled) return 0;
 
         // Tracked: a successful send stamps the incident.
         var incident = await db.Incidents
@@ -111,11 +124,12 @@ public class NotificationService(
             return 0;
         }
 
+        // Anyone who wants either channel. Each channel is checked against its own opt-in below.
         var recipients = await db.Users.AsNoTracking()
             .Where(user =>
                 user.IsActive &&
-                user.EmailNotificationsEnabled &&
-                user.District == district)
+                user.District == district &&
+                (user.EmailNotificationsEnabled || user.PushNotificationsEnabled))
             .ToListAsync(ct);
 
         if (recipients.Count == 0)
@@ -128,24 +142,32 @@ public class NotificationService(
         }
 
         var sent = 0;
-        foreach (var recipient in recipients)
+        if (_options.Enabled)
         {
-            if (await sender.SendAsync(
-                    EmailTemplates.DistrictWarning(recipient, incident, district), ct))
+            foreach (var recipient in recipients.Where(user => user.EmailNotificationsEnabled))
             {
-                sent++;
+                if (await sender.SendAsync(
+                        EmailTemplates.DistrictWarning(recipient, incident, district), ct))
+                {
+                    sent++;
+                }
             }
         }
 
-        if (sent > 0)
+        var pushed = await push.SendToUsersAsync(
+            recipients.Where(user => user.PushNotificationsEnabled).Select(user => user.Id),
+            WarningPush(incident, district),
+            ct);
+
+        if (sent > 0 || pushed > 0)
         {
             incident.DistrictWarningSentAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
         }
 
         logger.LogInformation(
-            "Warned {Sent}/{Total} subscriber(s) in {District} about incident {Id} ({Severity}).",
-            sent, recipients.Count, district, incidentId, incident.Severity);
+            "Warned {Sent} email(s) and {Pushed} push(es) in {District} for incident {Id} ({Severity}); {Total} subscriber(s).",
+            sent, pushed, district, incidentId, incident.Severity, recipients.Count);
 
         return sent;
     }
@@ -165,10 +187,10 @@ public class NotificationService(
 
     public async Task<int> SendDistrictBriefingAsync(Guid userId, CancellationToken ct = default)
     {
-        if (!_options.Enabled) return 0;
+        var user = await db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(entity => entity.Id == userId, ct);
 
-        var user = await FindReachableUserAsync(userId, ct);
-        if (user?.District is not string district) return 0;
+        if (user is not { IsActive: true } || user.District is not string district) return 0;
 
         var warnings = await ActiveWarningsInAsync(district, ct);
 
@@ -179,10 +201,22 @@ public class NotificationService(
             return 0;
         }
 
+        await push.SendToUsersAsync([userId], BriefingPush(district, warnings), ct);
+
+        if (!_options.Enabled || !user.EmailNotificationsEnabled) return 0;
+
         var sent = await sender.SendAsync(
             EmailTemplates.DistrictBriefing(user, district, warnings), ct);
         return sent ? 1 : 0;
     }
+
+    private static PushMessage WarningPush(Incident incident, string district) => new(
+        $"{incident.Severity.ToString().ToUpperInvariant()} warning in {district}",
+        $"{incident.Type}: {incident.Title}. Open the app for the safety map.");
+
+    private static PushMessage BriefingPush(string district, IReadOnlyList<Incident> warnings) => new(
+        $"Warnings in {district}",
+        $"{warnings.Count} warning(s) are in force in your district. The most serious: {warnings[0].Title}.");
 
     private async Task<User?> FindReachableUserAsync(Guid userId, CancellationToken ct)
     {

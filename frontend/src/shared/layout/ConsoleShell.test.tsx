@@ -30,7 +30,7 @@ function mount(role: Role, path: string) {
     token: 'test-only', expiresAt: '2099-01-01T00:00:00Z',
     user: { id: 'test-user', fullName: 'Test operator', email: 'test@example.test', role },
   }
-  storeSession(session, false)
+  storeSession(session)
   render(<MemoryRouter initialEntries={[path]}>
     <ConsoleShell session={session} onSignOut={vi.fn()} />
     <Location />

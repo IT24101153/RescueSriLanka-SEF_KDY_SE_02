@@ -6,6 +6,8 @@ import '../../../shared/widgets/app_ui.dart';
 import '../models/coordination_requests.dart';
 import '../models/incident_reference.dart';
 import '../services/rescue_coordination_service.dart';
+import 'package:flutter/services.dart';
+import '../../../shared/core/input_rules.dart';
 
 String mutationError(Object error) => error is RescueCoordinationException
     ? error.message
@@ -92,6 +94,7 @@ class _ResourceEditorState extends State<ResourceEditor> {
     bool optional = false,
     bool numeric = false,
     String? Function(String)? validate,
+    List<TextInputFormatter>? formatters,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 16),
     child: TextFormField(
@@ -105,6 +108,7 @@ class _ResourceEditorState extends State<ResourceEditor> {
           ? const TextInputType.numberWithOptions(decimal: true, signed: true)
           : TextInputType.text,
       maxLength: max,
+      inputFormatters: formatters,
       onChanged: (v) => _text[key] = v.trim(),
       validator: (v) {
         final value = v?.trim() ?? '';
@@ -251,13 +255,18 @@ class _ResourceEditorState extends State<ResourceEditor> {
                     ),
                 ],
                 if (widget.kind == ResourceKind.member) ...[
-                  _field('fullName', 'Full name', max: 150),
+                  _field(
+                    'fullName',
+                    'Full name',
+                    max: 150,
+                    formatters: nameInputFormatters,
+                    validate: (v) => validatePersonName(v),
+                  ),
                   _field(
                     'phone',
                     'Phone',
-                    validate: (v) => RegExp(r'^[0-9+\-\s]{7,15}$').hasMatch(v)
-                        ? null
-                        : 'Use 7-15 phone characters.',
+                    formatters: phoneInputFormatters,
+                    validate: (v) => validateSriLankaPhone(v, required: true),
                   ),
                   _choice(
                     'Skill',
@@ -692,6 +701,7 @@ class _AssignmentEditorState extends State<AssignmentEditor> {
                                 labelText: 'People/Patients Requiring Transport',
                               ),
                               keyboardType: TextInputType.number,
+                              inputFormatters: digitsInputFormatters,
                               onChanged: (v) => _capacity = v.trim(),
                               validator: (v) {
                                 final capacity = int.tryParse(v ?? '');

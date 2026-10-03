@@ -9,7 +9,6 @@ import '../../../shared/core/theme.dart';
 import '../../../shared/widgets/app_ui.dart';
 import '../help_style.dart';
 import '../services/help_request_service.dart';
-import '../services/cloudinary_service.dart';
 import '../widgets/estimated_people_field.dart';
 
 class SubmitRequestScreen extends StatefulWidget {
@@ -167,12 +166,12 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
       _error = null;
     });
 
-    // Upload the photo first (if one was picked), then submit the request with its URL.
+    // Upload the photo through the API first (if one was picked), then submit the request with its URL.
     // XFile supports byte uploads on both Flutter Web and mobile.
     String? imageUrl;
     if (_selectedImageFile != null) {
       setState(() => _uploadingImage = true);
-      imageUrl = await CloudinaryService.uploadImage(_selectedImageFile!);
+      imageUrl = await HelpRequestService.uploadPhoto(_selectedImageFile!);
       setState(() => _uploadingImage = false);
 
       if (imageUrl == null) {

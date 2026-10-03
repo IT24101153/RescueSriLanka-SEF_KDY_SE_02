@@ -12,7 +12,7 @@ export async function signIn(
   let response: Response
 
   try {
-    response = await fetch(`${API_BASE}/api/auth/login`, {
+    response = await fetch(`${API_BASE}/api/auth/portal/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim(), password }),

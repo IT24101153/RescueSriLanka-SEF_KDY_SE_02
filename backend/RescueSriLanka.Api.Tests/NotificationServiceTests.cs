@@ -20,7 +20,7 @@ namespace RescueSriLanka.Api.Tests;
 public class NotificationServiceTests
 {
     /// <summary>Records what it was asked to send instead of sending it.</summary>
-    private sealed class RecordingEmailSender : IEmailSender
+    internal sealed class RecordingEmailSender : IEmailSender
     {
         public List<EmailMessage> Sent { get; } = [];
 
@@ -39,13 +39,17 @@ public class NotificationServiceTests
             .Options);
 
     private static (NotificationService Service, RecordingEmailSender Sender) NewService(
-        AppDbContext db, IncidentSeverity minimum = IncidentSeverity.High)
+        AppDbContext db,
+        IncidentSeverity minimum = IncidentSeverity.High,
+        RecordingPushNotificationService? push = null)
     {
         var sender = new RecordingEmailSender();
         var options = Options.Create(new EmailOptions { MinimumWarningSeverity = minimum });
 
         return (
-            new NotificationService(db, sender, options, NullLogger<NotificationService>.Instance),
+            new NotificationService(
+                db, sender, push ?? new RecordingPushNotificationService(), options,
+                NullLogger<NotificationService>.Instance),
             sender);
     }
 
@@ -413,11 +417,120 @@ public class NotificationServiceTests
         var service = new NotificationService(
             db,
             sender,
+            new RecordingPushNotificationService(),
             Options.Create(new EmailOptions { Enabled = false }),
             NullLogger<NotificationService>.Instance);
 
         await service.SendDistrictWarningAsync(incident.Id);
 
         Assert.Empty(sender.Sent);
+    }
+}
+
+/// <summary>
+/// Push runs on its own opt-in, beside email. These pin down that a citizen who
+/// has only push on still hears about warnings, receipts and briefings.
+/// </summary>
+public class NotificationPushTests
+{
+    private static AppDbContext NewDb() =>
+        new(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"notify-push-{Guid.NewGuid()}")
+            .Options);
+
+    [Fact]
+    public async Task Warning_ReachesAPushOnlyCitizenEvenWhenEmailIsOff()
+    {
+        using var db = NewDb();
+        var incident = new Incident
+        {
+            Title = "Flash flooding on Galle Road", Description = "Water over the road.", Type = IncidentType.Flood,
+            Severity = IncidentSeverity.Critical, District = "Colombo", IsActive = true
+        };
+        var pushOnly = new User
+        {
+            FullName = "Push Only", Email = "push@example.com", PasswordHash = "-", District = "Colombo",
+            EmailNotificationsEnabled = false, PushNotificationsEnabled = true
+        };
+        db.Incidents.Add(incident);
+        db.Users.Add(pushOnly);
+        await db.SaveChangesAsync();
+
+        var sender = new NotificationServiceTests.RecordingEmailSender();
+        var push = new RecordingPushNotificationService();
+        var service = new NotificationService(
+            db, sender, push,
+            Options.Create(new EmailOptions { Enabled = false }),
+            NullLogger<NotificationService>.Instance);
+
+        await service.SendDistrictWarningAsync(incident.Id);
+
+        Assert.Empty(sender.Sent);
+        var (userIds, message) = Assert.Single(push.Calls);
+        Assert.Equal([pushOnly.Id], userIds);
+        Assert.Equal("CRITICAL warning in Colombo", message.Title);
+
+        // Pushed is as good as sent: the incident is stamped, so the warning is not repeated.
+        Assert.NotNull((await db.Incidents.FindAsync(incident.Id))!.DistrictWarningSentAt);
+    }
+
+    [Fact]
+    public async Task Receipt_IsPushedToTheReporter()
+    {
+        using var db = NewDb();
+        var reporter = new User
+        {
+            FullName = "Reporter", Email = "reporter@example.com", PasswordHash = "-", PushNotificationsEnabled = true
+        };
+        var incident = new Incident
+        {
+            Title = "Landslide near Kandy", Description = "Road blocked.", Type = IncidentType.Landslide,
+            ReportedByUserId = reporter.Id, IsActive = true
+        };
+        db.Users.Add(reporter);
+        db.Incidents.Add(incident);
+        await db.SaveChangesAsync();
+
+        var push = new RecordingPushNotificationService();
+        var service = new NotificationService(
+            db, new NotificationServiceTests.RecordingEmailSender(), push,
+            Options.Create(new EmailOptions()), NullLogger<NotificationService>.Instance);
+
+        await service.SendReportReceivedAsync(incident.Id);
+
+        var (userIds, message) = Assert.Single(push.Calls);
+        Assert.Equal([reporter.Id], userIds);
+        Assert.Equal("Report received", message.Title);
+        Assert.Contains("Landslide near Kandy", message.Body);
+    }
+
+    [Fact]
+    public async Task Briefing_IsPushedToACitizenWhoMovedIntoADistrictUnderWarning()
+    {
+        using var db = NewDb();
+        var mover = new User
+        {
+            FullName = "Mover", Email = "mover@example.com", PasswordHash = "-", District = "Kandy",
+            EmailNotificationsEnabled = false, PushNotificationsEnabled = true
+        };
+        db.Users.Add(mover);
+        db.Incidents.Add(new Incident
+        {
+            Title = "Flood on Peradeniya Road", Description = "Rising water.", Type = IncidentType.Flood,
+            Severity = IncidentSeverity.High, District = "Kandy", IsActive = true,
+            DistrictWarningSentAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var push = new RecordingPushNotificationService();
+        var service = new NotificationService(
+            db, new NotificationServiceTests.RecordingEmailSender(), push,
+            Options.Create(new EmailOptions()), NullLogger<NotificationService>.Instance);
+
+        await service.SendDistrictBriefingAsync(mover.Id);
+
+        var (userIds, message) = Assert.Single(push.Calls);
+        Assert.Equal([mover.Id], userIds);
+        Assert.Equal("Warnings in Kandy", message.Title);
     }
 }

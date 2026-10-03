@@ -97,9 +97,28 @@ void main() {
       expect(auth.isSignedIn, isFalse);
     });
 
-    test('reports a duplicate email on registration', () async {
+    test('registration signs in once the account is ready', () async {
       final auth = AuthService(
-        client: MockClient((_) async => http.Response('{}', 409)),
+        client: MockClient((request) async => request.url.path.endsWith('/register')
+            ? http.Response('{}', 202)
+            : http.Response(authBody(), 200)),
+      );
+
+      final result = await auth.register(
+        fullName: 'Nimali Perera',
+        email: 'nimali@example.lk',
+        password: 'password123',
+      );
+
+      expect(result.ok, isTrue);
+      expect(auth.isSignedIn, isTrue);
+    });
+
+    test('an address that already has an account gets the same answer as a new one', () async {
+      final auth = AuthService(
+        client: MockClient((request) async => request.url.path.endsWith('/register')
+            ? http.Response('{}', 202)
+            : http.Response('{}', 401)),
       );
 
       final result = await auth.register(
@@ -109,7 +128,8 @@ void main() {
       );
 
       expect(result.ok, isFalse);
-      expect(result.message, contains('already exists'));
+      expect(result.message, contains('Invalid email or password'));
+      expect(auth.isSignedIn, isFalse);
     });
 
     test('surfaces an unreachable server rather than throwing', () async {

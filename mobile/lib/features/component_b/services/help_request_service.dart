@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'package:http_parser/http_parser.dart';
+import 'package:image_picker/image_picker.dart';
+
 import 'help_request_api.dart';
 
 // Matches HelpRequestType enum: Water=0, Food=1, Medical=2, Rescue=3, Shelter=4, Other=5
@@ -130,6 +133,38 @@ class HelpRequestLoadResult {
 }
 
 class HelpRequestService {
+  /// Uploads [photo] through the API, which stores it on Cloudinary, and
+  /// returns the hosted URL for the request to carry. Null when the upload fails.
+  static Future<String?> uploadPhoto(XFile photo) async {
+    try {
+      final bytes = await photo.readAsBytes();
+      final res = await HelpRequestApi.postFile(
+        '/api/HelpRequests/photo',
+        field: 'photo',
+        bytes: bytes,
+        filename: photo.name,
+        contentType: MediaType('image', _imageSubtype(photo.name)),
+      );
+      if (res.statusCode != 200) return null;
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      return body['url'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // The API accepts only these four; anything else is sent as jpeg and the
+  // server's signature check refuses it with a clear message.
+  static String _imageSubtype(String filename) {
+    final extension = filename.split('.').last.toLowerCase();
+    return switch (extension) {
+      'png' => 'png',
+      'webp' => 'webp',
+      'heic' => 'heic',
+      _ => 'jpeg',
+    };
+  }
+
   static Future<HelpRequest?> submit({
     required int estimatedPeopleCount,
     required int type,
