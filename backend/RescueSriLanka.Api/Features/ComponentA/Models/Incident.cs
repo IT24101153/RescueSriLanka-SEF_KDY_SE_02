@@ -74,6 +74,12 @@ public class Incident
     /// </summary>
     public DateTime? DistrictWarningSentAt { get; set; }
 
+    /// <summary>
+    /// Set when this report was merged into another report of the same event.
+    /// The kept incident carries the photos and the map presence from then on.
+    /// </summary>
+    public Guid? DuplicateOfIncidentId { get; set; }
+
     /// <summary>False once resolved or rejected — drives the "active" map layer.</summary>
     public bool IsActive { get; set; } = true;
 

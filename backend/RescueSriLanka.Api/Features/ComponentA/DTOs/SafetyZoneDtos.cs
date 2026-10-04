@@ -1,7 +1,40 @@
+using System.ComponentModel.DataAnnotations;
+using RescueSriLanka.Api.DTOs;
 using RescueSriLanka.Api.Features.ComponentA.Models;
 
-
 namespace RescueSriLanka.Api.Features.ComponentA.DTOs;
+
+/// <summary>
+/// A zone a coordinator declares or edits by hand — or a Zone Planning Agent
+/// draft they adjusted before approving. Only manual zones take this shape;
+/// derived zones follow their incident.
+/// </summary>
+public record SafetyZoneRequest
+{
+    [Required, StringLength(200, MinimumLength = 3)]
+    public required string Name { get; init; }
+
+    [Required]
+    public required ZoneStatus Status { get; init; }
+
+    [Range(-90, 90)]
+    public required double CenterLatitude { get; init; }
+
+    [Range(-180, 180)]
+    public required double CenterLongitude { get; init; }
+
+    [Range(100, 20000)]
+    public required int RadiusMeters { get; init; }
+
+    [MaxLength(100), SriLankaDistrict]
+    public string? District { get; init; }
+
+    [MaxLength(500)]
+    public string? Rationale { get; init; }
+
+    /// <summary>When the zone lapses by itself. Null keeps it until retired.</summary>
+    public DateTime? ExpiresAt { get; init; }
+}
 public record SafetyZoneDto
 {
     public required Guid Id { get; init; }
@@ -15,6 +48,8 @@ public record SafetyZoneDto
     public string? Rationale { get; init; }
     public Guid? SourceIncidentId { get; init; }
     public required DateTime ComputedAt { get; init; }
+    public DateTime? ExpiresAt { get; init; }
+    public Guid? SourceAgentRunId { get; init; }
 
     public static SafetyZoneDto FromZone(SafetyZone zone) => new()
     {
@@ -28,7 +63,9 @@ public record SafetyZoneDto
         District = zone.District,
         Rationale = zone.Rationale,
         SourceIncidentId = zone.SourceIncidentId,
-        ComputedAt = zone.ComputedAt
+        ComputedAt = zone.ComputedAt,
+        ExpiresAt = zone.ExpiresAt,
+        SourceAgentRunId = zone.SourceAgentRunId
     };
 }
 

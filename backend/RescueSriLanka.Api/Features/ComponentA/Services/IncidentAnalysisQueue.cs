@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
+using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentEnrichmentAgent;
 
 namespace RescueSriLanka.Api.Features.ComponentA.Services;
 public interface IIncidentAnalysisQueue
@@ -45,7 +46,12 @@ public class IncidentAnalysisQueue(ILogger<IncidentAnalysisQueue> logger)
     }
 }
 
-/// <summary>Drains the queue one incident at a time.</summary>
+/// <summary>
+/// Drains the queue one incident at a time: the Incident Analysis Agent grades
+/// it, then the Enrichment Agent checks it for duplicates and missing fields.
+/// Each runs in its own scope and fails on its own — a failed grading never
+/// stops the duplicate check, and the other way round.
+/// </summary>
 public class IncidentAnalysisWorker(
     IncidentAnalysisQueue queue,
     IServiceScopeFactory scopeFactory,
@@ -78,6 +84,23 @@ public class IncidentAnalysisWorker(
                 // A failed analysis must never take the worker down — the
                 // incident simply stays unanalysed until someone runs it.
                 logger.LogError(ex, "Background analysis failed for incident {IncidentId}", incidentId);
+            }
+
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                if (scope.ServiceProvider.GetService<IIncidentEnrichmentAgent>() is { } enrichment)
+                {
+                    await enrichment.EnrichAsync(incidentId, stoppingToken);
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Background enrichment failed for incident {IncidentId}", incidentId);
             }
         }
     }

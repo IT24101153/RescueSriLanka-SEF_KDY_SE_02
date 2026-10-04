@@ -18,6 +18,8 @@ import IncidentTable, {
 import AgentActivity from './sections/AgentActivity'
 import ReportDecision from './sections/ReportDecision'
 import IncidentPhotos from './sections/IncidentPhotos'
+import EnrichmentPanel from './sections/EnrichmentPanel'
+import IncidentForm from './sections/IncidentForm'
 import { SEVERITY_TOKEN, STATUS_LABEL, timeAgo } from './severity'
 import './DisasterDashboard.css'
 
@@ -61,6 +63,8 @@ export default function DisasterDashboard() {
   const [showZones, setShowZones] = useState(true)
 
   const [selected, setSelected] = useState<Incident | null>(null)
+  // undefined: closed · null: filing a new report · an incident: editing it
+  const [form, setForm] = useState<Incident | null | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
@@ -221,6 +225,9 @@ export default function DisasterDashboard() {
           >
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
+          <button type="button" className="btn-approve" onClick={() => setForm(null)}>
+            + New report
+          </button>
         </div>
       </header>
 
@@ -335,7 +342,7 @@ export default function DisasterDashboard() {
       )}
 
       {tab === 'zones' && (
-        <ZonesSection zones={zones} incidents={incidents} onSelect={setSelected} />
+        <ZonesSection zones={zones} incidents={incidents} onSelect={setSelected} onChanged={reload} />
       )}
 
       {tab === 'agent' && <AgentActivity />}
@@ -404,6 +411,15 @@ export default function DisasterDashboard() {
               <span className={`chip chip--${SEVERITY_TOKEN[selected.severity]}`}>
                 {selected.severity}
               </span>
+              {selected.status !== 'Merged' && (
+                <button
+                  type="button"
+                  className="btn-small drawer__edit"
+                  onClick={() => setForm(selected)}
+                >
+                  ✎ Edit details
+                </button>
+              )}
               <button
                 type="button"
                 className="drawer__close"
@@ -448,8 +464,27 @@ export default function DisasterDashboard() {
               incident={selected}
               onChanged={() => void refreshAfterDecision(selected.id)}
             />
+
+            <EnrichmentPanel
+              key={selected.id}
+              incident={selected}
+              onChanged={() => void refreshAfterDecision(selected.id)}
+            />
           </aside>
         </div>
+      )}
+
+      {form !== undefined && (
+        <IncidentForm
+          incident={form ?? undefined}
+          onClose={() => setForm(undefined)}
+          onSaved={(saved) => {
+            setForm(undefined)
+            reload()
+            // Open the saved report, so the agents' proposals can be followed.
+            setSelected(saved)
+          }}
+        />
       )}
     </div>
   )

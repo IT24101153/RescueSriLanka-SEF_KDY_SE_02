@@ -18,6 +18,8 @@ using RescueSriLanka.Api.Services.Llm;
 using RescueSriLanka.Api.Services.Push;
 using RescueSriLanka.Api.Services.Storage;
 using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
+using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentEnrichmentAgent;
+using RescueSriLanka.Api.Features.ComponentA.Agents.ZonePlanningAgent;
 using RescueSriLanka.Api.Features.ComponentA.Data;
 using RescueSriLanka.Api.Features.ComponentA.Services;
 using RescueSriLanka.Api.Features.ComponentA.Services.Notifications;
@@ -90,7 +92,9 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 // Component A — incidents, map and safety zones.
-builder.Services.AddScoped<ISafetyZoneService, SafetyZoneService>();
+builder.Services.AddScoped<SafetyZoneService>();
+builder.Services.AddScoped<ISafetyZoneService>(provider => provider.GetRequiredService<SafetyZoneService>());
+builder.Services.AddScoped<IManualZoneService>(provider => provider.GetRequiredService<SafetyZoneService>());
 builder.Services.AddScoped<IIncidentService, IncidentService>();
 builder.Services.AddScoped<IImageStorageService, ImageStorageService>();
 
@@ -258,6 +262,8 @@ builder.Services.AddHttpClient<IncidentAnalysisTools>(client =>
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 builder.Services.AddScoped<AIncidentAnalysisAgent, IncidentAnalysisAgent>();
+builder.Services.AddScoped<IIncidentEnrichmentAgent, IncidentEnrichmentAgent>();
+builder.Services.AddScoped<IZonePlanningAgent, ZonePlanningAgent>();
 builder.Services.AddScoped<IAgentRunService, AgentRunService>();
 
 // New reports are scored in the background — the citizen filing one never

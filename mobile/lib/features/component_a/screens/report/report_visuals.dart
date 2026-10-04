@@ -54,8 +54,14 @@ String stepLabel(String status) => switch (status) {
 String statusLabel(String status) => switch (status) {
   'Reported' => 'Under review',
   'Verified' || 'InProgress' => 'Approved',
+  'Merged' => 'Merged',
   _ => status,
 };
+
+/// True when a coordinator folded this report into an earlier report of the
+/// same event. Like a rejection it leaves the review path — but the event is
+/// real, and the earlier report carries it on the map.
+bool isMerged(String status) => status == 'Merged';
 
 String statusExplainer(String status) => switch (status) {
   'Reported' =>
@@ -66,12 +72,16 @@ String statusExplainer(String status) => switch (status) {
   'Resolved' => 'Closed. The situation has been dealt with.',
   'Rejected' =>
     'A coordinator found this report was not true, so it is not on the map.',
+  'Merged' =>
+    'Someone reported the same event first. Your report and photos were '
+        'added to theirs, which is on the live map.',
   _ => '',
 };
 
 Color statusTone(String status) => switch (status) {
   'Verified' || 'InProgress' => AppColors.low,
   'Rejected' => AppColors.critical,
+  'Merged' => AppColors.brandInk,
   _ => AppColors.body,
 };
 

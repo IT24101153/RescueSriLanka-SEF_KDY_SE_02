@@ -45,6 +45,7 @@ export const STATUS_LABEL: Record<string, string> = {
   InProgress: 'In progress',
   Resolved: 'Resolved',
   Rejected: 'Rejected',
+  Merged: 'Merged (duplicate)',
 }
 
 export function timeAgo(iso: string): string {
@@ -54,4 +55,14 @@ export function timeAgo(iso: string): string {
   const hours = Math.round(minutes / 60)
   if (hours < 24) return `${hours}h ago`
   return `${Math.round(hours / 24)}d ago`
+}
+
+/** "in 5h", "in 2d" — for zone expiry, which lies ahead. */
+export function timeUntil(iso: string): string {
+  const minutes = Math.round((new Date(iso).getTime() - Date.now()) / 60000)
+  if (minutes <= 0) return 'now'
+  if (minutes < 60) return `in ${minutes}m`
+  const hours = Math.round(minutes / 60)
+  if (hours < 48) return `in ${hours}h`
+  return `in ${Math.round(hours / 24)}d`
 }

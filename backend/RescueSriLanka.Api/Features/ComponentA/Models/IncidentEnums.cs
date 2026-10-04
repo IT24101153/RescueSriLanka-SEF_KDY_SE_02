@@ -30,7 +30,14 @@ public enum IncidentStatus
     Verified,
     InProgress,
     Resolved,
-    Rejected
+    Rejected,
+
+    /// <summary>
+    /// A duplicate of another report of the same event, folded into it on a
+    /// coordinator's approval of the Enrichment Agent's proposal. Off the map;
+    /// <see cref="Incident.DuplicateOfIncidentId"/> points at the one kept.
+    /// </summary>
+    Merged
 }
 
 /// <summary>Safety classification of an area, shown on the citizen map.</summary>

@@ -115,6 +115,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasIndex(incident => incident.IsActive);
             entity.HasIndex(incident => incident.District);
             entity.HasIndex(incident => new { incident.Latitude, incident.Longitude });
+            entity.HasIndex(incident => incident.DuplicateOfIncidentId);
 
             entity.HasMany(incident => incident.Images)
                 .WithOne(image => image.Incident)

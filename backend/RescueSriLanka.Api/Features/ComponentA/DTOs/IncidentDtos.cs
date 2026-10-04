@@ -24,6 +24,7 @@ public record IncidentDto
     public string? AiRationale { get; init; }
     public DateTime? AiAnalysedAt { get; init; }
     public bool SeverityOverridden { get; init; }
+    public Guid? DuplicateOfIncidentId { get; init; }
     public required bool IsActive { get; init; }
     public required DateTime ReportedAt { get; init; }
     public DateTime? ResolvedAt { get; init; }
@@ -58,6 +59,7 @@ public record IncidentDto
         AiRationale = incident.AiRationale,
         AiAnalysedAt = incident.AiAnalysedAt,
         SeverityOverridden = incident.SeverityOverriddenAt is not null,
+        DuplicateOfIncidentId = incident.DuplicateOfIncidentId,
         IsActive = incident.IsActive,
         ReportedAt = incident.ReportedAt,
         ResolvedAt = incident.ResolvedAt,
@@ -117,6 +119,40 @@ public record CreateIncidentResponse
     public required IncidentDto Incident { get; init; }
 
     public string? PhotoError { get; init; }
+}
+
+/// <summary>
+/// A coordinator's correction of a report's details. Severity and status keep
+/// their own endpoints — each has its own rules and notifications.
+/// </summary>
+public record UpdateIncidentRequest
+{
+    [Required, StringLength(200, MinimumLength = 3)]
+    public required string Title { get; init; }
+
+    [Required, StringLength(4000, MinimumLength = 3)]
+    public required string Description { get; init; }
+
+    [Required]
+    public required IncidentType Type { get; init; }
+
+    [Range(-90, 90)]
+    public required double Latitude { get; init; }
+
+    [Range(-180, 180)]
+    public required double Longitude { get; init; }
+
+    [Range(50, 50000)]
+    public required int AffectedRadiusMeters { get; init; }
+
+    [MaxLength(100), SriLankaDistrict]
+    public string? District { get; init; }
+
+    [MaxLength(300)]
+    public string? AddressText { get; init; }
+
+    [Range(0, 1000000)]
+    public int? EstimatedAffectedPeople { get; init; }
 }
 
 public record UpdateIncidentStatusRequest

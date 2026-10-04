@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
+using RescueSriLanka.Api.Features.ComponentA.Agents.IncidentEnrichmentAgent;
 using RescueSriLanka.Api.Features.ComponentA.DTOs;
 using RescueSriLanka.Api.Features.ComponentA.Models;
 using RescueSriLanka.Api.Features.ComponentA.Services;
@@ -20,11 +21,13 @@ namespace RescueSriLanka.Api.Features.ComponentA.Controllers;
 public class IncidentsController(
     IIncidentService incidentService,
     IIncidentAnalysisAgent analysisAgent,
+    IIncidentEnrichmentAgent enrichmentAgent,
     IImageStorageService imageStorage,
     IActionEmailService emails) : ControllerBase
 {
     private const string Coordinator = nameof(UserRole.EmergencyCoordinator);
     private const string Citizen = nameof(UserRole.Citizen);
+    private const string Reporters = Citizen + "," + Coordinator;
 
     /// <summary>
     /// Filtered incident list for the admin table. Sorting and paging are
@@ -119,15 +122,42 @@ public class IncidentsController(
     public async Task<ActionResult<DashboardStatisticsDto>> Statistics(CancellationToken ct) =>
         Ok(await incidentService.GetStatisticsAsync(ct));
 
-    /// <summary>Report an incident. Citizens only; staff do not file reports.</summary>
+    /// <summary>
+    /// Report an incident. A citizen's report waits for a coordinator; a
+    /// coordinator filing from the console (a phone call, a field report) is
+    /// vouching for it, so theirs is approved on arrival.
+    /// </summary>
     [HttpPost]
-    [Authorize(Roles = Citizen)]
+    [Authorize(Roles = Reporters)]
     public async Task<ActionResult<IncidentDto>> Create(
         [FromBody] CreateIncidentRequest request, CancellationToken ct)
     {
-        var incident = await incidentService.CreateAsync(request, CurrentUserId(), ct);
-        await emails.IncidentReportedAsync(incident.Id, ct);
+        var staff = User.IsInRole(Coordinator);
+        var incident = await incidentService.CreateAsync(request, CurrentUserId(), staff, ct);
+        if (!staff) await emails.IncidentReportedAsync(incident.Id, ct);
         return CreatedAtAction(nameof(Get), new { id = incident.Id }, incident);
+    }
+
+    /// <summary>A coordinator corrects a report's details: text, type, location, radius, district.</summary>
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = Coordinator)]
+    [ProducesResponseType(typeof(IncidentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<IncidentDto>> Update(
+        Guid id, [FromBody] UpdateIncidentRequest request, CancellationToken ct)
+    {
+        if (CurrentUserId() is not Guid userId) return Unauthorized();
+
+        try
+        {
+            var incident = await incidentService.UpdateAsync(id, request, userId, ct);
+            return incident is null ? NotFound() : Ok(incident);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -137,7 +167,7 @@ public class IncidentsController(
     /// it graded the report blind.
     /// </summary>
     [HttpPost("with-photo")]
-    [Authorize(Roles = Citizen)]
+    [Authorize(Roles = Reporters)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(10 * 1024 * 1024)]
     [ProducesResponseType(typeof(CreateIncidentResponse), StatusCodes.Status201Created)]
@@ -150,9 +180,10 @@ public class IncidentsController(
     {
         try
         {
+            var staff = User.IsInRole(Coordinator);
             var result = await incidentService.CreateWithPhotoAsync(
-                request, photo, caption, CurrentUserId(), ct);
-            await emails.IncidentReportedAsync(result.Incident.Id, ct);
+                request, photo, caption, CurrentUserId(), staff, ct);
+            if (!staff) await emails.IncidentReportedAsync(result.Incident.Id, ct);
             return CreatedAtAction(nameof(Get), new { id = result.Incident.Id }, result);
         }
         catch (ArgumentException ex)
@@ -276,6 +307,37 @@ public class IncidentsController(
             return StatusCode(StatusCodes.Status502BadGateway, new
             {
                 message = "The analysis failed and was recorded on the agent run. Nothing was changed; try again."
+            });
+        }
+    }
+
+    /// <summary>
+    /// Runs the Incident Enrichment Agent: duplicate search and field
+    /// corrections. Like analysis, it only proposes — each change waits for a
+    /// coordinator's approval on the agent run.
+    /// </summary>
+    [HttpPost("{id:guid}/enrich")]
+    [Authorize(Roles = Coordinator)]
+    [EnableRateLimiting("ai")]
+    [ProducesResponseType(typeof(EnrichmentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<ActionResult<EnrichmentResult>> Enrich(Guid id, CancellationToken ct)
+    {
+        if (await incidentService.GetAsync(id, ct) is null)
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            return Ok(await enrichmentAgent.EnrichAsync(id, ct));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                message = "The enrichment check failed and was recorded on the agent run. Nothing was changed; try again."
             });
         }
     }

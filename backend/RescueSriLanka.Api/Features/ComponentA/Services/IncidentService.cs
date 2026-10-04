@@ -53,8 +53,13 @@ public interface IIncidentService
         double latitude, double longitude, double radiusKm,
         bool approvedOnly = false, CancellationToken ct = default);
 
+    /// <param name="filedByStaff">
+    /// True when a coordinator files it from the console: they are vouching for
+    /// it as they write it, so it is approved on arrival and can warn its district.
+    /// </param>
     Task<IncidentDto> CreateAsync(
-        CreateIncidentRequest request, Guid? reportedByUserId, CancellationToken ct = default);
+        CreateIncidentRequest request, Guid? reportedByUserId,
+        bool filedByStaff = false, CancellationToken ct = default);
 
     /// <summary>
     /// Files a report and its photo together, storing the photo before the
@@ -64,7 +69,15 @@ public interface IIncidentService
     /// </summary>
     Task<CreateIncidentResponse> CreateWithPhotoAsync(
         CreateIncidentRequest request, IFormFile photo, string? caption,
-        Guid? reportedByUserId, CancellationToken ct = default);
+        Guid? reportedByUserId, bool filedByStaff = false, CancellationToken ct = default);
+
+    /// <summary>
+    /// A coordinator corrects a report's details. Null when it does not exist;
+    /// throws <see cref="InvalidOperationException"/> for a merged report,
+    /// which lives on only as a pointer to the one it was merged into.
+    /// </summary>
+    Task<IncidentDto?> UpdateAsync(
+        Guid id, UpdateIncidentRequest request, Guid actingUserId, CancellationToken ct = default);
 
     Task<IncidentDto?> UpdateStatusAsync(
         Guid id, IncidentStatus status, Guid actingUserId, CancellationToken ct = default);
@@ -95,6 +108,8 @@ public class IncidentService(
         [IncidentStatus.InProgress] = [IncidentStatus.Verified, IncidentStatus.Resolved, IncidentStatus.Rejected],
         [IncidentStatus.Resolved] = [IncidentStatus.InProgress],
         [IncidentStatus.Rejected] = [IncidentStatus.Verified],
+        // Merging is the Enrichment Agent's approval path, and it is final.
+        [IncidentStatus.Merged] = [],
     };
 
     public async Task<IncidentQueryResult> QueryAsync(
@@ -109,7 +124,9 @@ public class IncidentService(
 
         if (activeOnly) query = query.Where(incident => incident.IsActive);
         // A report is only public once a coordinator has approved it as true.
-        if (approvedOnly) query = query.Where(incident => incident.Status != IncidentStatus.Reported);
+        if (approvedOnly)
+            query = query.Where(incident =>
+                incident.Status != IncidentStatus.Reported && incident.Status != IncidentStatus.Merged);
         if (status is not null) query = query.Where(incident => incident.Status == status);
         if (severity is not null) query = query.Where(incident => incident.Severity == severity);
         if (type is not null) query = query.Where(incident => incident.Type == type);
@@ -187,7 +204,7 @@ public class IncidentService(
         if (incident is null) return null;
 
         var isReporter = viewerId is not null && incident.ReportedByUserId == viewerId;
-        var isPublic = incident.Status is not (IncidentStatus.Reported or IncidentStatus.Rejected);
+        var isPublic = incident.Status is not (IncidentStatus.Reported or IncidentStatus.Rejected or IncidentStatus.Merged);
 
         return viewerIsStaff || isReporter || isPublic ? IncidentDto.FromIncident(incident) : null;
     }
@@ -236,22 +253,23 @@ public class IncidentService(
     }
 
     public async Task<IncidentDto> CreateAsync(
-        CreateIncidentRequest request, Guid? reportedByUserId, CancellationToken ct = default)
+        CreateIncidentRequest request, Guid? reportedByUserId,
+        bool filedByStaff = false, CancellationToken ct = default)
     {
-        var incident = await SaveNewAsync(request, reportedByUserId, ct);
-        QueueFollowUps(incident.Id);
+        var incident = await SaveNewAsync(request, reportedByUserId, filedByStaff, ct);
+        QueueFollowUps(incident.Id, filedByStaff);
         return IncidentDto.FromIncident(incident);
     }
 
     public async Task<CreateIncidentResponse> CreateWithPhotoAsync(
         CreateIncidentRequest request, IFormFile photo, string? caption,
-        Guid? reportedByUserId, CancellationToken ct = default)
+        Guid? reportedByUserId, bool filedByStaff = false, CancellationToken ct = default)
     {
         // Refuse a bad file up front: a report left behind without the photo
         // the citizen meant to send is worse than asking them to pick another.
         ImageStorageService.Validate(photo);
 
-        var incident = await SaveNewAsync(request, reportedByUserId, ct);
+        var incident = await SaveNewAsync(request, reportedByUserId, filedByStaff, ct);
 
         string? photoError = null;
         try
@@ -269,14 +287,14 @@ public class IncidentService(
         }
 
         // Only now, with the photo stored, does the agent get to look.
-        QueueFollowUps(incident.Id);
+        QueueFollowUps(incident.Id, filedByStaff);
 
         var saved = await GetAsync(incident.Id, ct) ?? IncidentDto.FromIncident(incident);
         return new CreateIncidentResponse { Incident = saved, PhotoError = photoError };
     }
 
     private async Task<Incident> SaveNewAsync(
-        CreateIncidentRequest request, Guid? reportedByUserId, CancellationToken ct)
+        CreateIncidentRequest request, Guid? reportedByUserId, bool filedByStaff, CancellationToken ct)
     {
         var incident = new Incident
         {
@@ -284,7 +302,9 @@ public class IncidentService(
             Description = request.Description.Trim(),
             Type = request.Type,
             Severity = request.Severity ?? IncidentSeverity.Moderate,
-            Status = IncidentStatus.Reported,
+            Status = filedByStaff ? IncidentStatus.Verified : IncidentStatus.Reported,
+            VerifiedByUserId = filedByStaff ? reportedByUserId : null,
+            VerifiedAt = filedByStaff ? DateTime.UtcNow : null,
             Latitude = request.Latitude,
             Longitude = request.Longitude,
             AffectedRadiusMeters = request.AffectedRadiusMeters,
@@ -311,17 +331,61 @@ public class IncidentService(
     /// stored: the analysis worker starts at once, so queuing any earlier means
     /// the agent grades the report without ever seeing the picture.
     /// </summary>
-    private void QueueFollowUps(Guid incidentId)
+    private void QueueFollowUps(Guid incidentId, bool filedByStaff)
     {
-        // The agent scores it in the background so the coordinator finds a
-        // proposal waiting rather than a button to press. Nothing it produces
-        // is applied without approval.
+        // The agents score and check it in the background so the coordinator
+        // finds proposals waiting rather than a button to press. Nothing they
+        // produce is applied without approval.
         analysisQueue.Enqueue(incidentId);
+
+        if (filedByStaff)
+        {
+            // A coordinator's own report is confirmed as it is filed, which is
+            // the bar for warning a district; the severity threshold still applies.
+            notificationQueue.Enqueue(
+                new NotificationJob(NotificationKind.DistrictWarning, incidentId));
+            return;
+        }
 
         // Tell the reporter we have it. No district warning yet — nobody has
         // confirmed this is real.
         notificationQueue.Enqueue(
             new NotificationJob(NotificationKind.ReportReceived, incidentId));
+    }
+
+    public async Task<IncidentDto?> UpdateAsync(
+        Guid id, UpdateIncidentRequest request, Guid actingUserId, CancellationToken ct = default)
+    {
+        var incident = await db.Incidents
+            .Include(entity => entity.Images)
+            .FirstOrDefaultAsync(entity => entity.Id == id, ct);
+
+        if (incident is null) return null;
+
+        if (incident.Status == IncidentStatus.Merged)
+        {
+            throw new InvalidOperationException(
+                "This report was merged into another. Edit the report it was merged into.");
+        }
+
+        incident.Title = request.Title.Trim();
+        incident.Description = request.Description.Trim();
+        incident.Type = request.Type;
+        incident.Latitude = request.Latitude;
+        incident.Longitude = request.Longitude;
+        incident.AffectedRadiusMeters = request.AffectedRadiusMeters;
+        incident.District = SriLankaDistricts.Normalise(request.District);
+        incident.AddressText = string.IsNullOrWhiteSpace(request.AddressText) ? null : request.AddressText.Trim();
+        incident.EstimatedAffectedPeople = request.EstimatedAffectedPeople;
+        incident.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        // Location, radius and type all shape the derived zone.
+        await zoneService.RecomputeAsync(ct);
+
+        logger.LogInformation("Incident {Id} edited by {UserId}", id, actingUserId);
+        return IncidentDto.FromIncident(incident);
     }
 
     public async Task<IncidentDto?> UpdateStatusAsync(
@@ -405,7 +469,8 @@ public class IncidentService(
             .ToListAsync(ct);
 
         var all = await db.Incidents.AsNoTracking().ToListAsync(ct);
-        var since = DateTime.UtcNow.AddHours(-24);
+        var now = DateTime.UtcNow;
+        var since = now.AddHours(-24);
 
         return new DashboardStatisticsDto
         {
@@ -415,7 +480,8 @@ public class IncidentService(
             ReportedLast24Hours = all.Count(incident => incident.ReportedAt >= since),
             PeopleAffected = active.Sum(incident => incident.EstimatedAffectedPeople ?? 0),
             ActiveDangerZones = await db.SafetyZones.AsNoTracking()
-                .CountAsync(zone => zone.IsActive && zone.Status == ZoneStatus.Danger, ct),
+                .CountAsync(zone => zone.IsActive && zone.Status == ZoneStatus.Danger &&
+                                    (zone.ExpiresAt == null || zone.ExpiresAt > now), ct),
             AwaitingAiAnalysis = active.Count(incident => incident.AiAnalysedAt is null),
             BySeverity = active.GroupBy(incident => incident.Severity.ToString())
                 .ToDictionary(group => group.Key, group => group.Count()),

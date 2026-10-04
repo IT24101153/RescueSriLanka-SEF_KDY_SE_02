@@ -8,7 +8,7 @@ import {
   useMap,
 } from 'react-leaflet'
 import type { LatLngBoundsExpression } from 'leaflet'
-import type { Incident, SafetyZone } from '../types'
+import type { Incident, SafetyZone, ZoneProposal } from '../types'
 import { SEVERITY_HEX, SEVERITY_RADIUS, ZONE_HEX, timeAgo } from '../severity'
 import {
   TILE_ATTRIBUTION,
@@ -25,8 +25,12 @@ type IncidentMapProps = {
   showIncidents?: boolean
   selectedId?: string | null
   height?: number
+  /** Zones an agent proposes, drawn dashed in violet until approved. */
+  previewZones?: ZoneProposal[]
   onSelect: (incident: Incident) => void
 }
+
+const PREVIEW_HEX = '#6d28d9'
 
 /**
  * Island bounding box with a small margin. The map is hard-locked to this —
@@ -73,6 +77,7 @@ export default function IncidentMap({
   showIncidents = true,
   selectedId = null,
   height = 460,
+  previewZones = [],
   onSelect,
 }: IncidentMapProps) {
   const selected = incidents.find((incident) => incident.id === selectedId)
@@ -114,6 +119,26 @@ export default function IncidentMap({
               }}
             />
           ))}
+
+        {previewZones.map((zone, index) => (
+          <Circle
+            key={`preview-${index}`}
+            center={[zone.centerLatitude, zone.centerLongitude]}
+            radius={zone.radiusMeters}
+            pathOptions={{
+              color: PREVIEW_HEX,
+              fillColor: ZONE_HEX[zone.status],
+              fillOpacity: 0.08,
+              weight: 2,
+              dashArray: '8 6',
+            }}
+          >
+            <Popup>
+              <strong className="pop__title">{zone.name}</strong>
+              <span className="pop__line">Proposed {zone.status} zone · awaiting approval</span>
+            </Popup>
+          </Circle>
+        ))}
 
         {showIncidents &&
           incidents.map((incident) => {
@@ -165,6 +190,19 @@ export default function IncidentMap({
                 {severity}
               </span>
             ))}
+          </div>
+        )}
+
+        {previewZones.length > 0 && (
+          <div className="map__legend-group">
+            <span className="map__legend-title">Plan</span>
+            <span className="map__legend-item">
+              <i
+                className="map__zone-swatch"
+                style={{ borderColor: PREVIEW_HEX, borderStyle: 'dashed', background: 'transparent' }}
+              />
+              Proposed
+            </span>
           </div>
         )}
 

@@ -3,7 +3,7 @@ import { apiFetch, queryString } from '../../../shared/api/client'
 import { getSession } from '../../../shared/auth/session'
 import type { AgentRun } from '../../../shared/types'
 import type { AnalysisProposal, Incident, IncidentSeverity } from '../types'
-import { SEVERITY_ORDER } from '../types'
+import { AGENTS, SEVERITY_ORDER } from '../types'
 import { SEVERITY_TOKEN } from '../severity'
 
 type ReportDecisionProps = {
@@ -89,7 +89,7 @@ export default function ReportDecision({ incident, onChanged }: ReportDecisionPr
     async function load() {
       try {
         const data = await apiFetch<AgentRun[]>(
-          `/api/agentruns${queryString({ incidentId: incident.id, take: 5 })}`,
+          `/api/agentruns${queryString({ incidentId: incident.id, agentName: AGENTS.analysis, take: 5 })}`,
           { signal: controller.signal },
         )
         if (controller.signal.aborted) return
@@ -191,6 +191,7 @@ export default function ReportDecision({ incident, onChanged }: ReportDecisionPr
   const status = incident.status
   const approved = status === 'Verified' || status === 'InProgress' || status === 'Resolved'
   const rejected = status === 'Rejected'
+  const merged = status === 'Merged'
 
   return (
     <section className="decide" aria-label="Report decision">
@@ -203,8 +204,8 @@ export default function ReportDecision({ incident, onChanged }: ReportDecisionPr
       {/* ---------------------------------------------- 1. true or false */}
       <div className="decide__step">
         <header className="decide__head">
-          <span className={`decide__num${approved || rejected ? ' is-done' : ''}`}>
-            {approved || rejected ? '✓' : '1'}
+          <span className={`decide__num${approved || rejected || merged ? ' is-done' : ''}`}>
+            {approved || rejected || merged ? '✓' : '1'}
           </span>
           <h4 className="decide__title">Is this report true?</h4>
         </header>
@@ -319,8 +320,14 @@ export default function ReportDecision({ incident, onChanged }: ReportDecisionPr
         )}
       </div>
 
+      {merged && (
+        <p className="agent__decision agent__decision--no">
+          Merged as a duplicate · off the live map. The report it was merged into carries the decision.
+        </p>
+      )}
+
       {/* ---------------------------------------------- 2. condition */}
-      {!rejected && (
+      {!rejected && !merged && (
         <div className="decide__step">
           <header className="decide__head">
             <span className={`decide__num${conditionDecided ? ' is-done' : ''}`}>

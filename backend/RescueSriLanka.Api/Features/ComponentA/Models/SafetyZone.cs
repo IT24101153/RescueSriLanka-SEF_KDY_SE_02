@@ -33,6 +33,12 @@ public class SafetyZone
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>The coordinator who declared or last edited a manual zone.</summary>
+    public Guid? CreatedByUserId { get; set; }
+
+    /// <summary>The Zone Planning Agent run whose approved plan drew this zone, if any.</summary>
+    public Guid? SourceAgentRunId { get; set; }
+
     public DateTime ComputedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ExpiresAt { get; set; }
 }

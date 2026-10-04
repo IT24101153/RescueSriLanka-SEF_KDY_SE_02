@@ -170,7 +170,8 @@ class _ReportCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rejected = report.status == 'Rejected';
+    // Both leave the review path, so each is explained rather than tracked.
+    final offPath = report.status == 'Rejected' || isMerged(report.status);
 
     return AppCard(
       onTap: onTap,
@@ -214,11 +215,15 @@ class _ReportCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          if (rejected)
+          if (offPath)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.block, size: 16, color: AppColors.critical),
+                Icon(
+                  isMerged(report.status) ? Icons.call_merge : Icons.block,
+                  size: 16,
+                  color: statusTone(report.status),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -441,8 +446,13 @@ class _Timeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rejected = status == 'Rejected';
-    final steps = rejected ? const ['Reported', 'Rejected'] : reportSteps;
-    final current = rejected ? 1 : stepIndexFor(status);
+    final merged = isMerged(status);
+    final steps = rejected
+        ? const ['Reported', 'Rejected']
+        : merged
+        ? const ['Reported', 'Merged']
+        : reportSteps;
+    final current = rejected || merged ? 1 : stepIndexFor(status);
 
     return Column(
       children: [

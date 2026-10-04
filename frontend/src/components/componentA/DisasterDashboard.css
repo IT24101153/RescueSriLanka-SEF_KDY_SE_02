@@ -1770,3 +1770,400 @@
   color: var(--text);
   opacity: 0.8;
 }
+
+/* ============================================================
+   Coordinator editing and the Enrichment / Zone Planning agents
+   ============================================================ */
+
+/* ---------- drawer: edit button and the record check ---------- */
+.drawer__head .drawer__edit {
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.enrich {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+}
+
+.enrich__summary {
+  font-size: 13px;
+  color: var(--text-strong);
+}
+
+.enrich__list {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.enrich__item,
+.enrich__duplicate {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.enrich__duplicate {
+  border-color: var(--high);
+  background: var(--high-soft);
+}
+
+.enrich__item label,
+.enrich__duplicate label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--text-strong);
+  cursor: pointer;
+}
+
+.enrich__item input,
+.enrich__duplicate input {
+  accent-color: var(--accent-strong);
+  transform: translateY(1px);
+}
+
+.enrich__field {
+  min-width: 110px;
+  font-weight: 600;
+}
+
+.enrich__change s {
+  color: var(--text);
+}
+
+.enrich__reason {
+  margin-top: 4px;
+  padding-left: 24px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* ---------- modal form (new / edit report, zone) ---------- */
+.modal {
+  position: relative;
+  z-index: 1;
+  width: min(760px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 20px 24px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 16px;
+  animation: card-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.modal__title {
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+.modal__sub {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.modal__foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.field--wide {
+  grid-column: 1 / -1;
+}
+
+.field input:not([type='range']):not([type='checkbox']),
+.field select,
+.field textarea,
+.picker__search input {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-weight: 400;
+  font-size: 13.5px;
+}
+
+.field textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.picker__search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.field input[type='range'] {
+  accent-color: var(--accent-strong);
+}
+
+/* ---------- location picker ---------- */
+.picker {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+
+.picker__search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.picker__results {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  right: 0;
+  z-index: 1100;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.picker__results button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.picker__results button:hover {
+  background: var(--accent-soft);
+}
+
+.picker__results .picker__hint {
+  padding: 8px 10px;
+}
+
+.picker__map {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.picker__map .map__canvas {
+  height: 100%;
+  cursor: crosshair;
+}
+
+.picker__hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+p.picker__hint {
+  white-space: normal;
+}
+
+/* ---------- zone planning agent ---------- */
+.planner .panel__head {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.planner__sub {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.planner__body {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+
+.planner__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.planner__list {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.planner__item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border: 1px dashed #6d28d9;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.planner__item.is-off {
+  opacity: 0.55;
+  border-color: var(--border);
+}
+
+.planner__check {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 6px;
+}
+
+.planner__check input {
+  accent-color: var(--accent-strong);
+}
+
+.planner__check .tag {
+  margin: 0;
+}
+
+.planner__fields {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.planner__name,
+.planner__row input,
+.planner__row select {
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+}
+
+.planner__name {
+  width: 100%;
+  font-weight: 600;
+}
+
+.planner__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.planner__row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.planner__row input {
+  width: 88px;
+}
+
+.planner__retire {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.planner .enrich__reason {
+  padding-left: 0;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: 100svh;
+    border-radius: 0;
+    padding: 16px;
+  }
+
+  .planner__body {
+    padding: 14px;
+  }
+
+  .planner__item {
+    flex-direction: column;
+  }
+
+  .planner__check {
+    display: flex;
+    align-items: center;
+  }
+}

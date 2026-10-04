@@ -51,15 +51,35 @@ public record AgentRunDto
 }
 
 /// <summary>
-/// Revise: the coordinator accepts the run but substitutes their own severity.
-/// Leaving Severity null means "accept the proposal as-is".
+/// The coordinator's approval. Which fields apply depends on the agent that
+/// made the run; leaving every optional field null means "accept the proposal
+/// as-is", and supplying one revises it.
 /// </summary>
 public record ApproveAgentRunRequest
 {
+    /// <summary>Incident Analysis Agent: substitute this severity for the proposed one.</summary>
     public IncidentSeverity? Severity { get; init; }
 
     [MaxLength(500)]
     public string? Note { get; init; }
+
+    /// <summary>Enrichment Agent: the suggested fields to apply. Null applies them all.</summary>
+    [MaxLength(10)]
+    public IReadOnlyList<string>? Fields { get; init; }
+
+    /// <summary>Enrichment Agent: whether to merge into the proposed duplicate. Null follows the proposal.</summary>
+    public bool? MergeDuplicate { get; init; }
+
+    /// <summary>
+    /// Zone Planning Agent: the zones to create, as the coordinator edited them.
+    /// Null creates the proposed zones unchanged; an empty list creates none.
+    /// </summary>
+    [MaxLength(20)]
+    public IReadOnlyList<SafetyZoneRequest>? Zones { get; init; }
+
+    /// <summary>Zone Planning Agent: the proposed retirements to carry out. Null carries out all.</summary>
+    [MaxLength(20)]
+    public IReadOnlyList<Guid>? RetireZoneIds { get; init; }
 }
 
 public record RejectAgentRunRequest

@@ -20,13 +20,15 @@ public class AgentRunsController(IAgentRunService agentRunService) : ControllerB
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AgentRunDto>>> List(
         [FromQuery] Guid? incidentId,
+        [FromQuery] string? agentName,
         [FromQuery] int take = 50,
         CancellationToken ct = default) =>
-        Ok(await agentRunService.QueryAsync(incidentId, take, ct));
+        Ok(await agentRunService.QueryAsync(incidentId, take, agentName, ct));
 
     /// <summary>
-    /// Approve the proposal, optionally revising the severity. This is the only
-    /// path by which an agent's assessment reaches the live incident.
+    /// Approve the proposal, optionally revising it: a different severity, a
+    /// subset of the enrichment fields, or edited zones. This is the only path by
+    /// which an agent's proposal reaches the live incident or the map.
     /// </summary>
     [HttpPost("{id:guid}/approve")]
     [Authorize(Roles = Coordinator)]
@@ -37,12 +39,16 @@ public class AgentRunsController(IAgentRunService agentRunService) : ControllerB
 
         try
         {
-            var run = await agentRunService.ApproveAsync(id, request.Severity, userId, request.Note, ct);
+            var run = await agentRunService.ApproveWithAsync(id, request, userId, ct);
             return run is null ? NotFound() : Ok(run);
         }
         catch (InvalidOperationException ex)
         {
             return Conflict(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 
