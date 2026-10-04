@@ -31,7 +31,8 @@ public static class DbSeeder
     {
         var seedEmails = Accounts.Select(a => a.Email.ToLowerInvariant()).ToList();
         var existing = await db.Users
-            .Where(u => seedEmails.Contains(u.Email))
+            // A citizen may have registered with one of these addresses; that is a separate account.
+            .Where(u => seedEmails.Contains(u.Email) && u.Role != UserRole.Citizen)
             .ToDictionaryAsync(u => u.Email, cancellationToken);
 
         var added = 0;

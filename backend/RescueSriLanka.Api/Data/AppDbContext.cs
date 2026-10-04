@@ -57,7 +57,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             entity.ToTable("users");
 
-            entity.HasIndex(user => user.Email).IsUnique();
+            // Citizens and staff are separate sets of accounts: one address may hold a
+            // citizen account and a staff account, but never two of the same kind.
+            entity.HasIndex(user => user.Email, "IX_users_Email_Citizen")
+                .IsUnique()
+                .HasFilter("\"Role\" = 'Citizen'");
+            entity.HasIndex(user => user.Email, "IX_users_Email_Staff")
+                .IsUnique()
+                .HasFilter("\"Role\" <> 'Citizen'");
 
             // Every district warning asks "who lives here?" — this is the index
             // that question runs on.

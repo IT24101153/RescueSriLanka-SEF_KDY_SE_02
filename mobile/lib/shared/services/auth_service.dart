@@ -55,6 +55,7 @@ class AuthService extends ChangeNotifier implements PushDeviceRegistry {
       _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const String _storageKey = 'rsl.session';
+  static const String _invalidCredentials = 'Invalid email or password.';
   static const Duration _timeout = Duration(seconds: 15);
   static const Duration _uploadTimeout = Duration(seconds: 45);
 
@@ -166,9 +167,17 @@ class AuthService extends ChangeNotifier implements PushDeviceRegistry {
       return AuthResult.failure('Sign-up failed (HTTP ${response.statusCode}).');
     }
 
-    // The API answers the same way whether or not the address already has an account, so the app
-    // signs in with the same details to tell the two apart.
-    return signIn(email: email, password: password);
+    // The API answers the same way whether or not the address already has a citizen account, so
+    // the app signs in with the same details to tell the two apart.
+    final result = await signIn(email: email, password: password);
+    if (!result.ok && result.message == _invalidCredentials) {
+      // Nothing was created: a citizen account already uses this address with another password.
+      return const AuthResult.failure(
+        'This email already has an account. Sign in instead, or use '
+        '"Forgot password" if you do not remember the password.',
+      );
+    }
+    return result;
   }
 
   /// Asks the API to email a one-time code for a forgotten password. Always
@@ -526,7 +535,7 @@ class AuthService extends ChangeNotifier implements PushDeviceRegistry {
     }
 
     if (response.statusCode == 401) {
-      return const AuthResult.failure('Invalid email or password.');
+      return const AuthResult.failure(_invalidCredentials);
     }
 
     if (response.statusCode == 409) {

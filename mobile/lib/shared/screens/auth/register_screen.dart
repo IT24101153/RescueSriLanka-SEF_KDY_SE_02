@@ -89,7 +89,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!mounted) return;
 
     if (result.ok) {
-      // Registration returns a token, so there is no second sign-in step.
+      // The service signs in straight after registering, so there is no second sign-in step.
       Navigator.of(context).pop(true);
       return;
     }

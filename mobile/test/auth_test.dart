@@ -128,7 +128,7 @@ void main() {
       );
 
       expect(result.ok, isFalse);
-      expect(result.message, contains('Invalid email or password'));
+      expect(result.message, contains('already has an account'));
       expect(auth.isSignedIn, isFalse);
     });
 

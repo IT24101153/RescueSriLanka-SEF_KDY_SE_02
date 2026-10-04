@@ -77,6 +77,11 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("auth", http => RateLimitPartition.GetFixedWindowLimiter(
         http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+    // Sign-up has its own allowance: the app signs in straight after registering, and that
+    // sign-in should not be refused because the registration used up the "auth" window.
+    options.AddPolicy("register", http => RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
     // Anonymous submission forms: a generous per-IP limit, enough for a family but not for a script.
     options.AddPolicy("public", http => RateLimitPartition.GetFixedWindowLimiter(
         http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -451,7 +456,8 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 
         // Component B sample records are isolated to local development and are
         // explicitly marked as fixtures; production data stays operator-entered.
-        if (app.Environment.IsDevelopment())
+        // Off by default so a shared database holds only real accounts and requests.
+        if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Database:SeedComponentBDemo", false))
         {
             await ComponentBDataSeeder.SeedAsync(
                 db,

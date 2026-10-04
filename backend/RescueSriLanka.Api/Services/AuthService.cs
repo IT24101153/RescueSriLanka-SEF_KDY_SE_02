@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using RescueSriLanka.Api.DTOs.Auth;
 using RescueSriLanka.Api.Data;
 using RescueSriLanka.Api.Features.ComponentA.Services;
@@ -18,8 +19,8 @@ public interface IAuthService
     Task<AuthResponse?> LoginAsync(LoginRequest request, LoginClient client, CancellationToken cancellationToken = default);
 
     /// <returns>
-    /// null when the email is taken. Throws <see cref="ArgumentException"/> when
-    /// the district is not one of Sri Lanka's.
+    /// False when a citizen account already uses the email. Throws
+    /// <see cref="ArgumentException"/> when the district is not one of Sri Lanka's.
     /// </returns>
     Task<bool> RegisterCitizenAsync(RegisterRequest request, CancellationToken cancellationToken = default);
     Task<User?> FindByIdAsync(Guid id, CancellationToken cancellationToken = default);
@@ -54,7 +55,8 @@ public interface IAuthService
 }
 
 /// <summary>Which front end is asking to sign someone in. Citizens use the
-/// mobile app; staff use the web portal. Each only accepts its own accounts.</summary>
+/// mobile app; staff use the web portal. Each only accepts its own accounts,
+/// and the two sets are separate: one email may hold one of each.</summary>
 public enum LoginClient
 {
     CitizenApp,
@@ -96,7 +98,12 @@ public class AuthService(
         CancellationToken cancellationToken = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
+
+        // An address can hold a citizen account and a staff account, so the
+        // sign-in picks the one that belongs to the client asking.
+        var citizen = client == LoginClient.CitizenApp;
+        var user = await db.Users.FirstOrDefaultAsync(
+            u => u.Email == email && (u.Role == UserRole.Citizen) == citizen, cancellationToken);
 
         if (user is null)
         {
@@ -126,8 +133,7 @@ public class AuthService(
             return null;
         }
 
-        // Checked after the password, and answered with the same null, so the
-        // response never reveals which kind of account the email belongs to.
+        // The lookup above already chose by client; this guards the rule itself.
         if (!client.Accepts(user.Role))
         {
             logger.LogInformation("Login refused: {Role} account {UserId} used the {Client} sign-in", user.Role, user.Id, client);
@@ -154,7 +160,9 @@ public class AuthService(
     {
         var email = request.Email.Trim().ToLowerInvariant();
 
-        if (await db.Users.AnyAsync(u => u.Email == email, cancellationToken))
+        // Only another citizen account blocks the address — a staff member may
+        // also register as a citizen with the email their staff account uses.
+        if (await db.Users.AnyAsync(u => u.Email == email && u.Role == UserRole.Citizen, cancellationToken))
         {
             return false;
         }
@@ -185,9 +193,10 @@ public class AuthService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            // Two sign-ups for the same address raced past the check above.
+            // Two sign-ups for the same address raced past the check above. Any
+            // other database failure is a real error and is left to surface.
             db.ChangeTracker.Clear();
             return false;
         }
@@ -322,8 +331,7 @@ public class AuthService(
         ForgotPasswordRequest request, CancellationToken cancellationToken = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
-        var user = await db.Users.FirstOrDefaultAsync(
-            u => u.Email == email && u.IsActive, cancellationToken);
+        var user = await FindForPasswordResetAsync(email, cancellationToken);
 
         if (user is null)
         {
@@ -384,8 +392,7 @@ public class AuthService(
         VerifyResetCodeRequest request, CancellationToken cancellationToken = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
-        var user = await db.Users.FirstOrDefaultAsync(
-            u => u.Email == email && u.IsActive, cancellationToken);
+        var user = await FindForPasswordResetAsync(email, cancellationToken);
         if (user is null) return null;
 
         var attemptsInWindow = await db.PasswordResetCodes
@@ -426,8 +433,7 @@ public class AuthService(
         ResetPasswordRequest request, CancellationToken cancellationToken = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
-        var user = await db.Users.FirstOrDefaultAsync(
-            u => u.Email == email && u.IsActive, cancellationToken);
+        var user = await FindForPasswordResetAsync(email, cancellationToken);
         if (user is null) return false;
 
         var record = await db.PasswordResetCodes
@@ -456,6 +462,17 @@ public class AuthService(
         logger.LogInformation("Password reset completed for account {UserId}", user.Id);
         return true;
     }
+
+    /// <summary>
+    /// The account a password reset applies to. Reset is offered in the citizen
+    /// app, so when an address holds both kinds of account the citizen one is
+    /// the one that is reset.
+    /// </summary>
+    private Task<User?> FindForPasswordResetAsync(string email, CancellationToken cancellationToken) =>
+        db.Users
+            .Where(u => u.Email == email && u.IsActive)
+            .OrderBy(u => u.Role == UserRole.Citizen ? 0 : 1)
+            .FirstOrDefaultAsync(cancellationToken);
 
     private AuthResponse BuildResponse(User user)
     {

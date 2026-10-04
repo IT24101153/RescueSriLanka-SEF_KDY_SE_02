@@ -78,6 +78,56 @@ public sealed class AuthLoginClientTests : IDisposable
         Assert.Null(wrongPassword);
     }
 
+    [Fact]
+    public async Task OneEmailCanHoldAStaffAccountAndACitizenAccount()
+    {
+        var staff = await AddAccount("both@example.com", UserRole.EmergencyCoordinator);
+
+        var created = await Service().RegisterCitizenAsync(new RegisterRequest
+        {
+            FullName = "Both Kinds", Email = "Both@Example.com", Password = "Citizen-Pass-22"
+        });
+
+        Assert.True(created);
+        Assert.Equal(2, await db.Users.CountAsync(u => u.Email == "both@example.com"));
+
+        // Each sign-in reaches its own account, with its own password.
+        var app = await Service().LoginAsync(Request("both@example.com", "Citizen-Pass-22"), LoginClient.CitizenApp);
+        var portal = await Service().LoginAsync(Request("both@example.com"), LoginClient.StaffPortal);
+
+        Assert.Equal(nameof(UserRole.Citizen), app!.User.Role);
+        Assert.Equal(staff.Id, portal!.User.Id);
+        Assert.Null(await Service().LoginAsync(Request("both@example.com"), LoginClient.CitizenApp));
+        Assert.Null(await Service().LoginAsync(Request("both@example.com", "Citizen-Pass-22"), LoginClient.StaffPortal));
+    }
+
+    [Fact]
+    public async Task ASecondCitizenAccountForTheSameEmailIsNotCreated()
+    {
+        await AddAccount("citizen@example.com", UserRole.Citizen);
+
+        var created = await Service().RegisterCitizenAsync(new RegisterRequest
+        {
+            FullName = "Second Citizen", Email = "citizen@example.com", Password = "Another-Pass-22"
+        });
+
+        Assert.False(created);
+        Assert.Single(db.Users);
+    }
+
+    [Fact]
+    public async Task PasswordResetGoesToTheCitizenAccountWhenAnEmailHoldsBoth()
+    {
+        var staff = await AddAccount("both@example.com", UserRole.ResourceManager);
+        var citizen = await AddAccount("both@example.com", UserRole.Citizen);
+
+        await Service().RequestPasswordResetAsync(new ForgotPasswordRequest { Email = "both@example.com" });
+
+        var code = Assert.Single(db.PasswordResetCodes);
+        Assert.Equal(citizen.Id, code.UserId);
+        Assert.NotEqual(staff.Id, code.UserId);
+    }
+
     private sealed class StubTokenService : IJwtTokenService
     {
         public (string Token, DateTime ExpiresAt) CreateToken(User user) => ("stub", DateTime.UtcNow.AddHours(1));

@@ -39,7 +39,7 @@ public class AuthController(IAuthService authService) : ControllerBase
     {
         var result = await authService.LoginAsync(request, client, cancellationToken);
 
-        // Deliberately vague: never reveal whether the email exists or which kind of account it is.
+        // Deliberately vague: never reveal whether the email has an account of this kind.
         return result is null
             ? Unauthorized(new { message = "Invalid email or password." })
             : Ok(result);
@@ -47,7 +47,7 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     /// <summary>Citizen self-registration for the Flutter app.</summary>
     [HttpPost("register")]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting("register")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -57,7 +57,7 @@ public class AuthController(IAuthService authService) : ControllerBase
     {
         try
         {
-            // The same answer whether or not the address was already registered, so sign-up cannot be used to find accounts.
+            // The same answer whether or not a citizen already uses the address, so sign-up cannot be used to find accounts.
             await authService.RegisterCitizenAsync(request, cancellationToken);
             return Accepted(new { message = "If this email can be registered, the account is ready. Sign in with your email and password." });
         }
