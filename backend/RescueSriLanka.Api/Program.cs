@@ -411,7 +411,7 @@ using (var startupScope = app.Services.CreateScope())
     {
         startupLogger.LogWarning(
             "Firebase is not configured, so push notifications are logged, not sent. "
-            + "Set Push:Fcm:ProjectId and Push:Fcm:CredentialsFile to deliver them.");
+            + "Set Push:Fcm:ProjectId and Push:Fcm:CredentialsFile (or CredentialsJson) to deliver them.");
     }
 }
 

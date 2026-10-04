@@ -37,7 +37,10 @@ public sealed class FcmAccessTokens(
         {
             if (_accessToken is not null && DateTimeOffset.UtcNow < _expiresAt) return _accessToken;
 
-            _credentials ??= Credentials.Load(options.Value.Fcm.CredentialsFile!);
+            var fcm = options.Value.Fcm;
+            _credentials ??= string.IsNullOrWhiteSpace(fcm.CredentialsJson)
+                ? Credentials.Load(fcm.CredentialsFile!)
+                : Credentials.Parse(fcm.CredentialsJson);
 
             var now = DateTimeOffset.UtcNow;
             var assertion = BuildAssertion(_credentials, now);
@@ -111,9 +114,11 @@ public sealed class FcmAccessTokens(
         public required string TokenUri { get; init; }
         public required RSA Key { get; init; }
 
-        public static Credentials Load(string path)
+        public static Credentials Load(string path) => Parse(File.ReadAllText(path));
+
+        public static Credentials Parse(string json)
         {
-            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
 
             var key = RSA.Create();

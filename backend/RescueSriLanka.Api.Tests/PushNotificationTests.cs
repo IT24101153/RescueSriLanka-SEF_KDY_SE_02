@@ -135,6 +135,24 @@ public class PushNotificationTests
         }
     }
 
+    [Fact]
+    public void AServiceAccountGivenAsASettingValueIsReadTheSameWay()
+    {
+        using var rsa = RSA.Create(2048);
+        var json = JsonSerializer.Serialize(new
+        {
+            client_email = "sender@project.iam.gserviceaccount.com",
+            private_key = rsa.ExportPkcs8PrivateKeyPem(),
+            token_uri = "https://oauth2.googleapis.com/token"
+        });
+
+        var credentials = FcmAccessTokens.Credentials.Parse(json);
+
+        Assert.Equal("sender@project.iam.gserviceaccount.com", credentials.ClientEmail);
+        Assert.True(new PushOptions.FcmOptions { ProjectId = "project", CredentialsJson = json }.IsConfigured);
+        Assert.False(new PushOptions.FcmOptions { ProjectId = "project" }.IsConfigured);
+    }
+
     [Theory]
     [InlineData(404, "{\"error\":{\"details\":[{\"errorCode\":\"UNREGISTERED\"}]}}", true)]
     [InlineData(400, "The registration token is not a valid FCM registration token", true)]

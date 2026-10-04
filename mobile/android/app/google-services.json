@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "682921310524",
+    "project_id": "rescuesrilanka",
+    "storage_bucket": "rescuesrilanka.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:682921310524:android:cf4ad6cc17b87810278639",
+        "android_client_info": {
+          "package_name": "com.example.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjJgVyaSPAS30M0tFpVpNzi2cglIM2OQg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

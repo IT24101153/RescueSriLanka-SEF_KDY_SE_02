@@ -25,7 +25,15 @@ public class PushOptions
         /// </summary>
         public string? CredentialsFile { get; set; }
 
+        /// <summary>
+        /// The contents of that same service-account JSON, for hosts where an
+        /// app setting is easier to provide than a file. Used when set;
+        /// otherwise <see cref="CredentialsFile"/> is read.
+        /// </summary>
+        public string? CredentialsJson { get; set; }
+
         public bool IsConfigured =>
-            !string.IsNullOrWhiteSpace(ProjectId) && !string.IsNullOrWhiteSpace(CredentialsFile);
+            !string.IsNullOrWhiteSpace(ProjectId)
+            && (!string.IsNullOrWhiteSpace(CredentialsJson) || !string.IsNullOrWhiteSpace(CredentialsFile));
     }
 }
