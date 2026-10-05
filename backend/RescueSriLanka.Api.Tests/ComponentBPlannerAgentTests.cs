@@ -127,7 +127,7 @@ public class ComponentBPlannerAgentTests
     public async Task DecideApprovalAsync_RejectsSecondDecision()
     {
         await using var db = CreateContext();
-        var request = await AddRequest(db, 60);
+        var request = await AddRequest(db, 60, type: HelpRequestType.Shelter);
         var (planner, _) = CreatePlanner(db, new ScriptedModel(_ => Final()));
         var workflow = await planner.TriggerAsync(Trigger(request));
         await planner.DecideApprovalAsync(workflow.Id, Guid.NewGuid(), new ApprovalDecisionDto { Approved = true });
@@ -273,7 +273,7 @@ public class ComponentBPlannerAgentTests
     {
         await using var db = CreateContext();
         var componentD = await SeedTeamsAsync();
-        var request = await AddRequest(db, 90);
+        var request = await AddRequest(db, 90, type: HelpRequestType.Shelter);
         request.VerificationStatus = VerificationStatus.Verified;
         await db.SaveChangesAsync();
         var model = new ScriptedModel(turn => turn switch
@@ -298,12 +298,40 @@ public class ComponentBPlannerAgentTests
         Assert.Contains("\"outcome\":\"approved\"", decided!.FinalOutcomeJson);
     }
 
+    [Theory]
+    [InlineData(HelpRequestType.Medical)]
+    [InlineData(HelpRequestType.Rescue)]
+    public async Task Approving_MedicalOrRescue_HandsTheRequestToTheRescueCoordinator(HelpRequestType type)
+    {
+        await using var db = CreateContext();
+        var componentD = await SeedTeamsAsync();
+        var request = await AddRequest(db, 90, type: type);
+        request.VerificationStatus = VerificationStatus.Verified;
+        await db.SaveChangesAsync();
+        var model = new ScriptedModel(turn => turn switch
+        {
+            0 => Call(AssessmentTools.ListAvailableTeams),
+            _ => Final(CoordinatorTeam)
+        });
+        var (planner, emails) = CreatePlanner(db, model, componentD);
+        var workflow = await planner.TriggerAsync(Trigger(request));
+
+        var decided = await planner.DecideApprovalAsync(workflow.Id, Guid.NewGuid(), new ApprovalDecisionDto { Approved = true });
+
+        var saved = await db.HelpRequests.AsNoTracking().SingleAsync(r => r.Id == request.Id);
+        Assert.Equal(HelpRequestStatus.Pending, saved.Status);
+        Assert.Equal(VerificationStatus.Verified, saved.VerificationStatus);
+        Assert.Empty(await db.RequestStatusHistories.ToListAsync());
+        Assert.Empty(emails.HelpRequestStatusChanges);
+        Assert.Contains("RescueCoordinator", decided!.FinalOutcomeJson);
+    }
+
     [Fact]
     public async Task ApprovingAssignmentPlan_RequiresRequestVerification()
     {
         await using var db = CreateContext();
         var componentD = await SeedTeamsAsync();
-        var request = await AddRequest(db, 90);
+        var request = await AddRequest(db, 90, type: HelpRequestType.Shelter);
         var model = new ScriptedModel(turn => turn switch
         {
             0 => Call(AssessmentTools.ListAvailableTeams),
@@ -351,7 +379,7 @@ public class ComponentBPlannerAgentTests
     public async Task ApprovingWithoutAnyTeamRecordsTheDecisionOnly()
     {
         await using var db = CreateContext();
-        var request = await AddRequest(db, 90);
+        var request = await AddRequest(db, 90, type: HelpRequestType.Shelter);
         var (planner, emails) = CreatePlanner(db, new ScriptedModel(_ => Final(null)));
         var workflow = await planner.TriggerAsync(Trigger(request));
 
@@ -396,11 +424,12 @@ public class ComponentBPlannerAgentTests
         return (planner, emails);
     }
 
-    private static async Task<HelpRequest> AddRequest(AppDbContext db, int urgency, HelpRequestStatus status = HelpRequestStatus.Pending)
+    private static async Task<HelpRequest> AddRequest(AppDbContext db, int urgency, HelpRequestStatus status = HelpRequestStatus.Pending,
+        HelpRequestType type = HelpRequestType.Rescue)
     {
         var request = new HelpRequest
         {
-            CitizenId = Guid.NewGuid(), Type = HelpRequestType.Rescue,
+            CitizenId = Guid.NewGuid(), Type = type,
             Description = "Need help at the reported location.",
             Latitude = 6.9271, Longitude = 79.8612,
             UrgencyScore = urgency, Status = status

@@ -321,7 +321,10 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 
             var recommendedTeam = RecommendedTeamFrom(workflow);
             var request = await _db.HelpRequests.FindAsync(workflow.ObjectiveId);
-            if (dto.Approved && recommendedTeam is not null &&
+            // Medical and Rescue requests need a rescue team, so approving one hands it to the
+            // Rescue Coordinator in Component D instead of assigning it here.
+            bool routesToRescue = request is { Type: HelpRequestType.Medical or HelpRequestType.Rescue };
+            if (dto.Approved && (recommendedTeam is not null || routesToRescue) &&
                 request is { Status: HelpRequestStatus.Pending } &&
                 request.VerificationStatus != VerificationStatus.Verified)
             {
@@ -351,7 +354,20 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             // Approval acts only when there is a team to recommend and the request is still waiting for one.
             object outcome;
             bool assigned = false;
-            if (request is { Status: HelpRequestStatus.Pending } && recommendedTeam is not null)
+            if (request is { Status: HelpRequestStatus.Pending } && routesToRescue)
+            {
+                // The request stays Pending and Verified, which is what puts it in the Rescue
+                // Coordinator's queue. Component D marks it Assigned once a team is planned.
+                outcome = new
+                {
+                    outcome = "approved",
+                    helpRequestStatus = HelpRequestStatus.Pending.ToString(),
+                    handedOffTo = "RescueCoordinator",
+                    note = "Approved and sent to the Rescue Coordinator, who assigns the team and vehicle.",
+                    approvedAt = DateTime.UtcNow
+                };
+            }
+            else if (request is { Status: HelpRequestStatus.Pending } && recommendedTeam is not null)
             {
                 _db.RequestStatusHistories.Add(HelpRequestStatusTransition.Apply(
                     request,
