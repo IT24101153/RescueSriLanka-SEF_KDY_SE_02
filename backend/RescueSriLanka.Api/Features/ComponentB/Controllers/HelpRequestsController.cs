@@ -387,13 +387,19 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         }
 
         // PATCH /api/helprequests/{id}/status
-        // Coordinator changes status (or system/agent does, post-approval)
+        // Coordinator changes status for Water, Food, Medical, Shelter and Other requests.
+        // Rescue requests belong to the Rescue Coordinator in Component D, whose assignments
+        // and dispatches drive the status, so it cannot be changed by hand here.
         [HttpPatch("{id}/status")]
         [Authorize(Roles = Coordinators)]
         public async Task<ActionResult<HelpRequestResponseDto>> UpdateStatus(Guid id, [FromBody] UpdateHelpRequestStatusDto dto)
         {
             var changedByUserId = GetUserId();
             if (changedByUserId is null) return Unauthorized();
+
+            var current = await _service.GetByIdAsync(id);
+            if (current is { Type: HelpRequestType.Rescue })
+                return Conflict(new { message = "Rescue requests are managed by the Rescue Coordinator. Their status follows the rescue response." });
 
             try
             {

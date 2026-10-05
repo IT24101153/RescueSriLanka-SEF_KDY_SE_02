@@ -52,11 +52,11 @@ public sealed class HelpRequestCoordinationTests : IDisposable
     [Theory]
     [InlineData(HelpRequestType.Water, false)]
     [InlineData(HelpRequestType.Food, false)]
-    [InlineData(HelpRequestType.Medical, true)]
+    [InlineData(HelpRequestType.Medical, false)]
     [InlineData(HelpRequestType.Rescue, true)]
     [InlineData(HelpRequestType.Shelter, false)]
     [InlineData(HelpRequestType.Other, false)]
-    public async Task QueueAndCreationOnlyAcceptMedicalOrRescueTypes(HelpRequestType type, bool eligible)
+    public async Task QueueAndCreationOnlyAcceptRescueType(HelpRequestType type, bool eligible)
     {
         request.Type = type; await shared.SaveChangesAsync();
         Assert.Equal(eligible ? 1 : 0, (await Candidates.GetQueueAsync()).Count);

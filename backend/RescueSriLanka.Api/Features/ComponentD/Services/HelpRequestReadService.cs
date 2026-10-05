@@ -14,13 +14,13 @@ public interface IHelpRequestReadService
 
 public sealed class HelpRequestReadService(AppDbContext db) : IHelpRequestReadService
 {
-    // Only requests a rescue team can actually act on reach the coordination
-    // queue. Water/Food/Shelter/Other stay with Component B and Component C;
+    // Only Rescue requests reach the coordination queue. Medical, Water, Food,
+    // Shelter and Other stay with the Help Request Manager in Component B and Component C;
     // forwarding them here would just be noise the Rescue Coordinator can't do
     // anything about.
     private IQueryable<HelpRequest> Eligible() => db.HelpRequests.AsNoTracking()
         .Where(r => r.Status == HelpRequestStatus.Pending && r.VerificationStatus == VerificationStatus.Verified
-            && (r.Type == HelpRequestType.Medical || r.Type == HelpRequestType.Rescue));
+            && r.Type == HelpRequestType.Rescue);
 
     public async Task<List<RescueHelpRequestDto>> GetEligibleAsync(CancellationToken ct = default)
     {

@@ -69,6 +69,9 @@ interface AiAssessmentDto {
 }
 
 // What each next step is called on its button; the order here is the order they appear.
+// Rescue (3): the Rescue Coordinator in Component D owns its status.
+const RESCUE_TYPES = [3];
+
 const ACTION_LABELS: [number, string][] = [
   [1, "Assign"],
   [2, "Start work"],
@@ -425,7 +428,7 @@ export default function HelpRequestsReview() {
                       <p>{aiReview.recommendedTeam}{aiReview.recommendedTeamSource ? ` — ${aiReview.recommendedTeamSource}` : ""}</p>
                     </div>
                   )}
-                  {aiReview.workflowStatus === "AwaitingApproval" && (
+                  {aiReview.workflowStatus === "AwaitingApproval" && !RESCUE_TYPES.includes(selected.type) && (
                     <div className="hr-ai-decision">
                       <span>Decide on this plan</span>
                       <div className="hr-ai-decision-actions">
@@ -439,7 +442,7 @@ export default function HelpRequestsReview() {
                       {decisionError && <p className="hr-banner">{decisionError}</p>}
                     </div>
                   )}
-                  {(aiReview.workflowStatus === "Approved" || aiReview.workflowStatus === "Rejected") && (
+                  {(aiReview.workflowStatus === "Approved" || aiReview.workflowStatus === "Rejected") && !RESCUE_TYPES.includes(selected.type) && (
                     <p className="hr-ai-decided">Plan {aiReview.workflowStatus === "Approved" ? "approved" : "rejected"}.</p>
                   )}
                 </div>
@@ -509,7 +512,15 @@ export default function HelpRequestsReview() {
                   </ol>
                 )}
 
-                {ACTION_LABELS.some(([status]) => canTransition(selected.status, status)) ? (
+                {RESCUE_TYPES.includes(selected.type) ? (
+                  <p className="hr-flow-hint">
+                    {selected.verificationStatus === 1
+                      ? "Approved. The Rescue Coordinator handles this request from here, and its status updates as the rescue response progresses."
+                      : selected.verificationStatus === 0
+                        ? "Approve (Verify) or Reject this report. Once approved, the Rescue Coordinator handles it."
+                        : "Rejected. No further action is needed."}
+                  </p>
+                ) : ACTION_LABELS.some(([status]) => canTransition(selected.status, status)) ? (
                   <>
                     <div className="hr-action-row">
                       {ACTION_LABELS.filter(([status]) => canTransition(selected.status, status)).map(([status, label]) => {

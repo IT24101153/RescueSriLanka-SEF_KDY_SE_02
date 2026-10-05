@@ -69,7 +69,7 @@ public class HelpRequestCoordinationApiTests
         using var scope = factory.Services.CreateScope();
         var shared = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var db = scope.ServiceProvider.GetRequiredService<RescueSriLanka.Api.Features.ComponentD.Data.ComponentDDbContext>();
-        var request = new HelpRequest { Type = HelpRequestType.Medical, Description = "Transport", EstimatedPeopleCount = 100, Latitude = 7, Longitude = 80, VerificationStatus = VerificationStatus.Verified };
+        var request = new HelpRequest { Type = HelpRequestType.Rescue, Description = "Transport", EstimatedPeopleCount = 100, Latitude = 7, Longitude = 80, VerificationStatus = VerificationStatus.Verified };
         shared.HelpRequests.Add(request); await shared.SaveChangesAsync();
         var team = new RescueSriLanka.Api.Features.ComponentD.Models.RescueTeam { Name = "Nearest", BaseLatitude = 7.01, BaseLongitude = 80 };
         team.Members.Add(new() { FullName = "Medic", Phone = "0712345678", Skill = RescueSriLanka.Api.Features.ComponentD.Models.SkillType.FirstAid });

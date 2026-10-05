@@ -8,7 +8,7 @@ const api = vi.mocked(authFetch);
 
 const request = {
   id: "r-1", citizenId: "c-1", citizenName: "Nimal Perera", citizenPhoneNumber: "0771234567",
-  type: 3, description: "Trapped on roof, water rising", latitude: 7, longitude: 80,
+  type: 4, description: "Trapped on roof, water rising", latitude: 7, longitude: 80,
   urgencyScore: 90, status: 0, verificationStatus: 0, verificationNotes: null, imageUrl: null,
   createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z",
 };
@@ -201,5 +201,25 @@ describe("Component B help request review — status flow", () => {
     render(<HelpRequestsReview />);
     expect(await screen.findByText("This request was cancelled.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Cancel request" })).toBeNull();
+  });
+});
+
+describe("Component B help request review — rescue-managed types", () => {
+  beforeEach(() => { cleanup(); api.mockReset(); });
+
+  it.each([3])("leaves status to the Rescue Coordinator for type %i", async (type) => {
+    mockRoutes({ priority: "High", aiAnalysisAvailable: false }, undefined, { verificationStatus: 1, type });
+    render(<HelpRequestsReview />);
+    expect(await screen.findByText(/Rescue Coordinator handles this request/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancel request" })).toBeNull();
+  });
+
+  it("offers only Verify and Reject on an unverified rescue report, with no plan decision", async () => {
+    mockRoutes({ priority: "High", aiAnalysisAvailable: false, workflowId: "w-1", workflowStatus: "AwaitingApproval" }, undefined, { type: 3 });
+    render(<HelpRequestsReview />);
+    expect(await screen.findByRole("button", { name: /Verify/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Reject$/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Approve plan/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Reject plan/ })).toBeNull();
   });
 });

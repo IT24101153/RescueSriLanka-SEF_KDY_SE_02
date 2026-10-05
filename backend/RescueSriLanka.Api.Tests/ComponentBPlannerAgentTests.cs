@@ -298,14 +298,12 @@ public class ComponentBPlannerAgentTests
         Assert.Contains("\"outcome\":\"approved\"", decided!.FinalOutcomeJson);
     }
 
-    [Theory]
-    [InlineData(HelpRequestType.Medical)]
-    [InlineData(HelpRequestType.Rescue)]
-    public async Task Approving_MedicalOrRescue_HandsTheRequestToTheRescueCoordinator(HelpRequestType type)
+    [Fact]
+    public async Task Approving_Rescue_HandsTheRequestToTheRescueCoordinator()
     {
         await using var db = CreateContext();
         var componentD = await SeedTeamsAsync();
-        var request = await AddRequest(db, 90, type: type);
+        var request = await AddRequest(db, 90, type: HelpRequestType.Rescue);
         request.VerificationStatus = VerificationStatus.Verified;
         await db.SaveChangesAsync();
         var model = new ScriptedModel(turn => turn switch

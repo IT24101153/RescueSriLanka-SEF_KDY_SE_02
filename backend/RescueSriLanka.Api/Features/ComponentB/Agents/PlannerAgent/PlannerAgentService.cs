@@ -321,9 +321,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 
             var recommendedTeam = RecommendedTeamFrom(workflow);
             var request = await _db.HelpRequests.FindAsync(workflow.ObjectiveId);
-            // Medical and Rescue requests need a rescue team, so approving one hands it to the
+            // Rescue requests need a rescue team, so approving one hands it to the
             // Rescue Coordinator in Component D instead of assigning it here.
-            bool routesToRescue = request is { Type: HelpRequestType.Medical or HelpRequestType.Rescue };
+            bool routesToRescue = request is { Type: HelpRequestType.Rescue };
             if (dto.Approved && (recommendedTeam is not null || routesToRescue) &&
                 request is { Status: HelpRequestStatus.Pending } &&
                 request.VerificationStatus != VerificationStatus.Verified)
