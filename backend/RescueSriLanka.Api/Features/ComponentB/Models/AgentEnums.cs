@@ -19,7 +19,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Models
         Rejected,
         Executing,          // Approved plan is being carried out
         Completed,
-        Failed
+        Failed,
+        // Appended last: the status is stored as its number, so existing rows keep their meaning.
+        Superseded          // A newer assessment of the same request replaced this plan
     }
 
     // Source: Proposal Section 6 — four named agents.

@@ -23,6 +23,7 @@ public interface IActionEmailService
     Task HelpRequestSubmittedAsync(Guid helpRequestId, CancellationToken ct = default);
     Task HelpRequestVerifiedAsync(Guid helpRequestId, bool isReal, CancellationToken ct = default);
     Task HelpRequestStatusChangedAsync(Guid helpRequestId, string status, CancellationToken ct = default);
+    Task HelpRequestGuidanceAsync(Guid helpRequestId, bool critical, CancellationToken ct = default);
     Task HelpRequestCancelledAsync(Guid helpRequestId, CancellationToken ct = default);
     Task ResourceRequestSubmittedAsync(Guid resourceRequestId, CancellationToken ct = default);
     Task ResourceRequestStatusChangedAsync(Guid resourceRequestId, string status, CancellationToken ct = default);
@@ -166,6 +167,23 @@ public sealed class ActionEmailService(
             $"The status of your help request is now {status}.",
             new (string Label, string Value)[] { ("Request type", request.Type.ToString()), ("Status", status) },
             "You can see the full history in the app.",
+            ct);
+    }
+
+    // The advice itself stays in the app; a push or email only says there is something to read.
+    public async Task HelpRequestGuidanceAsync(Guid helpRequestId, bool critical, CancellationToken ct = default)
+    {
+        var request = await db.HelpRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == helpRequestId, ct);
+        if (request is null) return;
+
+        await ToCitizenAsync(request.CitizenId,
+            critical ? "Important safety guidance for your help request" : "New message about your help request",
+            critical ? "Important safety guidance" : "New message from the response team",
+            critical
+                ? "The response team has sent urgent safety guidance for your help request. Please read it now."
+                : "The response team has sent you a message about your help request.",
+            new (string Label, string Value)[] { ("Request type", request.Type.ToString()) },
+            "Open the app and go to My requests to read it.",
             ct);
     }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/features/component_b/screens/submit_request_screen.dart';
 import 'package:mobile/features/component_b/services/help_request_service.dart';
+import 'package:mobile/shared/services/auth_service.dart';
 
 void main() {
   group('Component B request contract', () {
@@ -39,10 +40,12 @@ void main() {
   testWidgets('request submission requires a description and location', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: SubmitRequestScreen()));
+    // Tall enough to show the whole form, so the buttons are on screen.
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: SubmitRequestScreen(auth: AuthService())));
 
-    await tester.ensureVisible(find.text('Submit request'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Submit request'));
     await tester.pump();
     expect(find.text('Please describe what help you need.'), findsOneWidget);
@@ -52,8 +55,6 @@ void main() {
       'Need water for my family',
     );
     await tester.enterText(find.byType(TextFormField), '4');
-    await tester.ensureVisible(find.text('Submit request'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Submit request'));
     await tester.pump();
     expect(find.text('Please share your location first.'), findsOneWidget);

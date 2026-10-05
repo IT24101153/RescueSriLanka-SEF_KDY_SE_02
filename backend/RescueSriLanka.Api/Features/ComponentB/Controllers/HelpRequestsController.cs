@@ -22,11 +22,12 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
     [Route("api/[controller]")]
     public class HelpRequestsController(
         IHelpRequestService service,
-        IAiAnalysisService aiAnalysis,
         AppDbContext db,
         IPlannerAgentService plannerAgent,
         IActionEmailService emails,
-        IImageStore images) : ControllerBase
+        IImageStore images,
+        IEmergencyContactService emergencyContacts,
+        IHelpRequestMessageService messages) : ControllerBase
     {
         // Either coordinator may triage help requests; the web console sends
         // HelpRequestManager accounts to the Help request dashboard.
@@ -34,7 +35,6 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             nameof(UserRole.EmergencyCoordinator) + "," + nameof(UserRole.HelpRequestManager);
 
         private readonly IHelpRequestService _service = service;
-        private readonly IAiAnalysisService _aiAnalysis = aiAnalysis;
         private readonly AppDbContext _db = db;
         private readonly IPlannerAgentService _plannerAgent = plannerAgent;
         private readonly IImageStore _images = images;
@@ -115,35 +115,11 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             return Ok(result);
         }
 
-        // Pre-submission guidance improves a report but never prevents submission.
-        [HttpPost("ai-draft-analysis")]
-        [EnableRateLimiting("ai")]
-        [Authorize]
-        public async Task<ActionResult<AiAnalysisResult>> AnalyzeDraft([FromBody] AnalyzeRequestDraftDto dto)
-        {
-            if (string.IsNullOrWhiteSpace(dto.Description))
-                return BadRequest(new { message = "Add a short description before requesting AI guidance." });
-
-            var urgencyScore = dto.Type switch
-            {
-                HelpRequestType.Medical => 80,
-                HelpRequestType.Rescue => 90,
-                HelpRequestType.Shelter => 50,
-                HelpRequestType.Water => 40,
-                HelpRequestType.Food => 30,
-                _ => 20
-            };
-            var result = await _aiAnalysis.AnalyzeHelpRequestAsync(dto.Type.ToString(), dto.Description, urgencyScore);
-            return result is null
-                ? StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "AI guidance is temporarily unavailable. You can still submit your request." })
-                : Ok(result);
-        }
-
-        // AI guidance is generated server-side; the API key is never exposed to clients.
-        // The requester and authorised coordinators may run the review.
+        // AI assessment is a staff tool: it is generated server-side, the API key is
+        // never exposed to clients, and citizens neither see nor trigger it.
         [HttpPost("{id}/ai-analysis")]
         [EnableRateLimiting("ai")]
-        [Authorize]
+        [Authorize(Roles = Coordinators)]
         public async Task<ActionResult<AiAnalysisResult>> Analyze(Guid id)
         {
             var request = await _service.GetByIdAsync(id);
@@ -187,17 +163,20 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
         // Approve/Reject decision on it via POST /api/agentworkflows/{id}/decision
         // without a second round-trip to look the workflow up by help-request id.
         [HttpGet("{id}/ai-priority")]
-        [Authorize]
+        [Authorize(Roles = Coordinators)]
         public async Task<ActionResult<AiPriorityResponseDto>> GetAiPriority(Guid id)
         {
             var request = await _service.GetByIdAsync(id);
             if (request is null) return NotFound();
             if (!CanAccess(request)) return Forbid();
 
+            // A re-run that failed validation, or a plan a newer run replaced, must not
+            // hide the plan the manager can actually act on, so those come last.
             var workflow = await _db.AgentWorkflows
                 .Include(w => w.Steps)
                 .Where(w => w.ObjectiveType == PlannerWorkflowObjectiveType.HelpRequest && w.ObjectiveId == id)
-                .OrderByDescending(w => w.CreatedAt)
+                .OrderBy(w => w.Status == PlannerWorkflowStatus.Failed || w.Status == PlannerWorkflowStatus.Superseded)
+                .ThenByDescending(w => w.CreatedAt)
                 .FirstOrDefaultAsync();
 
             if (workflow is null)
@@ -229,6 +208,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
                 response.Reasoning = available && root.TryGetProperty("aiReasoning", out var reasoning) ? reasoning.GetString() : null;
                 response.SuggestedAction = available && root.TryGetProperty("aiSuggestedAction", out var suggestedAction) ? suggestedAction.GetString() : null;
                 response.CredibilitySignal = available && root.TryGetProperty("aiCredibilitySignal", out var credibility) ? credibility.GetString() : null;
+                response.ModelPriority = root.TryGetProperty("modelPriority", out var modelPriority) && modelPriority.ValueKind == JsonValueKind.String ? modelPriority.GetString() : null;
+                response.UnavailableReason = !available && root.TryGetProperty("modelUnavailableReason", out var reason) && reason.ValueKind == JsonValueKind.String ? reason.GetString() : null;
+                ReadRecommendedTeam(workflow, response);
                 return Ok(response);
             }
             catch (JsonException)
@@ -237,10 +219,103 @@ namespace RescueSriLanka.Api.Features.ComponentB.Controllers
             }
         }
 
+        // Step 3 records which team approving would assign, and whether the model or a rule chose it.
+        private static void ReadRecommendedTeam(AgentWorkflow workflow, AiPriorityResponseDto response)
+        {
+            var validation = workflow.Steps.FirstOrDefault(s => s.StepNumber == 3)?.ValidationResultJson;
+            if (validation is null) return;
+
+            try
+            {
+                using var document = JsonDocument.Parse(validation);
+                var root = document.RootElement;
+                response.RecommendedTeam = root.TryGetProperty("recommendedTeam", out var team) && team.ValueKind == JsonValueKind.String ? team.GetString() : null;
+                response.RecommendedTeamSource = response.RecommendedTeam is not null && root.TryGetProperty("recommendedTeamSource", out var source) && source.ValueKind == JsonValueKind.String ? source.GetString() : null;
+            }
+            catch (JsonException)
+            {
+                // A malformed validation record only means no team is shown.
+            }
+        }
+
         private Guid? GetUserId()
         {
             var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
             return Guid.TryParse(idClaim, out var id) ? id : null;
+        }
+
+        // GET /api/helprequests/emergency-contacts?latitude=&longitude=&district=
+        // Public emergency numbers for a place: the national ones plus the district
+        // disaster-management unit nearest the coordinates (or named by district).
+        // No personal data, and wanted most when sign-in is the last thing on anyone's mind.
+        [HttpGet("emergency-contacts")]
+        [AllowAnonymous]
+        public async Task<ActionResult<EmergencyContactsResponseDto>> GetEmergencyContacts(
+            [FromQuery] double? latitude, [FromQuery] double? longitude, [FromQuery] string? district,
+            CancellationToken ct)
+        {
+            if (latitude is < -90 or > 90 || longitude is < -180 or > 180)
+                return BadRequest(new { message = "Latitude or longitude is out of range." });
+
+            return Ok(await emergencyContacts.GetForAreaAsync(latitude, longitude, district, ct));
+        }
+
+        // GET /api/helprequests/{id}/emergency-contacts
+        // The numbers for where this request was made, matched on its coordinates.
+        [HttpGet("{id}/emergency-contacts")]
+        [Authorize]
+        public async Task<ActionResult<EmergencyContactsResponseDto>> GetRequestEmergencyContacts(
+            Guid id, CancellationToken ct)
+        {
+            var request = await _service.GetByIdAsync(id);
+            if (request is null) return NotFound();
+            if (!CanAccess(request)) return Forbid();
+
+            return Ok(await emergencyContacts.GetForAreaAsync(
+                request.Latitude, request.Longitude, request.District, ct));
+        }
+
+        // POST /api/helprequests/{id}/messages
+        // The response team sends the citizen a note and/or Do/Don't safety guidance.
+        [HttpPost("{id}/messages")]
+        [Authorize(Roles = Coordinators)]
+        public async Task<ActionResult<HelpRequestMessageDto>> AddMessage(
+            Guid id, [FromBody] CreateHelpRequestMessageDto dto, CancellationToken ct)
+        {
+            var authorId = GetUserId();
+            if (authorId is null) return Unauthorized();
+
+            try
+            {
+                var result = await messages.AddAsync(id, authorId.Value, dto, ct);
+                return result is null ? NotFound() : Created($"/api/helprequests/{id}/messages", result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // GET /api/helprequests/{id}/messages
+        // What the response team has told the citizen, for them and for staff.
+        [HttpGet("{id}/messages")]
+        [Authorize]
+        public async Task<ActionResult<List<HelpRequestMessageDto>>> GetMessages(Guid id, CancellationToken ct)
+        {
+            var request = await _service.GetByIdAsync(id);
+            if (request is null) return NotFound();
+            if (!CanAccess(request)) return Forbid();
+
+            return Ok(await messages.GetAsync(id, ct));
+        }
+
+        // DELETE /api/helprequests/{id}/messages/{messageId}
+        // Takes back a message sent by mistake.
+        [HttpDelete("{id}/messages/{messageId:guid}")]
+        [Authorize(Roles = Coordinators)]
+        public async Task<IActionResult> DeleteMessage(Guid id, Guid messageId, CancellationToken ct)
+        {
+            return await messages.DeleteAsync(id, messageId, ct) ? NoContent() : NotFound();
         }
 
         // GET /api/helprequests/{id}

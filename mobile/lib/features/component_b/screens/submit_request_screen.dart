@@ -4,9 +4,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../shared/core/theme.dart';
 import '../../../shared/widgets/app_ui.dart';
+import '../../component_a/screens/report/location_picker_screen.dart';
 import '../help_style.dart';
 import '../services/help_request_service.dart';
 import '../widgets/estimated_people_field.dart';
@@ -42,9 +44,7 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
   bool _locating = false;
   bool _uploadingImage = false;
   bool _submitting = false;
-  bool _analyzingDraft = false;
   String? _error;
-  AiRequestAnalysis? _draftAnalysis;
 
   @override
   void initState() {
@@ -160,6 +160,8 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
       if (choice == 'current') {
         _latitude = null;
         _longitude = null;
+      } else if (choice == 'map') {
+        // Keep any point already found: it is where the map opens.
       } else if (choice == 'profile' && profileDistrict != null &&
           _districtCentres.containsKey(profileDistrict)) {
         final centre = _districtCentres[profileDistrict]!;
@@ -173,6 +175,32 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
       }
     });
     if (choice == 'current') _useMyLocation();
+    if (choice == 'map') _pickOnMap();
+  }
+
+  static const _islandCentre = LatLng(7.8731, 80.7718);
+
+  // Opens the full-screen map on the point found so far, or on the whole
+  // island when there is none. Cancelling leaves the choice as it was.
+  Future<void> _pickOnMap() async {
+    FocusScope.of(context).unfocus();
+    final hasPoint = _latitude != null && _longitude != null;
+    final picked = await Navigator.of(context).push<LatLng>(
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initial: hasPoint ? LatLng(_latitude!, _longitude!) : _islandCentre,
+          initialZoom: hasPoint ? 15 : 7.2,
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _selectedDistrict = null;
+      _latitude = picked.latitude;
+      _longitude = picked.longitude;
+      _locationUnavailable = false;
+      _locationError = null;
+    });
   }
 
   Widget _locationOption({required String value, required IconData icon,
@@ -228,6 +256,23 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
           subtitle: 'The district on your profile.'),
         _locationOption(value: 'other', icon: Icons.travel_explore_outlined,
           title: 'Another area', subtitle: 'Somewhere else — choose a district.'),
+        _locationOption(value: 'map', icon: Icons.map_outlined,
+          title: 'Pick on the map', subtitle: 'Drop a pin on the exact spot.'),
+        if (_locationChoice == 'map') ...[
+          OutlinedButton.icon(
+            onPressed: _pickOnMap,
+            icon: const Icon(Icons.edit_location_alt_outlined, size: 18),
+            label: Text(_latitude == null ? 'Choose on map' : 'Change spot'),
+          ),
+          if (_latitude != null && _longitude != null)
+            Padding(padding: const EdgeInsets.only(top: 7), child: Text(
+              'Pin at ${_latitude!.toStringAsFixed(5)}, ${_longitude!.toStringAsFixed(5)}',
+              style: const TextStyle(color: AppColors.body, fontSize: 12))),
+          const SizedBox(height: 10),
+          TextField(controller: _landmarkController,
+            decoration: const InputDecoration(labelText: 'Landmark or address (optional)',
+              prefixIcon: Icon(Icons.place_outlined), border: OutlineInputBorder())),
+        ],
         if (_locationChoice == 'current' && (_locationUnavailable || _locating))
           Container(margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.all(13),
             decoration: BoxDecoration(color: AppColors.surfaceAlt,
@@ -244,7 +289,7 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
         if (needsDistrict) ...[
           const SizedBox(height: 3),
           DropdownButtonFormField<String>(
-            value: _locationChoice == 'profile' && profileDistrict != null && _districts.contains(profileDistrict)
+            initialValue: _locationChoice == 'profile' && profileDistrict != null && _districts.contains(profileDistrict)
                 ? profileDistrict : _selectedDistrict,
             decoration: const InputDecoration(labelText: 'District',
               prefixIcon: Icon(Icons.location_city_outlined), border: OutlineInputBorder()),
@@ -386,31 +431,6 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
     }
   }
 
-  Future<void> _analyzeDraft() async {
-    final description = _descriptionController.text.trim();
-    if (description.isEmpty) {
-      setState(
-        () => _error = 'Describe the situation before requesting AI guidance.',
-      );
-      return;
-    }
-    setState(() {
-      _analyzingDraft = true;
-      _error = null;
-      _draftAnalysis = null;
-    });
-    final result = await HelpRequestService.analyzeDraft(
-      type: _selectedType,
-      description: description,
-    );
-    if (!mounted) return;
-    setState(() {
-      _analyzingDraft = false;
-      _draftAnalysis = result;
-      if (result == null) _error = 'AI guidance is unavailable right now. You can still submit your request.';
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -453,10 +473,7 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
                           label: Text(helpRequestTypeLabels[i]),
                           selected: selected,
                           showCheckmark: false,
-                          onSelected: (_) => setState(() {
-                            _selectedType = i;
-                            _draftAnalysis = null;
-                          }),
+                          onSelected: (_) => setState(() => _selectedType = i),
                           selectedColor: AppColors.brand,
                           backgroundColor: AppColors.surface,
                           side: const BorderSide(color: AppColors.border),
@@ -481,76 +498,6 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
                         border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: _analyzingDraft ? null : _analyzeDraft,
-                      icon: _analyzingDraft
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.auto_awesome_outlined, size: 18),
-                      label: Text(
-                        _analyzingDraft
-                            ? 'Reviewing your report…'
-                            : 'Improve report with AI',
-                      ),
-                    ),
-                    if (_draftAnalysis != null) ...[
-                      const SizedBox(height: AppSpacing.gap),
-                      AppCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(
-                                  Icons.auto_awesome_outlined,
-                                  size: 17,
-                                  color: AppColors.brandInk,
-                                ),
-                                SizedBox(width: 7),
-                                Text(
-                                  'AI report guidance',
-                                  style: TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.ink,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _draftAnalysis!.reasoning,
-                              style: const TextStyle(fontSize: 13, height: 1.4),
-                            ),
-                            if (_draftAnalysis!.suggestedAction.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                _draftAnalysis!.suggestedAction,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.35,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 10),
-                            const Text(
-                              'This is guidance only. Do not delay submitting an '
-                              'emergency request.',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: AppColors.body,
-                                height: 1.35,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
 
                     const SizedBox(height: 24),
                     const AppSectionTitle('Approximate number of people affected'),

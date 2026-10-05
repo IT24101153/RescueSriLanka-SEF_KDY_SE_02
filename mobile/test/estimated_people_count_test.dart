@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:mobile/features/component_b/screens/submit_request_screen.dart';
 import 'package:mobile/features/component_b/services/help_request_service.dart';
+import 'package:mobile/shared/services/auth_service.dart';
 import 'package:mobile/features/component_b/widgets/estimated_people_field.dart';
 
 Map<String, dynamic> response(int? count) => {
@@ -38,7 +39,7 @@ void main() {
   });
 
   testWidgets('citizen field is between description and photo', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: SubmitRequestScreen()));
+    await tester.pumpWidget(MaterialApp(home: SubmitRequestScreen(auth: AuthService())));
     final description = tester.getTopLeft(find.byType(TextField).first).dy;
     final people = tester.getTopLeft(find.byType(EstimatedPeopleField)).dy;
     final photo = tester.getTopLeft(find.text('PHOTO (OPTIONAL)')).dy;

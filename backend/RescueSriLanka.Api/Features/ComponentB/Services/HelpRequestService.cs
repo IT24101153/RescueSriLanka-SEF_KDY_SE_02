@@ -129,6 +129,10 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             entity.UrgencyScore = await CalculateUrgencyScoreAsync(entity);
             entity.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
+
+            // The edit may change type, place or description, so the earlier triage is stale.
+            analysisQueue.Enqueue(entity.Id);
+
             return ToDto(entity, await GetIdentityAsync(entity.CitizenId));
         }
 

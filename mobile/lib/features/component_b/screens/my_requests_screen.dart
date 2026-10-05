@@ -4,6 +4,8 @@ import '../../../shared/core/theme.dart';
 import '../../../shared/widgets/app_ui.dart';
 import '../help_style.dart';
 import '../services/help_request_service.dart';
+import '../widgets/emergency_contacts_section.dart';
+import '../widgets/guidance_section.dart';
 import '../widgets/estimated_people_field.dart';
 
 class MyRequestsScreen extends StatefulWidget {
@@ -15,7 +17,6 @@ class MyRequestsScreen extends StatefulWidget {
 
 class _MyRequestsScreenState extends State<MyRequestsScreen> {
   List<HelpRequest> _requests = [];
-  Map<String, AiPriority> _aiPriorities = {};
   bool _loading = true;
   String? _error;
 
@@ -29,20 +30,10 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
     setState(() => _loading = true);
     final loadResult = await HelpRequestService.getMineWithStatus();
     final data = loadResult.requests;
-    final priorities = await Future.wait(
-      data.map((request) async {
-        final priority = await HelpRequestService.getAiPriority(request.id);
-        return MapEntry(request.id, priority);
-      }),
-    );
     if (!mounted) return;
     setState(() {
       _requests = data;
       _error = loadResult.error;
-      _aiPriorities = {
-        for (final entry in priorities)
-          if (entry.value != null) entry.key: entry.value!,
-      };
       _loading = false;
     });
   }
@@ -116,7 +107,6 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.gap),
       itemBuilder: (context, index) {
         final request = _requests[index];
-        final aiPriority = _aiPriorities[request.id];
 
         return AppCard(
           accent: helpStatusTone(request.status),
@@ -157,10 +147,6 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
                       ),
                     ),
                     Text('People affected: ${request.estimatedPeopleCount ?? 'Not specified'}'),
-                    if (aiPriority != null) ...[
-                      const SizedBox(height: 9),
-                      _AiPriorityBadge(priority: aiPriority),
-                    ],
                   ],
                 ),
               ),
@@ -177,55 +163,6 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
   }
 }
 
-/// The AI's priority, always labelled as the AI's and never as a decision.
-class _AiPriorityBadge extends StatelessWidget {
-  const _AiPriorityBadge({required this.priority});
-
-  final AiPriority priority;
-
-  @override
-  Widget build(BuildContext context) {
-    final tone = priority.aiAnalysisAvailable
-        ? helpPriorityTone(priority.priority)
-        : AppColors.body;
-    final label = priority.aiAnalysisAvailable
-        ? 'AI priority: ${priority.priority}'
-        : priority.priority;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: tone.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            priority.aiAnalysisAvailable
-                ? Icons.auto_awesome_outlined
-                : Icons.hourglass_top_outlined,
-            size: 13,
-            color: tone,
-          ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: tone,
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _RequestDetailScreen extends StatefulWidget {
   const _RequestDetailScreen({required this.request});
 
@@ -238,9 +175,6 @@ class _RequestDetailScreen extends StatefulWidget {
 class _RequestDetailScreenState extends State<_RequestDetailScreen> {
   List<StatusHistoryEntry> _history = [];
   bool _loading = true;
-  bool _analyzing = false;
-  AiRequestAnalysis? _aiAnalysis;
-  String? _aiError;
 
   @override
   void initState() {
@@ -254,22 +188,6 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
     setState(() {
       _history = data;
       _loading = false;
-    });
-  }
-
-  Future<void> _loadAiGuidance() async {
-    setState(() {
-      _analyzing = true;
-      _aiError = null;
-    });
-    final result = await HelpRequestService.getAiAnalysis(widget.request.id);
-    if (!mounted) return;
-    setState(() {
-      _aiAnalysis = result;
-      _analyzing = false;
-      _aiError = result == null
-          ? 'AI guidance is unavailable right now. Your request is still being handled.'
-          : null;
     });
   }
 
@@ -481,12 +399,14 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
                 ],
               ),
             ],
-            const SizedBox(height: 20),
-            _AiGuidanceCard(
-              analysis: _aiAnalysis,
-              loading: _analyzing,
-              error: _aiError,
-              onRequestAnalysis: _loadAiGuidance,
+            const SizedBox(height: 24),
+            const AppSectionTitle('Messages from the response team'),
+            GuidanceSection(requestId: request.id),
+            const SizedBox(height: 24),
+            const AppSectionTitle('Emergency contacts for your area'),
+            EmergencyContactsSection(
+              load: () =>
+                  HelpRequestService.getRequestEmergencyContacts(request.id),
             ),
             const SizedBox(height: 24),
             const AppSectionTitle('Status history'),
@@ -546,107 +466,6 @@ class _RequestDetailScreenState extends State<_RequestDetailScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _AiGuidanceCard extends StatelessWidget {
-  const _AiGuidanceCard({
-    required this.analysis,
-    required this.loading,
-    required this.error,
-    required this.onRequestAnalysis,
-  });
-
-  final AiRequestAnalysis? analysis;
-  final bool loading;
-  final String? error;
-  final VoidCallback onRequestAnalysis;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(
-                Icons.auto_awesome_outlined,
-                size: 18,
-                color: AppColors.brandInk,
-              ),
-              SizedBox(width: 8),
-              Text(
-                'AI guidance',
-                style: TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 7),
-          const Text(
-            'Supplemental guidance only. Emergency coordinators make the '
-            'response decisions.',
-            style: TextStyle(fontSize: 12, color: AppColors.body, height: 1.35),
-          ),
-          if (analysis != null) ...[
-            const SizedBox(height: 14),
-            Text(
-              analysis!.reasoning,
-              style: const TextStyle(fontSize: 13, height: 1.4),
-            ),
-            if (analysis!.suggestedAction.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              const Text(
-                'SUGGESTED NEXT STEP',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                  color: AppColors.body,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                analysis!.suggestedAction,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ] else ...[
-            if (error != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                error!,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.critical,
-                  height: 1.35,
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: loading ? null : onRequestAnalysis,
-              icon: loading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.auto_awesome_outlined, size: 18),
-              label: Text(loading ? 'Preparing guidance…' : 'Get AI guidance'),
-            ),
-          ],
-        ],
       ),
     );
   }

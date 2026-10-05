@@ -6,6 +6,13 @@ namespace RescueSriLanka.Api.Tests;
 public sealed class RecordingActionEmailService : IActionEmailService
 {
     public List<(Guid HelpRequestId, string Status)> HelpRequestStatusChanges { get; } = [];
+    public List<(Guid HelpRequestId, bool Critical)> HelpRequestGuidance { get; } = [];
+
+    public Task HelpRequestGuidanceAsync(Guid helpRequestId, bool critical, CancellationToken ct = default)
+    {
+        HelpRequestGuidance.Add((helpRequestId, critical));
+        return Task.CompletedTask;
+    }
 
     public Task HelpRequestStatusChangedAsync(Guid helpRequestId, string status, CancellationToken ct = default)
     {

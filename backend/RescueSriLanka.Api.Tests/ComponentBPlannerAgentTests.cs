@@ -34,18 +34,51 @@ public class ComponentBPlannerAgentTests
     }
 
     [Fact]
-    public async Task TriggerAsync_FailsDuplicateActiveWorkflowDeterministically()
+    public async Task TriggerAsync_FailsWhenAnApprovedWorkflowAlreadyExists()
     {
         await using var db = CreateContext();
         var request = await AddRequest(db, 90);
         var (planner, _) = CreatePlanner(db, new ScriptedModel(_ => Final()));
-        await planner.TriggerAsync(Trigger(request));
+        var first = await planner.TriggerAsync(Trigger(request));
+        (await db.AgentWorkflows.FindAsync(first.Id))!.Status = PlannerWorkflowStatus.Approved;
+        await db.SaveChangesAsync();
 
         var duplicate = await planner.TriggerAsync(Trigger(request));
         var validation = JsonDocument.Parse(duplicate.Steps[2].ValidationResultJson!);
 
         Assert.Equal(PlannerWorkflowStatus.Failed, duplicate.Status);
         Assert.True(validation.RootElement.GetProperty("duplicateActiveWorkflow").GetBoolean());
+    }
+
+    [Fact]
+    public async Task TriggerAsync_ReplacesAPlanAwaitingApprovalInsteadOfFailingBesideIt()
+    {
+        await using var db = CreateContext();
+        var request = await AddRequest(db, 90);
+        var (planner, _) = CreatePlanner(db, new ScriptedModel(_ => Final()));
+        var first = await planner.TriggerAsync(Trigger(request));
+
+        var rerun = await planner.TriggerAsync(Trigger(request));
+
+        // The re-run is the plan the manager can decide on; the old one is retired.
+        Assert.Equal(PlannerWorkflowStatus.AwaitingApproval, rerun.Status);
+        Assert.Equal(PlannerWorkflowStatus.Superseded, (await db.AgentWorkflows.FindAsync(first.Id))!.Status);
+        Assert.Single(await db.AgentWorkflows
+            .Where(w => w.ObjectiveId == request.Id && w.Status == PlannerWorkflowStatus.AwaitingApproval)
+            .ToListAsync());
+    }
+
+    [Fact]
+    public async Task DecideApprovalAsync_RefusesAPlanThatWasSuperseded()
+    {
+        await using var db = CreateContext();
+        var request = await AddRequest(db, 90);
+        var (planner, _) = CreatePlanner(db, new ScriptedModel(_ => Final()));
+        var first = await planner.TriggerAsync(Trigger(request));
+        await planner.TriggerAsync(Trigger(request));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            planner.DecideApprovalAsync(first.Id, Guid.NewGuid(), new ApprovalDecisionDto { Approved = true }));
     }
 
     [Theory]

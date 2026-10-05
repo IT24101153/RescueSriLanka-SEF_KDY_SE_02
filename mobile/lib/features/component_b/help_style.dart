@@ -33,14 +33,6 @@ IconData helpTypeIcon(int type) => switch (type) {
   _ => Icons.help_outline,
 };
 
-/// The AI's suggested priority, which is guidance and says so in its label.
-Color helpPriorityTone(String priority) => switch (priority.toLowerCase()) {
-  'high' => AppColors.critical,
-  'medium' => AppColors.caution,
-  'low' => AppColors.safe,
-  _ => AppColors.body,
-};
-
 /// Travel-advisory levels: 0 Safe, 1 Caution, 2 Danger.
 Color safetyLevelTone(int level) => switch (level) {
   2 => AppColors.danger,

@@ -9,7 +9,9 @@ import '../../../shared/screens/auth/login_screen.dart';
 import 'submit_request_screen.dart';
 import 'my_requests_screen.dart';
 import 'my_requests_map_screen.dart';
+import 'emergency_contacts_screen.dart';
 import 'safety_check_screen.dart';
+import 'travel_advisories_screen.dart';
 import '../services/help_request_service.dart';
 
 /// The Help tab in the app shell: the help-request hub when signed in, a
@@ -41,6 +43,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<HelpRequest> _requests = [];
+  List<TravelAdvisory> _advisories = [];
   bool _loadingSummary = true;
   String? _summaryError;
 
@@ -59,14 +62,23 @@ class _HomeScreenState extends State<HomeScreen> {
       _summaryError = null;
     });
 
-    final result = await HelpRequestService.getMineWithStatus();
+    final results = await Future.wait([
+      HelpRequestService.getMineWithStatus(),
+      HelpRequestService.getActiveAdvisories(),
+    ]);
     if (!mounted) return;
+    final result = results[0] as HelpRequestLoadResult;
     setState(() {
+      _advisories = (results[1] as List<TravelAdvisory>?) ?? [];
       _requests = result.requests;
       _summaryError = result.error;
       _loadingSummary = false;
     });
   }
+
+  void _openAdvisories() => Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => const TravelAdvisoriesScreen()),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +164,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
+                    if (_advisories.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.gap),
+                      _AdvisoryBanner(
+                        advisories: _advisories,
+                        onTap: _openAdvisories,
+                      ),
+                    ],
                     const SizedBox(height: 26),
                     const AppSectionTitle('How can we help?'),
                     _HomeCard(
@@ -191,6 +210,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: AppSpacing.gap),
                     _HomeCard(
+                      icon: Icons.call_outlined,
+                      title: 'Emergency contacts',
+                      subtitle: 'Hotlines and your district disaster unit',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const EmergencyContactsScreen(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.gap),
+                    _HomeCard(
+                      icon: Icons.crisis_alert_outlined,
+                      title: 'Travel advisories',
+                      subtitle: 'Areas that are unsafe to travel through',
+                      onTap: _openAdvisories,
+                    ),
+                    const SizedBox(height: AppSpacing.gap),
+                    _HomeCard(
                       icon: Icons.shield_outlined,
                       title: 'Safety check',
                       subtitle:
@@ -207,6 +244,46 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Says how many advisories are in force, and how many are danger zones, so
+/// the warning is seen without opening anything.
+class _AdvisoryBanner extends StatelessWidget {
+  const _AdvisoryBanner({required this.advisories, required this.onTap});
+
+  final List<TravelAdvisory> advisories;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final danger = advisories.where((a) => a.safetyLevel == 2).length;
+    final tone = danger > 0 ? AppColors.danger : AppColors.caution;
+    final total = advisories.length;
+
+    return AppCard(
+      accent: tone,
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(
+            danger > 0 ? Icons.crisis_alert : Icons.warning_amber_rounded,
+            size: 20,
+            color: tone,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '$total active travel advisor${total == 1 ? 'y' : 'ies'}'
+              '${danger > 0 ? ', $danger danger zone${danger == 1 ? '' : 's'}' : ''}.'
+              ' Tap to see where.',
+              style: const TextStyle(fontSize: 13, height: 1.35),
+            ),
+          ),
+          const Icon(Icons.chevron_right, color: AppColors.body),
+        ],
       ),
     );
   }

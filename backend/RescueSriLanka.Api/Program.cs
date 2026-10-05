@@ -108,6 +108,8 @@ builder.Services.AddScoped<IHelpRequestService, HelpRequestService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IHelpRequestResponseStatusService, HelpRequestResponseStatusService>();
 builder.Services.AddScoped<ITravelAdvisoryService, TravelAdvisoryService>();
+builder.Services.AddScoped<IEmergencyContactService, EmergencyContactService>();
+builder.Services.AddScoped<IHelpRequestMessageService, HelpRequestMessageService>();
 builder.Services.AddScoped<IPlannerAgentService, PlannerAgentService>();
 
 // Component B — the assessment model calls read-only tools itself before it gives its verdict.
@@ -115,7 +117,6 @@ builder.Services.AddHttpClient<IPlanningModel, GeminiPlanningModel>(client =>
     client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddScoped<IRequestAssessmentAgent, RequestAssessmentAgent>();
 builder.Services.AddScoped<IHelpRequestServiceForAgent, HelpRequestServiceForAgent>();
-builder.Services.AddHttpClient<IAiAnalysisService, GeminiAnalysisService>();
 
 // New help requests are triaged by the Planner Agent in the background — the
 // citizen filing one never waits on a model, and a manager's queue is
@@ -443,6 +444,9 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 
         // Component D's rescue tables have their own migration history.
         await services.GetRequiredService<ComponentDDbContext>().Database.MigrateAsync();
+
+        // Public emergency numbers are reference data, not demo data.
+        await EmergencyContactSeeder.SeedAsync(db);
 
         // The placeholder staff logins share a password published in this repository,
         // so they are created only when a deployment asks for them.

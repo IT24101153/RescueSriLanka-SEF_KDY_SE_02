@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { authFetch } from "./api";
 import { getSession } from "../../shared/auth/session";
+import HelpRequestGuidance from "./HelpRequestGuidance";
 import "./HelpRequestsReview.css";
 
 const TYPE_LABELS = ["Water", "Food", "Medical", "Rescue", "Shelter", "Other"] as const;
@@ -51,7 +52,7 @@ function urgencyTier(score: number): UrgencyTier {
   return "safe";
 }
 
-type WorkflowStatus = "Planning" | "AwaitingApproval" | "Approved" | "Rejected" | "Executing" | "Completed" | "Failed";
+type WorkflowStatus = "Planning" | "AwaitingApproval" | "Approved" | "Rejected" | "Executing" | "Completed" | "Failed" | "Superseded";
 
 interface AiAssessmentDto {
   priority: string;
@@ -61,6 +62,10 @@ interface AiAssessmentDto {
   credibilitySignal: string | null;
   workflowId: string | null;
   workflowStatus: WorkflowStatus | null;
+  modelPriority: string | null;
+  recommendedTeam: string | null;
+  recommendedTeamSource: string | null;
+  unavailableReason: string | null;
 }
 
 function canTransition(current: number, next: number): boolean {
@@ -268,10 +273,14 @@ export default function HelpRequestsReview() {
           notes: approved ? "Approved by Help Request Manager" : "Rejected by Help Request Manager",
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        // The API explains a refusal, such as an unverified request, and the manager needs to read it.
+        const body = await res.json().catch(() => null) as { message?: string } | null;
+        throw new Error(body?.message ?? "Could not record the decision. Try again.");
+      }
       await loadAiAssessment(selected.id);
-    } catch {
-      setDecisionError("Could not record the decision. Try again.");
+    } catch (cause) {
+      setDecisionError(cause instanceof Error ? cause.message : "Could not record the decision. Try again.");
     } finally {
       setDeciding(false);
     }
@@ -380,8 +389,14 @@ export default function HelpRequestsReview() {
                 <div className="hr-ai-panel">
                   <div className="hr-ai-panel-head">
                     <span className={`hr-pill hr-pill--${urgencyTier(selected.urgencyScore)}`}>Priority: {aiReview.priority}</span>
+                    {aiReview.modelPriority && (
+                      <span className="hr-pill hr-pill--neutral">Model priority: {aiReview.modelPriority}</span>
+                    )}
                     {!aiReview.aiAnalysisAvailable && (
-                      <span className="hr-ai-pending">Gemini reasoning isn't available for this run — priority above is the rule-based score only.</span>
+                      <span className="hr-ai-pending">
+                        Gemini reasoning isn't available for this run — priority above is the rule-based score only.
+                        {aiReview.unavailableReason ? ` (${aiReview.unavailableReason})` : ""}
+                      </span>
                     )}
                   </div>
                   {aiReview.aiAnalysisAvailable && (
@@ -390,6 +405,12 @@ export default function HelpRequestsReview() {
                       <div className="hr-ai-result"><span>Credibility signal</span><p>{aiReview.credibilitySignal}</p></div>
                       <div className="hr-ai-result"><span>Suggested action</span><p>{aiReview.suggestedAction}</p></div>
                     </>
+                  )}
+                  {aiReview.recommendedTeam && (
+                    <div className="hr-ai-result">
+                      <span>Recommended team</span>
+                      <p>{aiReview.recommendedTeam}{aiReview.recommendedTeamSource ? ` — ${aiReview.recommendedTeamSource}` : ""}</p>
+                    </div>
                   )}
                   {aiReview.workflowStatus === "AwaitingApproval" && (
                     <div className="hr-ai-decision">
@@ -472,6 +493,8 @@ export default function HelpRequestsReview() {
                   ))}
                 </div>
               </div>
+
+              <HelpRequestGuidance key={selected.id} requestId={selected.id} />
 
               <div className="hr-history">
                 <span className="hr-actions-label">History</span>

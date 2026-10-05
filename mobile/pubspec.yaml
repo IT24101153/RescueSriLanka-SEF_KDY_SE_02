@@ -23,6 +23,7 @@ dependencies:
   shared_preferences: ^2.5.5
   flutter_secure_storage: ^11.2.0
   intl: ^0.20.2
+  url_launcher: ^6.3.2
   liquid_glass_easy: ^4.3.4
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0

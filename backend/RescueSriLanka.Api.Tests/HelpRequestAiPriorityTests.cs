@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -49,6 +50,86 @@ public sealed class HelpRequestAiPriorityTests
         Assert.Equal("Looks genuine", dto.CredibilitySignal);
         Assert.Equal(workflow.Id, dto.WorkflowId);
         Assert.Equal(PlannerWorkflowStatus.AwaitingApproval, dto.WorkflowStatus);
+    }
+
+    [Fact]
+    public async Task ShowsThePlanThatCanBeDecidedOn_NotANewerRunThatFailedValidation()
+    {
+        await using var db = CreateContext();
+        var citizenId = Guid.NewGuid();
+        var requestId = Guid.NewGuid();
+        var actionable = new AgentWorkflow
+        {
+            ObjectiveType = PlannerWorkflowObjectiveType.HelpRequest,
+            ObjectiveId = requestId,
+            Status = PlannerWorkflowStatus.AwaitingApproval,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        var failedRerun = new AgentWorkflow
+        {
+            ObjectiveType = PlannerWorkflowObjectiveType.HelpRequest,
+            ObjectiveId = requestId,
+            Status = PlannerWorkflowStatus.Failed,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.AgentWorkflows.AddRange(actionable, failedRerun);
+        await db.SaveChangesAsync();
+
+        var response = Assert.IsType<OkObjectResult>(
+            (await BuildController(db, citizenId, requestId).GetAiPriority(requestId)).Result);
+        var dto = Assert.IsType<AiPriorityResponseDto>(response.Value);
+
+        Assert.Equal(actionable.Id, dto.WorkflowId);
+        Assert.Equal(PlannerWorkflowStatus.AwaitingApproval, dto.WorkflowStatus);
+    }
+
+    [Fact]
+    public async Task ReportsTheModelsOwnPriorityTheRecommendedTeamAndWhyTheModelWasMissing()
+    {
+        await using var db = CreateContext();
+        var citizenId = Guid.NewGuid();
+        var requestId = Guid.NewGuid();
+        var workflow = new AgentWorkflow { ObjectiveType = PlannerWorkflowObjectiveType.HelpRequest, ObjectiveId = requestId, Status = PlannerWorkflowStatus.AwaitingApproval };
+        workflow.Steps.Add(new AgentStep
+        {
+            AgentWorkflowId = workflow.Id,
+            StepNumber = 1,
+            TargetAgent = PlannerAgentType.IncidentAnalysisAgent,
+            CompletedAt = DateTime.UtcNow,
+            ToolResultJson = """{"severity":"Medium","aiAnalysisAvailable":false,"modelPriority":null,"modelUnavailableReason":"Gemini is not configured; the rule-based result stands."}"""
+        });
+        workflow.Steps.Add(new AgentStep
+        {
+            AgentWorkflowId = workflow.Id,
+            StepNumber = 3,
+            TargetAgent = PlannerAgentType.SafetyValidationAgent,
+            ValidationResultJson = """{"passed":true,"recommendedTeam":"Colombo River Unit","recommendedTeamSource":"nearest available team (rule)"}"""
+        });
+        db.AgentWorkflows.Add(workflow);
+        await db.SaveChangesAsync();
+
+        var response = Assert.IsType<OkObjectResult>(
+            (await BuildController(db, citizenId, requestId).GetAiPriority(requestId)).Result);
+        var dto = Assert.IsType<AiPriorityResponseDto>(response.Value);
+
+        Assert.False(dto.AiAnalysisAvailable);
+        Assert.Equal("Gemini is not configured; the rule-based result stands.", dto.UnavailableReason);
+        Assert.Equal("Colombo River Unit", dto.RecommendedTeam);
+        Assert.Equal("nearest available team (rule)", dto.RecommendedTeamSource);
+    }
+
+    [Theory]
+    [InlineData(nameof(HelpRequestsController.GetAiPriority))]
+    [InlineData(nameof(HelpRequestsController.Analyze))]
+    public void AiEndpointsAreForStaffOnly(string action)
+    {
+        var authorize = typeof(HelpRequestsController).GetMethod(action)!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>()
+            .Single();
+
+        Assert.DoesNotContain(nameof(RescueSriLanka.Api.Models.UserRole.Citizen), authorize.Roles ?? string.Empty);
+        Assert.Contains(nameof(RescueSriLanka.Api.Models.UserRole.HelpRequestManager), authorize.Roles ?? string.Empty);
     }
 
     [Fact]
@@ -103,7 +184,7 @@ public sealed class HelpRequestAiPriorityTests
     private static HelpRequestsController BuildController(AppDbContext db, Guid citizenId, Guid requestId)
     {
         var controller = new HelpRequestsController(
-            new FakeHelpRequestService(citizenId, requestId), new UnusedAiAnalysisService(), db, new UnusedPlannerAgentService(), new NoOpActionEmailService(), new NoOpImageStore())
+            new FakeHelpRequestService(citizenId, requestId), db, new UnusedPlannerAgentService(), new NoOpActionEmailService(), new NoOpImageStore(), new RescueSriLanka.Api.Features.ComponentB.Services.EmergencyContactService(db), new RescueSriLanka.Api.Features.ComponentB.Services.HelpRequestMessageService(db, new NoOpActionEmailService()))
         {
             ControllerContext = new ControllerContext
             {
@@ -134,12 +215,6 @@ public sealed class HelpRequestAiPriorityTests
         public Task<HelpRequestResponseDto?> UpdateStatusAsync(Guid id, Guid changedByUserId, UpdateHelpRequestStatusDto dto) => throw new NotSupportedException();
         public Task<List<StatusHistoryDto>> GetHistoryAsync(Guid id) => throw new NotSupportedException();
         public Task<HelpRequestResponseDto?> VerifyAsync(Guid id, Guid verifiedByUserId, VerifyHelpRequestDto dto) => throw new NotSupportedException();
-    }
-
-    private sealed class UnusedAiAnalysisService : IAiAnalysisService
-    {
-        public Task<AiAnalysisResult?> AnalyzeHelpRequestAsync(string type, string description, int urgencyScore) =>
-            throw new NotSupportedException("ai-priority must never call Gemini.");
     }
 
     private sealed class UnusedPlannerAgentService : IPlannerAgentService

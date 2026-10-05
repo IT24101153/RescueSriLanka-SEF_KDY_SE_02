@@ -111,13 +111,16 @@ namespace RescueSriLanka.Api.Features.ComponentB.DTOs
         /// Planner Agent has run at least once for this request.</summary>
         public Guid? WorkflowId { get; set; }
         public PlannerWorkflowStatus? WorkflowStatus { get; set; }
-    }
 
-    public class AnalyzeRequestDraftDto
-    {
-        [JsonConverter(typeof(JsonNumberEnumConverter<HelpRequestType>))]
-        public HelpRequestType Type { get; set; }
-        [Required, StringLength(2000, MinimumLength = 5)]
-        public string Description { get; set; } = string.Empty;
+        /// <summary>The priority the model itself gave, which may differ from the
+        /// rule-based one in <see cref="Priority"/>.</summary>
+        public string? ModelPriority { get; set; }
+
+        /// <summary>The team approving the plan would recommend, and how it was chosen.</summary>
+        public string? RecommendedTeam { get; set; }
+        public string? RecommendedTeamSource { get; set; }
+
+        /// <summary>Why the model's assessment is missing, when it is.</summary>
+        public string? UnavailableReason { get; set; }
     }
 }

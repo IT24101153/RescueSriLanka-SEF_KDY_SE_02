@@ -29,6 +29,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<HelpRequest> HelpRequests => Set<HelpRequest>();
     public DbSet<RequestStatusHistory> RequestStatusHistories => Set<RequestStatusHistory>();
     public DbSet<TravelAdvisory> TravelAdvisories => Set<TravelAdvisory>();
+    public DbSet<EmergencyContact> EmergencyContacts => Set<EmergencyContact>();
+    public DbSet<HelpRequestMessage> HelpRequestMessages => Set<HelpRequestMessage>();
 
     // ---- Agentic AI workflow state (shared by all four agents) ----
     public DbSet<AgentRun> AgentRuns => Set<AgentRun>();
@@ -206,6 +208,27 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             entity.Property(history => history.Notes).HasMaxLength(1000);
             entity.HasIndex(history => new { history.HelpRequestId, history.ChangedAt });
+        });
+
+        modelBuilder.Entity<HelpRequestMessage>(entity =>
+        {
+            entity.Property(message => message.Message).HasMaxLength(1000);
+            entity.HasIndex(message => new { message.HelpRequestId, message.CreatedAt });
+            entity.HasOne<HelpRequest>()
+                .WithMany()
+                .HasForeignKey(message => message.HelpRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EmergencyContact>(entity =>
+        {
+            entity.Property(contact => contact.Name).HasMaxLength(200).IsRequired();
+            entity.Property(contact => contact.PhoneNumber).HasMaxLength(32).IsRequired();
+            entity.Property(contact => contact.SecondaryPhoneNumber).HasMaxLength(32);
+            entity.Property(contact => contact.Description).HasMaxLength(300);
+            entity.Property(contact => contact.District).HasMaxLength(100);
+            entity.Property(contact => contact.Category).HasConversion<string>().HasMaxLength(32);
+            entity.HasIndex(contact => contact.Name).IsUnique();
         });
 
         modelBuilder.Entity<TravelAdvisory>(entity =>

@@ -1,0 +1,30 @@
+.hr-guidance { margin-bottom: 1.75rem; }
+.hr-guidance-hint { margin: -0.3rem 0 0.8rem; color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
+
+.hr-guidance-form { display: flex; flex-direction: column; gap: 0.7rem; padding: 1rem 1.1rem; border-radius: 12px; background: #f7f8fa; border: 1px solid var(--line); }
+.hr-guidance-form select,
+.hr-guidance-form textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; font-size: 0.88rem; padding: 0.5rem 0.65rem; }
+.hr-guidance-form textarea { resize: vertical; line-height: 1.4; }
+.hr-guidance-form label > span { display: block; margin-bottom: 0.3rem; color: var(--muted); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.hr-guidance-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+.hr-guidance-form .hr-guidance-do { color: var(--safe); }
+.hr-guidance-form .hr-guidance-dont { color: var(--danger); }
+.hr-guidance-critical { display: flex; align-items: center; gap: 0.5rem; font-size: 0.84rem; font-weight: 500; }
+.hr-guidance-error { margin: 0; color: var(--danger); font-size: 0.82rem; font-weight: 500; }
+.hr-guidance-send { align-self: flex-start; border: none; border-radius: 8px; background: var(--ink); color: #fff; padding: 0.5rem 1rem; font-size: 0.84rem; font-weight: 600; cursor: pointer; }
+.hr-guidance-send:disabled { opacity: 0.5; cursor: default; }
+
+.hr-guidance-sent { margin-top: 1.2rem; }
+.hr-guidance-empty { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.hr-guidance-msg { margin-bottom: 0.7rem; padding: 0.8rem 0.95rem; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.hr-guidance-msg--critical { border-color: #f3c9c7; background: var(--danger-bg); }
+.hr-guidance-msg header { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 0.75rem; font-weight: 600; }
+.hr-guidance-msg header button { border: none; background: none; color: var(--muted); font-size: 0.75rem; text-decoration: underline; cursor: pointer; }
+.hr-guidance-msg p { margin: 0.45rem 0 0; font-size: 0.9rem; line-height: 1.45; }
+.hr-guidance-msg ul { margin: 0.5rem 0 0; padding-left: 1.1rem; font-size: 0.88rem; line-height: 1.5; }
+.hr-guidance-do-list li::marker { color: var(--safe); }
+.hr-guidance-dont-list li::marker { color: var(--danger); }
+
+@media (max-width: 640px) {
+  .hr-guidance-lists { grid-template-columns: 1fr; }
+}

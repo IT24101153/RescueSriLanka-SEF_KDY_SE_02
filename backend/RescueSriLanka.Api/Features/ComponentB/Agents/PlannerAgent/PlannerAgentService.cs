@@ -62,6 +62,25 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
 
             string objectiveSnapshotJson = await _helpRequestLookup.GetSnapshotJsonAsync(dto.ObjectiveType, dto.ObjectiveId);
 
+            // A re-run must replace the plan awaiting approval, not fail beside it: the
+            // failed twin would be the newest workflow, and the manager would lose the
+            // plan they can still decide on.
+            var replaced = await _db.AgentWorkflows
+                .Where(w => w.ObjectiveType == dto.ObjectiveType && w.ObjectiveId == dto.ObjectiveId &&
+                            w.Status == PlannerWorkflowStatus.AwaitingApproval)
+                .ToListAsync();
+            foreach (var old in replaced)
+            {
+                old.Status = PlannerWorkflowStatus.Superseded;
+                old.UpdatedAt = DateTime.UtcNow;
+                old.FinalOutcomeJson = JsonSerializer.Serialize(new
+                {
+                    outcome = "superseded",
+                    reason = "A newer assessment of this request replaced this plan.",
+                    at = DateTime.UtcNow
+                });
+            }
+
             var workflow = new AgentWorkflow
             {
                 ObjectiveType = dto.ObjectiveType,
@@ -221,11 +240,12 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             }
 
             // ---- Step 3: Validation — deterministic checks, and the team the plan will recommend ----
-            // Prevents double-dispatch: fails if another workflow for the same objective is already awaiting approval or approved.
+            // Prevents double-dispatch: fails if another workflow for the same objective is already approved.
+            // One awaiting approval was superseded above, so it is not a duplicate.
             bool duplicateActiveWorkflow = await _db.AgentWorkflows.AnyAsync(w =>
                 w.Id != workflow.Id &&
                 w.ObjectiveId == workflow.ObjectiveId &&
-                (w.Status == PlannerWorkflowStatus.AwaitingApproval || w.Status == PlannerWorkflowStatus.Approved));
+                w.Status == PlannerWorkflowStatus.Approved);
 
             bool requestStillActionable = request is not null &&
                 request.Status != HelpRequestStatus.Resolved &&
