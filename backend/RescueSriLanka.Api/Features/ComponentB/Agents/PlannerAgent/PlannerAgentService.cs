@@ -299,6 +299,16 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             if (workflow.Status != PlannerWorkflowStatus.AwaitingApproval)
                 throw new InvalidOperationException("Only a validated plan awaiting approval can receive a decision.");
 
+            var recommendedTeam = RecommendedTeamFrom(workflow);
+            var request = await _db.HelpRequests.FindAsync(workflow.ObjectiveId);
+            if (dto.Approved && recommendedTeam is not null &&
+                request is { Status: HelpRequestStatus.Pending } &&
+                request.VerificationStatus != VerificationStatus.Verified)
+            {
+                throw new InvalidOperationException(
+                    "Verify the help request before approving an assignment plan.");
+            }
+
             workflow.ApprovedByUserId = coordinatorUserId;
             workflow.ApprovalDecisionAt = DateTime.UtcNow;
             workflow.ApprovalNotes = dto.Notes;
@@ -319,9 +329,6 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             }
 
             // Approval acts only when there is a team to recommend and the request is still waiting for one.
-            var recommendedTeam = RecommendedTeamFrom(workflow);
-            var request = await _db.HelpRequests.FindAsync(workflow.ObjectiveId);
-
             object outcome;
             bool assigned = false;
             if (request is { Status: HelpRequestStatus.Pending } && recommendedTeam is not null)

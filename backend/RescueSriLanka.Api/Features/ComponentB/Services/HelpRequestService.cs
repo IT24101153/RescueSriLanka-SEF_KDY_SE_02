@@ -137,6 +137,13 @@ namespace RescueSriLanka.Api.Features.ComponentB.Services
             var entity = await _db.HelpRequests.FindAsync(id);
             if (entity is null) return null;
 
+            if (dto.NewStatus == HelpRequestStatus.Assigned &&
+                entity.VerificationStatus != VerificationStatus.Verified)
+            {
+                throw new InvalidOperationException(
+                    "A help request must be verified before it can be assigned.");
+            }
+
             _db.RequestStatusHistories.Add(HelpRequestStatusTransition.Apply(
                 entity, dto.NewStatus, changedByUserId, dto.Notes));
 

@@ -32,7 +32,7 @@ public class ComponentBServiceTests
     public async Task UpdateStatusAsync_AllowsTheDefinedLifecycleAndRecordsHistory()
     {
         await using var context = CreateContext();
-        var request = new HelpRequest { CitizenId = Guid.NewGuid(), Type = HelpRequestType.Medical, EstimatedPeopleCount = 12 };
+        var request = new HelpRequest { CitizenId = Guid.NewGuid(), Type = HelpRequestType.Medical, EstimatedPeopleCount = 12, VerificationStatus = VerificationStatus.Verified };
         context.HelpRequests.Add(request);
         await context.SaveChangesAsync();
         var service = new HelpRequestService(context, NoOpHelpRequestAnalysisQueue.Instance);
@@ -63,6 +63,25 @@ public class ComponentBServiceTests
             request.Id,
             Guid.NewGuid(),
             new UpdateHelpRequestStatusDto { NewStatus = HelpRequestStatus.Resolved }));
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_RequiresVerificationBeforeAssignment()
+    {
+        await using var context = CreateContext();
+        var request = new HelpRequest { CitizenId = Guid.NewGuid(), Type = HelpRequestType.Rescue };
+        context.HelpRequests.Add(request);
+        await context.SaveChangesAsync();
+        var service = new HelpRequestService(context, NoOpHelpRequestAnalysisQueue.Instance);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateStatusAsync(
+            request.Id,
+            Guid.NewGuid(),
+            new UpdateHelpRequestStatusDto { NewStatus = HelpRequestStatus.Assigned }));
+
+        Assert.Contains("verified", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HelpRequestStatus.Pending, request.Status);
+        Assert.Empty(await context.RequestStatusHistories.ToListAsync());
     }
 
     [Fact]
@@ -274,6 +293,8 @@ public class ComponentBServiceTests
         Assert.Equal(4, updated.EstimatedPeopleCount);
         Assert.Equal(4, (await context.HelpRequests.AsNoTracking().SingleAsync()).EstimatedPeopleCount);
 
+        request.VerificationStatus = VerificationStatus.Verified;
+        await context.SaveChangesAsync();
         await service.UpdateStatusAsync(request.Id, Guid.NewGuid(),
             new UpdateHelpRequestStatusDto { NewStatus = HelpRequestStatus.Assigned });
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateAsync(request.Id, citizenId,

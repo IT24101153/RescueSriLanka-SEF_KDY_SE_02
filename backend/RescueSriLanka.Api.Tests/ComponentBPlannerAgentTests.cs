@@ -241,6 +241,8 @@ public class ComponentBPlannerAgentTests
         await using var db = CreateContext();
         var componentD = await SeedTeamsAsync();
         var request = await AddRequest(db, 90);
+        request.VerificationStatus = VerificationStatus.Verified;
+        await db.SaveChangesAsync();
         var model = new ScriptedModel(turn => turn switch
         {
             0 => Call(AssessmentTools.ListAvailableTeams),
@@ -261,6 +263,39 @@ public class ComponentBPlannerAgentTests
         Assert.Contains(CoordinatorTeam, history.Notes);
         Assert.Equal([(request.Id, "Assigned")], emails.HelpRequestStatusChanges);
         Assert.Contains("\"outcome\":\"approved\"", decided!.FinalOutcomeJson);
+    }
+
+    [Fact]
+    public async Task ApprovingAssignmentPlan_RequiresRequestVerification()
+    {
+        await using var db = CreateContext();
+        var componentD = await SeedTeamsAsync();
+        var request = await AddRequest(db, 90);
+        var model = new ScriptedModel(turn => turn switch
+        {
+            0 => Call(AssessmentTools.ListAvailableTeams),
+            _ => Final(CoordinatorTeam)
+        });
+        var (planner, emails) = CreatePlanner(db, model, componentD);
+        var workflow = await planner.TriggerAsync(Trigger(request));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => planner.DecideApprovalAsync(
+            workflow.Id, Guid.NewGuid(), new ApprovalDecisionDto { Approved = true }));
+
+        Assert.Contains("Verify", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(PlannerWorkflowStatus.AwaitingApproval,
+            (await planner.GetByIdAsync(workflow.Id))!.Status);
+        Assert.Equal(HelpRequestStatus.Pending,
+            (await db.HelpRequests.AsNoTracking().SingleAsync(r => r.Id == request.Id)).Status);
+        Assert.Empty(await db.RequestStatusHistories.ToListAsync());
+        Assert.Empty(emails.HelpRequestStatusChanges);
+
+        request.VerificationStatus = VerificationStatus.Verified;
+        await db.SaveChangesAsync();
+        await planner.DecideApprovalAsync(workflow.Id, Guid.NewGuid(), new ApprovalDecisionDto { Approved = true });
+
+        Assert.Equal(HelpRequestStatus.Assigned,
+            (await db.HelpRequests.AsNoTracking().SingleAsync(r => r.Id == request.Id)).Status);
     }
 
     [Fact]

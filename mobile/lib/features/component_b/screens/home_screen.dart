@@ -161,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onTap: () async {
                         await Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const SubmitRequestScreen(),
+                            builder: (_) => SubmitRequestScreen(auth: widget.auth),
                           ),
                         );
                         _loadSummary();

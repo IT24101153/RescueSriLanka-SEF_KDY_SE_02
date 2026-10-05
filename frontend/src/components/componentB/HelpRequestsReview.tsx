@@ -463,7 +463,8 @@ export default function HelpRequestsReview() {
                     <button
                       key={label}
                       className={`hr-segment ${selected.status === idx ? "hr-segment--current" : ""}`}
-                      disabled={updating || !canTransition(selected.status, idx)}
+                      disabled={updating || !canTransition(selected.status, idx) || (idx === 1 && selected.verificationStatus !== 1)}
+                      title={idx === 1 && selected.verificationStatus !== 1 ? "Verify this request before assigning it." : undefined}
                       onClick={() => changeStatus(idx)}
                     >
                       {label}

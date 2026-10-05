@@ -44,12 +44,13 @@ describe("Component B help request review — AI assessment", () => {
     render(<HelpRequestsReview />);
 
     await screen.findByText("Reported by: Nimal Perera · 0771234567");
-    expect(api).toHaveBeenCalledWith("/api/HelpRequests/r-1/ai-priority");
     expect(await screen.findByText("Priority: High")).toBeTruthy();
+    expect(api).toHaveBeenCalledWith("/api/HelpRequests/r-1/ai-priority");
     expect(await screen.findByText("Flooding reported near a known hazard zone.")).toBeTruthy();
     expect(screen.getByText("Dispatch a rescue team promptly.")).toBeTruthy();
     expect(screen.getByText("Looks genuine")).toBeTruthy();
     expect(screen.getByText("This report needs verification")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Assigned" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows a pending state, not an error, when no analysis has completed yet", async () => {
