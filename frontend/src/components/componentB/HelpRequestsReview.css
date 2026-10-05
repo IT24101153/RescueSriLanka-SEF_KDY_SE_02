@@ -498,3 +498,27 @@
 .hr-ai-decision > span { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .hr-ai-decision-actions { display: flex; gap: .5rem; margin-top: .6rem; }
 .hr-ai-decided { margin: .85rem 0 0; padding-top: .85rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; font-weight: 600; }
+
+/* Status flow: where the request is, and the next step as a button. */
+.hr-steps { display: flex; flex-wrap: wrap; gap: 0.35rem 0.5rem; margin: 0 0 0.9rem; padding: 0; list-style: none; }
+.hr-step { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.7rem 0.3rem 0.35rem; border-radius: 999px; background: #f0f0f3; color: var(--muted); font-size: 0.8rem; font-weight: 500; }
+.hr-step-dot { display: inline-flex; align-items: center; justify-content: center; width: 1.3rem; height: 1.3rem; border-radius: 50%; background: #e0e0e6; font-size: 0.7rem; font-weight: 700; }
+.hr-step--done { color: var(--safe); background: var(--safe-bg); }
+.hr-step--done .hr-step-dot { background: var(--safe); color: #fff; }
+.hr-step--current { background: var(--ink); color: #fff; font-weight: 600; }
+.hr-step--current .hr-step-dot { background: var(--brand); color: var(--ink); }
+
+.hr-action-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.hr-action-btn { border: 1.3px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); padding: 0.55rem 1.1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: opacity 0.12s ease, background 0.12s ease; }
+.hr-action-btn:hover:not(:disabled) { background: #f4f4f7; }
+.hr-action-btn--primary { border-color: var(--ink); background: var(--ink); color: #fff; }
+.hr-action-btn--primary:hover:not(:disabled) { background: #2a2d37; }
+.hr-action-btn--danger { border-color: #f3c9c7; background: var(--danger-bg); color: var(--danger); }
+.hr-action-btn--danger:hover:not(:disabled) { background: #fbe3e1; }
+.hr-action-btn:disabled { opacity: 0.45; cursor: default; }
+
+.hr-flow-hint { margin: 0.6rem 0 0; color: var(--caution); font-size: 0.8rem; font-weight: 500; }
+.hr-flow-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.7rem; padding: 0.7rem 0.9rem; border: 1px solid #f3c9c7; border-radius: 10px; background: var(--danger-bg); font-size: 0.85rem; font-weight: 500; }
+.hr-flow-confirm > span { flex: 1 1 14rem; color: var(--danger); }
+.hr-flow-done { margin: 0; color: var(--muted); font-size: 0.85rem; font-weight: 500; }
+.hr-flow-done--cancelled { color: var(--danger); }

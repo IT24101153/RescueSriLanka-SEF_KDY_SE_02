@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using RescueSriLanka.Api.Services.Llm;
 
 namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent;
 
@@ -37,26 +38,30 @@ public sealed class GeminiPlanningModel(HttpClient http, IConfiguration config) 
         };
 
         var attempts = Attempts;
+        var maxWait = GeminiThrottle.MaxWait(config);
         for (var attempt = 1; ; attempt++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(body) };
-            request.Headers.Add("x-goog-api-key", apiKey);
-
-            using var response = await http.SendAsync(request, ct);
+            // The key is shared with every other AI feature, so calls share their throttle too.
+            using var response = await GeminiThrottle.SendAsync(http, () =>
+            {
+                var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(body) };
+                request.Headers.Add("x-goog-api-key", apiKey);
+                return request;
+            }, ct);
             if (response.IsSuccessStatusCode)
             {
                 return ParseTurn(await response.Content.ReadAsStringAsync(ct));
             }
 
-            // Free-tier Gemini returns 429 and 5xx under load. Those are transient, so retry with backoff.
-            var transient = (int)response.StatusCode is 429 or 500 or 502 or 503 or 504;
-            if (!transient || attempt >= attempts)
+            var decision = GeminiThrottle.Decide(
+                response.StatusCode, await response.Content.ReadAsStringAsync(ct),
+                response.Headers.RetryAfter?.Delta, attempt, attempts, maxWait);
+            if (!decision.Retry)
             {
-                throw new HttpRequestException(
-                    $"Gemini returned HTTP {(int)response.StatusCode} after {attempt} attempt(s).");
+                throw new HttpRequestException(decision.Message);
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(600 * Math.Pow(2, attempt - 1)), ct);
+            await Task.Delay(decision.Delay, ct);
         }
     }
 

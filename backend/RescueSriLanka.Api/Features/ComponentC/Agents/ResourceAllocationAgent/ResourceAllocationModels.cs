@@ -11,7 +11,9 @@ public record ResourceAllocationRecommendation(
     bool RequiresApproval,
     string? ResourceName = null,
     string? Unit = null,
-    decimal? AvailableQuantity = null);
+    decimal? AvailableQuantity = null,
+    // "AI" when the model decided, "Rules" when the built-in rules did because the AI was unavailable.
+    string Source = "AI");
 
 public record ResourceAllocationCandidate(
     Guid Id,
@@ -47,7 +49,8 @@ public record ResourceAllocationPlanItem(
     decimal Confidence,
     string Reason,
     IReadOnlyList<string> Warnings,
-    bool RequiresApproval);
+    bool RequiresApproval,
+    string Source = "AI");
 
 internal record PendingRequestInfo(
     Guid Id,

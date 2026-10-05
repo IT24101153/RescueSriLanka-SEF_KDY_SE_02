@@ -128,6 +128,9 @@ public class ResourceAllocationAgentTests
 
         Assert.Equal("NoMatch", result.Decision);
         Assert.True(result.RequiresApproval);
+        Assert.Equal(0, result.Quantity);
+        // No amount is invented without the AI, but the manager is shown the stock that looks relevant.
+        Assert.Contains(result.Warnings, w => w.Contains("Bandages (10 packs)"));
     }
 
     [Fact]
@@ -258,6 +261,190 @@ public class ResourceAllocationAgentTests
         Assert.Equal(requestId, item.HelpRequestId);
         Assert.Equal("NoMatch", item.Decision);
         Assert.True(item.RequiresApproval);
+        Assert.Contains(item.Warnings, w => w.Contains("Bandages (5 packs)"));
+    }
+
+    [Fact]
+    public async Task RecommendAsync_OffersNoStockHintWhenNothingLooksRelevant()
+    {
+        await using var context = CreateContext();
+        var requestId = Guid.NewGuid();
+        context.ResourceHelpRequests.Add(new HelpRequest
+        {
+            Id = requestId, RequesterName = "Requester", ContactNumber = "111", NeedType = "Shelter", Description = "Family needs tents"
+        });
+        context.MedicalSupplies.Add(new MedicalSupply { Id = Guid.NewGuid(), Name = "Bandages", Unit = "packs", QuantityOnHand = 5, LowStockThreshold = 1 });
+        await context.SaveChangesAsync();
+
+        var agent = new ResourceAllocationAgent(
+            context, new FaultyLlmClient(new LlmUnavailableException("quota")), NullLogger<ResourceAllocationAgent>.Instance);
+
+        var result = await agent.RecommendAsync(requestId);
+
+        Assert.Equal("NoMatch", result.Decision);
+        Assert.DoesNotContain(result.Warnings, w => w.Contains("Stock that may fit"));
+    }
+
+    private static readonly LlmUnavailableException QuotaUsedUp = new("Google AI's daily quota for this key is used up.");
+
+    [Fact]
+    public async Task RecommendAsync_UsesTheBuiltInRulesWhenTheAiQuotaIsUsedUp()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Medical", "Bandages - 20 packs");
+        var stock = AddMedical(context, "Bandages", "packs", 50);
+        await context.SaveChangesAsync();
+
+        var result = await NewAgent(context).RecommendAsync(request.Id);
+
+        Assert.Equal("Recommend", result.Decision);
+        Assert.Equal("Rules", result.Source);
+        Assert.Equal(stock.Id, result.ResourceId);
+        Assert.Equal(20, result.Quantity);
+        Assert.Equal(50, result.AvailableQuantity);
+        Assert.True(result.RequiresApproval);
+        // The manager sees the recommendation, not the AI's failure or a notice about it.
+        Assert.DoesNotContain("Built-in rules", result.Reason);
+        Assert.DoesNotContain(result.Warnings, w => w.Contains("quota") || w.Contains("Google AI"));
+    }
+
+    [Fact]
+    public async Task RecommendAsync_RulesNeverRecommendMoreThanIsOnHand()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Medical", "Bandages - 20 packs");
+        AddMedical(context, "Bandages", "packs", 8);
+        await context.SaveChangesAsync();
+
+        var result = await NewAgent(context).RecommendAsync(request.Id);
+
+        Assert.Equal("Recommend", result.Decision);
+        Assert.Equal(8, result.Quantity);
+        Assert.Contains(result.Warnings, w => w.Contains("Only 8 packs available of the 20 requested"));
+    }
+
+    [Fact]
+    public async Task RecommendAsync_RulesWarnWhenTheUnitsDiffer()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Food", "Rice - 10 kg");
+        context.FoodWaterStocks.Add(new FoodWaterStock { Id = Guid.NewGuid(), ItemName = "Rice", Unit = "bags", QuantityOnHand = 40, LowStockThreshold = 5 });
+        await context.SaveChangesAsync();
+
+        var result = await NewAgent(context).RecommendAsync(request.Id);
+
+        Assert.Equal("Recommend", result.Decision);
+        Assert.Contains(result.Warnings, w => w.Contains("in kg but this stock is counted in bags"));
+        Assert.True(result.Confidence < 0.85m);
+    }
+
+    [Fact]
+    public async Task RecommendAsync_RulesDeclineWhenNothingMatchesTheItem()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Medical", "Insulin - 4 vials");
+        AddMedical(context, "Bandages", "packs", 50);
+        await context.SaveChangesAsync();
+
+        var result = await NewAgent(context).RecommendAsync(request.Id);
+
+        Assert.Equal("NoMatch", result.Decision);
+        Assert.Equal("Rules", result.Source);
+        Assert.Equal(0, result.Quantity);
+        Assert.Contains("No available stock matches", result.Reason);
+    }
+
+    [Fact]
+    public async Task RecommendAsync_RulesDeclineWhenNoQuantityIsStated()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Medical", "Need bandages please");
+        AddMedical(context, "Bandages", "packs", 50);
+        await context.SaveChangesAsync();
+
+        var result = await NewAgent(context).RecommendAsync(request.Id);
+
+        Assert.Equal("NoMatch", result.Decision);
+        Assert.Contains("does not state a quantity", result.Reason);
+    }
+
+    [Fact]
+    public async Task RecommendAsync_UsesTheRulesWhenNoKeyIsConfigured()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Medical", "Bandages - 5 packs");
+        AddMedical(context, "Bandages", "packs", 50);
+        await context.SaveChangesAsync();
+
+        var agent = new ResourceAllocationAgent(context, new UnconfiguredLlmClient(), NullLogger<ResourceAllocationAgent>.Instance);
+        var result = await agent.RecommendAsync(request.Id);
+
+        Assert.Equal("Recommend", result.Decision);
+        Assert.Equal("Rules", result.Source);
+        Assert.Equal(5, result.Quantity);
+    }
+
+    [Fact]
+    public async Task PlanAsync_RulesServeMedicalFirstThenOldestAndNeverOverClaimStock()
+    {
+        await using var context = CreateContext();
+        var now = DateTime.UtcNow;
+        var olderFood = AddRequest(context, "Food", "Bandages - 6 packs", now.AddHours(-5));
+        var medicalA = AddRequest(context, "Medical", "Bandages - 8 packs", now.AddHours(-2));
+        var medicalB = AddRequest(context, "Medical", "Bandages - 8 packs", now.AddHours(-1));
+        var stock = AddMedical(context, "Bandages", "packs", 10);
+        await context.SaveChangesAsync();
+
+        var plan = await NewAgent(context).PlanAsync();
+
+        // Medical outranks the older food request; within medical the older one goes first.
+        Assert.Equal([medicalA.Id, medicalB.Id, olderFood.Id], plan.Items.Select(i => i.HelpRequestId));
+        Assert.Equal([8m, 2m, 0m], plan.Items.Select(i => i.Quantity));
+        Assert.Equal(["Recommend", "Recommend", "NoMatch"], plan.Items.Select(i => i.Decision));
+        Assert.All(plan.Items, item => Assert.Equal("Rules", item.Source));
+        Assert.True(plan.Items.Where(i => i.ResourceId == stock.Id).Select(i => i.Quantity).Aggregate(0m, (a, b) => a + b) <= 10m);
+        Assert.Equal("2 of 3 pending request(s) matched to available stock.", plan.Summary);
+    }
+
+    [Fact]
+    public async Task RecommendAsync_ARealAiAnswerIsStillMarkedAsTheAis()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Medical", "Bandages - 5 packs");
+        var stock = AddMedical(context, "Bandages", "packs", 50);
+        await context.SaveChangesAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            decision = "Recommend", resourceId = stock.Id, resourceType = "MedicalSupply", quantity = 5,
+            confidence = 0.9, reason = "Matches.", warnings = Array.Empty<string>(), requiresApproval = true
+        });
+
+        var agent = new ResourceAllocationAgent(context, new FakeLlmClient(json), NullLogger<ResourceAllocationAgent>.Instance);
+        var result = await agent.RecommendAsync(request.Id);
+
+        Assert.Equal("Recommend", result.Decision);
+        Assert.Equal("AI", result.Source);
+    }
+
+    private static ResourceAllocationAgent NewAgent(AppDbContext context) =>
+        new(context, new FaultyLlmClient(QuotaUsedUp), NullLogger<ResourceAllocationAgent>.Instance);
+
+    private static HelpRequest AddRequest(AppDbContext context, string needType, string description, DateTime? createdAt = null)
+    {
+        var request = new HelpRequest
+        {
+            Id = Guid.NewGuid(), RequesterName = "Requester", ContactNumber = "111",
+            NeedType = needType, Description = description, CreatedAtUtc = createdAt ?? DateTime.UtcNow
+        };
+        context.ResourceHelpRequests.Add(request);
+        return request;
+    }
+
+    private static MedicalSupply AddMedical(AppDbContext context, string name, string unit, int quantity)
+    {
+        var supply = new MedicalSupply { Id = Guid.NewGuid(), Name = name, Unit = unit, QuantityOnHand = quantity, LowStockThreshold = 1 };
+        context.MedicalSupplies.Add(supply);
+        return supply;
     }
 
     private static ResourceAllocation Allocation(Guid resourceId, decimal quantity, DateTime allocatedAtUtc) => new()

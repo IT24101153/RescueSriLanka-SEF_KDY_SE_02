@@ -107,21 +107,22 @@ public class GoogleAiClient(
             : 3;
 
         HttpResponseMessage? response = null;
+        var maxWait = GeminiThrottle.MaxWait(configuration);
 
         LastAttempts = 0;
         for (var attempt = 1; attempt <= attempts; attempt++)
         {
             LastAttempts = attempt;
-            using var request = new HttpRequestMessage(HttpMethod.Post, url)
-            {
-                Content = JsonContent.Create(body)
-            };
-            // Header rather than a query string, so the key never lands in logs.
-            request.Headers.Add("x-goog-api-key", ApiKey);
 
             try
             {
-                response = await http.SendAsync(request, ct);
+                // Header rather than a query string, so the key never lands in logs.
+                response = await GeminiThrottle.SendAsync(http, () =>
+                {
+                    var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(body) };
+                    request.Headers.Add("x-goog-api-key", ApiKey);
+                    return request;
+                }, ct);
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {
@@ -131,21 +132,21 @@ public class GoogleAiClient(
             if (response.IsSuccessStatusCode) break;
 
             var lastDetail = await response.Content.ReadAsStringAsync(ct);
-            var transient = (int)response.StatusCode is 429 or 500 or 502 or 503 or 504;
+            var decision = GeminiThrottle.Decide(
+                response.StatusCode, lastDetail, response.Headers.RetryAfter?.Delta, attempt, attempts, maxWait);
 
-            if (!transient || attempt == attempts)
+            if (!decision.Retry)
             {
                 logger.LogWarning(
-                    "Google AI returned {Status}: {Detail}", (int)response.StatusCode, lastDetail);
-                throw new LlmUnavailableException(
-                    $"Google AI returned HTTP {(int)response.StatusCode} after {attempt} attempt(s).");
+                    "Google AI returned {Status} on attempt {Attempt}: {Detail}",
+                    (int)response.StatusCode, attempt, lastDetail);
+                throw new LlmUnavailableException(decision.Message);
             }
 
-            var delay = TimeSpan.FromMilliseconds(600 * Math.Pow(2, attempt - 1));
             logger.LogInformation(
                 "Google AI {Status} (attempt {Attempt}/{Total}); retrying in {Delay}ms.",
-                (int)response.StatusCode, attempt, attempts, delay.TotalMilliseconds);
-            await Task.Delay(delay, ct);
+                (int)response.StatusCode, attempt, attempts, decision.Delay.TotalMilliseconds);
+            await Task.Delay(decision.Delay, ct);
         }
 
         if (response is null || !response.IsSuccessStatusCode)

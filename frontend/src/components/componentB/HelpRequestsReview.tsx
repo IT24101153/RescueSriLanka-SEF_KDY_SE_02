@@ -68,6 +68,16 @@ interface AiAssessmentDto {
   unavailableReason: string | null;
 }
 
+// What each next step is called on its button; the order here is the order they appear.
+const ACTION_LABELS: [number, string][] = [
+  [1, "Assign"],
+  [2, "Start work"],
+  [3, "Mark resolved"],
+  [4, "Cancel request"],
+];
+// The steps a request moves through; Cancelled is a way out, not a step.
+const PROGRESS_STEPS = [0, 1, 2, 3];
+
 function canTransition(current: number, next: number): boolean {
   return (
     (current === 0 && (next === 1 || next === 4)) ||
@@ -110,6 +120,7 @@ export default function HelpRequestsReview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [aiReview, setAiReview] = useState<AiAssessmentDto | null>(null);
   const [aiReviewing, setAiReviewing] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -179,6 +190,7 @@ export default function HelpRequestsReview() {
     loadHistory(selectedId);
     loadAiAssessment(selectedId);
     setAiError(null);
+    setConfirmingCancel(false);
   }, [selectedId, loadHistory, loadAiAssessment]);
 
   const filteredRequests = requests
@@ -200,6 +212,7 @@ export default function HelpRequestsReview() {
   async function changeStatus(newStatusIndex: number) {
     if (!selected) return;
     setUpdating(true);
+    setConfirmingCancel(false);
     try {
       const res = await authFetch(`/api/HelpRequests/${selected.id}/status`, {
         method: "PATCH",
@@ -478,20 +491,61 @@ export default function HelpRequestsReview() {
               </div>
 
               <div className="hr-actions">
-                <span className="hr-actions-label">Set status</span>
-                <div className="hr-segmented">
-                  {STATUS_LABELS.map((label, idx) => (
-                    <button
-                      key={label}
-                      className={`hr-segment ${selected.status === idx ? "hr-segment--current" : ""}`}
-                      disabled={updating || !canTransition(selected.status, idx) || (idx === 1 && selected.verificationStatus !== 1)}
-                      title={idx === 1 && selected.verificationStatus !== 1 ? "Verify this request before assigning it." : undefined}
-                      onClick={() => changeStatus(idx)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <span className="hr-actions-label">Status</span>
+                {selected.status === 4 ? (
+                  <p className="hr-flow-done hr-flow-done--cancelled">This request was cancelled.</p>
+                ) : (
+                  <ol className="hr-steps" aria-label="Request progress">
+                    {PROGRESS_STEPS.map((step) => (
+                      <li
+                        key={step}
+                        className={`hr-step ${step < selected.status ? "hr-step--done" : ""} ${step === selected.status ? "hr-step--current" : ""}`}
+                        aria-current={step === selected.status ? "step" : undefined}
+                      >
+                        <span className="hr-step-dot">{step < selected.status ? <CheckIcon /> : step + 1}</span>
+                        {STATUS_LABELS[step]}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+
+                {ACTION_LABELS.some(([status]) => canTransition(selected.status, status)) ? (
+                  <>
+                    <div className="hr-action-row">
+                      {ACTION_LABELS.filter(([status]) => canTransition(selected.status, status)).map(([status, label]) => {
+                        const isCancel = status === 4;
+                        const needsVerification = status === 1 && selected.verificationStatus !== 1;
+                        return (
+                          <button
+                            key={status}
+                            type="button"
+                            className={`hr-action-btn ${isCancel ? "hr-action-btn--danger" : "hr-action-btn--primary"}`}
+                            disabled={updating || needsVerification || (isCancel && confirmingCancel)}
+                            onClick={() => (isCancel ? setConfirmingCancel(true) : changeStatus(status))}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selected.status === 0 && selected.verificationStatus !== 1 && (
+                      <p className="hr-flow-hint">Verify this request before assigning it.</p>
+                    )}
+                    {confirmingCancel && (
+                      <div className="hr-flow-confirm" role="alert">
+                        <span>Cancel this request? The citizen will be told.</span>
+                        <button type="button" className="hr-action-btn hr-action-btn--danger" disabled={updating} onClick={() => changeStatus(4)}>
+                          Yes, cancel it
+                        </button>
+                        <button type="button" className="hr-action-btn" disabled={updating} onClick={() => setConfirmingCancel(false)}>
+                          Keep it
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  selected.status === 3 && <p className="hr-flow-done">This request is resolved. No further action is needed.</p>
+                )}
               </div>
 
               <HelpRequestGuidance key={selected.id} requestId={selected.id} />

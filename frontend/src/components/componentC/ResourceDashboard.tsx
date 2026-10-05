@@ -1048,7 +1048,6 @@ function ResourceDashboard() {
                         {recommendation.result.decision === 'Recommend' && <span>{recommendation.result.availableQuantity} {recommendation.result.unit} currently available</span>}
                         <span>{recommendation.result.reason}</span>
                         {recommendation.result.warnings.map((warning) => <span key={warning}>{warning}</span>)}
-                        <span>Manager approval required before allocation.</span>
                       </div>
                     )}
                     {request.status === 'Fulfilled' && <span className="fulfilled-label">Sent</span>}

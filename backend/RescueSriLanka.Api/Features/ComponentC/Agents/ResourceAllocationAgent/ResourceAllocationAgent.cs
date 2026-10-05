@@ -98,7 +98,7 @@ public sealed class ResourceAllocationAgent(
 
         if (!llm.IsConfigured)
         {
-            return NoMatch("Gemini is not configured, so manager review is required.", "Gemini API key is not configured.");
+            return RulesRecommendation(request, candidates);
         }
 
         var prompt = $$"""
@@ -116,7 +116,7 @@ public sealed class ResourceAllocationAgent(
         catch (Exception exception) when (exception is LlmUnavailableException or JsonException)
         {
             logger.LogWarning(exception, "Gemini allocation recommendation failed for request {RequestId}.", helpRequestId);
-            return NoMatch("The AI recommendation could not be completed; review the request manually.", exception.Message);
+            return RulesRecommendation(request, candidates);
         }
     }
 
@@ -144,10 +144,7 @@ public sealed class ResourceAllocationAgent(
 
         if (!llm.IsConfigured)
         {
-            return FallbackPlan(
-                generatedAt, pendingRequests,
-                "Gemini is not configured, so manager review is required.",
-                "Gemini API key is not configured.");
+            return RulesPlan(generatedAt, pendingRequests, candidates);
         }
 
         var pendingInfos = pendingRequests
@@ -168,7 +165,7 @@ public sealed class ResourceAllocationAgent(
         catch (Exception exception) when (exception is LlmUnavailableException or JsonException)
         {
             logger.LogWarning(exception, "Gemini allocation plan failed.");
-            return FallbackPlan(generatedAt, pendingRequests, "The AI plan could not be completed; review requests manually.", exception.Message);
+            return RulesPlan(generatedAt, pendingRequests, candidates);
         }
     }
 
@@ -212,12 +209,91 @@ public sealed class ResourceAllocationAgent(
             AvailableQuantity = candidate.QuantityOnHand,
             Confidence = Math.Clamp(recommendation.Confidence, 0, 1),
             RequiresApproval = true,
-            Warnings = recommendation.Warnings ?? []
+            Warnings = recommendation.Warnings ?? [],
+            Source = "AI"
         };
     }
 
-    private static ResourceAllocationRecommendation NoMatch(string reason, string warning) =>
-        new("NoMatch", null, null, 0, 0, reason, [warning], true);
+    // The AI could not answer, so the built-in rules do. Why the AI failed is in the server log; the manager sees the result.
+    private static ResourceAllocationRecommendation RulesRecommendation(
+        HelpRequest request, IReadOnlyList<ResourceAllocationCandidate> candidates)
+    {
+        var result = ResourceAllocationRules.Recommend(request, candidates);
+        List<string> warnings = [.. result.Warnings];
+        if (result.Decision != "Recommend" && StockHint(request, candidates) is { } hint) warnings.Add(hint);
+        return result with { Warnings = warnings };
+    }
+
+    // Same rules across every pending request, in a fixed order, taking stock off as it is claimed.
+    private static ResourceAllocationPlan RulesPlan(
+        DateTime generatedAtUtc,
+        IReadOnlyList<HelpRequest> pendingRequests,
+        IReadOnlyList<ResourceAllocationCandidate> candidates)
+    {
+        var remaining = candidates.ToDictionary(candidate => candidate.Id, candidate => candidate.QuantityOnHand);
+        var items = new List<ResourceAllocationPlanItem>();
+
+        foreach (var request in pendingRequests
+            .OrderByDescending(ResourceAllocationRules.Urgency)
+            .ThenBy(request => request.CreatedAtUtc))
+        {
+            var result = ResourceAllocationRules.Recommend(request, candidates, remaining);
+            var priority = items.Count + 1;
+
+            if (result.Decision == "Recommend")
+            {
+                remaining[result.ResourceId!.Value] -= result.Quantity;
+                items.Add(new ResourceAllocationPlanItem(
+                    request.Id, request.NeedType, request.RequesterName, priority, "Recommend",
+                    result.ResourceId, result.ResourceType, result.ResourceName, result.Unit,
+                    result.Quantity, result.AvailableQuantity, result.Confidence,
+                    result.Reason, result.Warnings, true, ResourceAllocationRules.Source));
+                continue;
+            }
+
+            List<string> warnings = [.. result.Warnings];
+            if (StockHint(request, candidates) is { } hint) warnings.Add(hint);
+            items.Add(NoMatchPlanItem(request, priority, result.Reason, warnings, ResourceAllocationRules.Source));
+        }
+
+        var matched = items.Count(item => item.Decision == "Recommend");
+        return new ResourceAllocationPlan(
+            generatedAtUtc,
+            $"{matched} of {items.Count} pending request(s) matched to available stock.",
+            items);
+    }
+
+    private static ResourceAllocationRecommendation NoMatch(string reason, string warning, string? stockHint = null) =>
+        new("NoMatch", null, null, 0, 0, reason, stockHint is null ? [warning] : [warning, stockHint], true);
+
+    // With no AI there is no safe way to pick an amount: a request does not state one, so any number
+    // would be invented. What can be said without it is which stock looks relevant, for the manager to judge.
+    private static string? StockHint(HelpRequest request, IReadOnlyList<ResourceAllocationCandidate> candidates)
+    {
+        var words = $"{request.NeedType} {request.Description}"
+            .Split([' ', ',', '.', ';', ':', '/', '-', '(', ')', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(word => word.ToLowerInvariant())
+            .Where(word => word.Length >= 4)
+            .Distinct()
+            .ToList();
+
+        var matches = candidates
+            .Select(candidate =>
+            {
+                var text = $"{candidate.Name} {candidate.Category} {candidate.ResourceType}".ToLowerInvariant();
+                return (Candidate: candidate, Score: words.Count(word => text.Contains(word)));
+            })
+            .Where(match => match.Score > 0)
+            .OrderByDescending(match => match.Score)
+            .ThenByDescending(match => match.Candidate.QuantityOnHand)
+            .Take(3)
+            .Select(match => $"{match.Candidate.Name} ({match.Candidate.QuantityOnHand:0.##} {match.Candidate.Unit})")
+            .ToList();
+
+        return matches.Count == 0
+            ? null
+            : $"Stock that may fit, with no quantity suggested without the AI: {string.Join("; ", matches)}.";
+    }
 
     // The model can rank requests and propose a resource per request, but it
     // cannot be trusted to correctly subtract shared stock across multiple
@@ -305,12 +381,17 @@ public sealed class ResourceAllocationAgent(
     }
 
     private static ResourceAllocationPlanItem NoMatchPlanItem(
-        HelpRequest request, int priority, string reason, IReadOnlyList<string> warnings) =>
+        HelpRequest request, int priority, string reason, IReadOnlyList<string> warnings, string source = "AI") =>
         new(request.Id, request.NeedType, request.RequesterName, priority, "NoMatch",
-            null, null, null, null, 0, null, 0, reason, warnings, true);
+            null, null, null, null, 0, null, 0, reason, warnings, true, source);
 
     private static ResourceAllocationPlan FallbackPlan(
-        DateTime generatedAtUtc, IReadOnlyList<HelpRequest> pendingRequests, string reason, string warning) =>
+        DateTime generatedAtUtc, IReadOnlyList<HelpRequest> pendingRequests, string reason, string warning,
+        IReadOnlyList<ResourceAllocationCandidate>? candidates = null) =>
         new(generatedAtUtc, reason, [.. pendingRequests
-            .Select((request, index) => NoMatchPlanItem(request, index + 1, reason, [warning]))]);
+            .Select((request, index) =>
+            {
+                var hint = candidates is null ? null : StockHint(request, candidates);
+                return NoMatchPlanItem(request, index + 1, reason, hint is null ? [warning] : [warning, hint]);
+            })]);
 }
