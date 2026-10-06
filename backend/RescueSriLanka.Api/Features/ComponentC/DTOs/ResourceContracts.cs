@@ -6,37 +6,37 @@ namespace RescueSriLanka.Api.Features.ComponentC.DTOs;
 public record CreateMedicalSupplyRequest(
     string Name,
     string Unit,
-    [property: Range(0, 1000000000)] int QuantityOnHand,
+    [Range(0, 1000000000)] int QuantityOnHand,
     int LowStockThreshold);
 
 public record CreateFoodWaterStockRequest(
     string ItemName,
     string Unit,
-    [property: Range(0, 1000000000)] decimal QuantityOnHand,
+    [Range(0, 1000000000)] decimal QuantityOnHand,
     decimal LowStockThreshold);
 
 public record UpdateMedicalSupplyRequest(
     string Name,
     string Unit,
-    [property: Range(0, 1000000000)] int QuantityOnHand,
+    [Range(0, 1000000000)] int QuantityOnHand,
     int LowStockThreshold);
 
 public record UpdateFoodWaterStockRequest(
     string ItemName,
     string Unit,
-    [property: Range(0, 1000000000)] decimal QuantityOnHand,
+    [Range(0, 1000000000)] decimal QuantityOnHand,
     decimal LowStockThreshold);
 
 public record AllocateResourceRequest(
     string ResourceType,
     Guid ResourceId,
-    [property: Range(0.01, 1000000000)] decimal Quantity,
+    [Range(0.01, 1000000000)] decimal Quantity,
     Guid? HelpRequestId,
     Guid? IncidentId);
 
 public record MatchResourceRequest(
     string ResourceType,
-    [property: Range(0.01, 1000000000)] decimal Quantity,
+    [Range(0.01, 1000000000)] decimal Quantity,
     Guid? HelpRequestId,
     Guid? IncidentId);
 
@@ -59,12 +59,12 @@ public record ResourceAlertResponse(
     string Unit);
 
 public record CreateHelpRequestRequest(
-    [property: Required, PersonName] string RequesterName,
-    [property: Required, SriLankaPhone] string ContactNumber,
+    [Required, PersonName] string RequesterName,
+    [Required, SriLankaPhone] string ContactNumber,
     string NeedType,
     string Description,
-    [property: Range(-90, 90)] decimal? Latitude,
-    [property: Range(-180, 180)] decimal? Longitude);
+    [Range(-90, 90)] decimal? Latitude,
+    [Range(-180, 180)] decimal? Longitude);
 
 public record HelpRequestResponse(
     Guid Id,
@@ -82,17 +82,17 @@ public record HelpRequestResponse(
 public record UpdateHelpRequestStatusRequest(string Status);
 
 public record CreateDonationRequest(
-    [property: Required, PersonName] string DonorName,
-    [property: Required, SriLankaPhone] string ContactNumber,
+    [Required, PersonName] string DonorName,
+    [Required, SriLankaPhone] string ContactNumber,
     string DonationType,
-    [property: Range(0.01, 1000000000)] decimal Quantity,
+    [Range(0.01, 1000000000)] decimal Quantity,
     string Unit,
     string? Notes);
 
 public record ResourceSubmissionItem(
     string Category,
     string ItemName,
-    [property: Range(0.01, 1000000000)] decimal Quantity,
+    [Range(0.01, 1000000000)] decimal Quantity,
     string Unit);
 
 public record CreateHelpRequestsBatchRequest(List<ResourceSubmissionItem> Items);
@@ -129,5 +129,5 @@ public record CreateManagedSupplyRequest(
     string Category,
     string Name,
     string Unit,
-    [property: Range(0, 1000000000)] decimal QuantityOnHand,
+    [Range(0, 1000000000)] decimal QuantityOnHand,
     decimal LowStockThreshold);
