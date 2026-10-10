@@ -24,7 +24,6 @@ type ResourceType = 'medical' | 'food' | 'managed'
 type Page = 'overview' | 'supplies' | 'allocations' | 'donate' | 'history'
 type SupplySource = { id: string; type: ResourceType }
 type DeleteRequest = { type: ResourceType; id: string; label: string; duplicates: SupplySource[] }
-type FulfillmentRequest = { id: string; supplyKey: string; quantity: string }
 type AllocationRecommendation = { decision: string; resourceId: string | null; resourceType: string | null; quantity: number; confidence: number; reason: string; warnings: string[]; requiresApproval: boolean; resourceName: string | null; unit: string | null; availableQuantity: number | null }
 type StockForecastItem = { resourceType: string; resourceId: string; name: string; unit: string; quantityOnHand: number; lowStockThreshold: number | null; usedInLast30Days: number; averageDailyUse: number; estimatedDaysRemaining: number | null; riskLevel: 'Critical' | 'Watch' | 'Stable'; suggestedAction: string }
 type StockForecast = { windowDays: number; generatedAtUtc: string; summary: string; items: StockForecastItem[] }
@@ -40,6 +39,33 @@ const MANAGED_SUPPLY_ITEMS: Record<string, string[]> = {
   Other: ['Other'],
 }
 const SUPPLY_CATEGORIES = ['Food', 'Water', 'Medical', 'Sanitary products', 'Hygiene items', 'Other'] as const
+
+/**
+ * Units each category may be counted in — chosen from a list, never typed.
+ *
+ * Stock is consolidated by item *and* unit, so "5 kg" and "5 kgs" would sit in
+ * two inventory rows that never add up. Must stay in step with _resourceUnits
+ * in the Flutter app, which offers citizens the same choices.
+ */
+const SUPPLY_UNITS: Record<string, string[]> = {
+  Food: ['kg', 'bags', 'packs', 'boxes'],
+  Water: ['litres', 'bottles', 'packs', 'containers'],
+  Medical: ['packs', 'boxes', 'kits', 'pieces', 'bottles'],
+  'Sanitary products': ['packs', 'boxes', 'pieces'],
+  'Hygiene items': ['packs', 'boxes', 'pieces', 'bottles'],
+  Other: ['packs', 'boxes', 'pieces', 'kg', 'litres'],
+}
+
+/**
+ * The options to offer for a category, keeping whatever unit a row already holds
+ * even when it predates this list — editing an old "sets" row must not silently
+ * rewrite its unit to the first option in the dropdown.
+ */
+function unitOptionsFor(category: string, current: string): string[] {
+  const options = SUPPLY_UNITS[category] ?? SUPPLY_UNITS.Other
+  const existing = current.trim()
+  return existing && !options.includes(existing) ? [existing, ...options] : options
+}
 const HISTORY_RETENTION_DAYS = 7
 const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000
 
@@ -128,7 +154,6 @@ function ResourceDashboard() {
   const [page, setPage] = useState<Page>('overview')
   const [historyClock, setHistoryClock] = useState(Date.now())
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null)
-  const [fulfillmentRequest, setFulfillmentRequest] = useState<FulfillmentRequest | null>(null)
   const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null)
   const [sendingRequestId, setSendingRequestId] = useState<string | null>(null)
   const [requestActionError, setRequestActionError] = useState<{ id: string; message: string } | null>(null)
@@ -162,7 +187,12 @@ function ResourceDashboard() {
       const now = Date.now()
       const requestKeys = new Set<string>()
       const donationKeys = new Set<string>()
-      const processedRequests = helpRequestData.filter((request) => request.status !== 'Pending')
+      // An Accepted request is still live work: it is waiting for the manager to
+      // send resources, which is the step that deducts stock. Only Rejected and
+      // Fulfilled requests are finished, so only they belong in history.
+      const processedRequests = helpRequestData.filter(
+        (request) => request.status === 'Rejected' || request.status === 'Fulfilled',
+      )
       const processedDonations = donationData.filter((donation) => donation.status !== 'PendingReview')
       for (const request of processedRequests) {
         const key = `request:${request.id}`
@@ -196,7 +226,12 @@ function ResourceDashboard() {
         if (new Date(processedAt).getTime() > now) historyDates[key] = new Date(now).toISOString()
       }
       rememberHistoryDates(historyDates)
-      setHelpRequests(helpRequestData.filter((request) => request.status === 'Pending'))
+      // Pending needs a decision, Accepted needs resources sending. Both have to
+      // stay in the working list: dropping Accepted here is what used to make the
+      // "Send resources" button unreachable, so stock was never deducted.
+      setHelpRequests(helpRequestData.filter(
+        (request) => request.status === 'Pending' || request.status === 'Accepted',
+      ))
       setDonations(donationData.filter((donation) => donation.status === 'PendingReview'))
       setRequestHistory(retainedRequests)
       setDonationHistory(retainedDonations)
@@ -225,7 +260,7 @@ function ResourceDashboard() {
       return
     }
     if (!unit.trim()) {
-      setFormError('Enter a unit.')
+      setFormError('Select a unit.')
       return
     }
     if (!quantityText.trim() || !Number.isFinite(quantity) || quantity <= 0) {
@@ -308,6 +343,9 @@ function ResourceDashboard() {
     name: 'name' in item ? item.name : item.itemName,
     percentage: Math.min(100, Math.round((Number(item.quantityOnHand) / Math.max(1, Number(item.quantityOnHand) + Number(item.lowStockThreshold))) * 100)),
   }))
+  // The working list holds both Pending and Accepted requests, so the panels that
+  // speak only about undecided ones narrow it down themselves.
+  const pendingRequests = helpRequests.filter((request) => request.status === 'Pending')
   const availableSupplies = [
     ...medicalSupplies
       .filter((supply) => supply.quantityOnHand > 0)
@@ -364,15 +402,9 @@ function ResourceDashboard() {
     const category = SUPPLY_CATEGORIES.find((value) => value.toLowerCase() === supply.category.toLowerCase()) ?? 'Other'
     addInventoryRow(category, { id: supply.id, type: 'managed' }, supply.name, supply.unit, supply.quantityOnHand)
   }
-  const preferredSupplyKey = (needType: string) => {
-    const need = needType.toLowerCase()
-    const preferred = need.includes('medical')
-      ? availableSupplies.find((supply) => supply.resourceType === 'MedicalSupply')
-      : need.includes('food') || need.includes('water')
-        ? availableSupplies.find((supply) => supply.resourceType === 'FoodWaterStock')
-        : undefined
-    return (preferred ?? availableSupplies[0])?.key ?? ''
-  }
+  /** Accepting runs two calls back to back, so both count as the row being busy. */
+  const busyWith = (id: string) => updatingRequestId === id || sendingRequestId === id
+
   const donationGroups = Object.entries(donations.reduce<Record<string, Donation[]>>((groups, donation) => {
     const key = donation.submissionId ?? `single:${donation.id}`
     if (!groups[key]) groups[key] = []
@@ -380,6 +412,16 @@ function ResourceDashboard() {
     return groups
   }, {})).map(([key, items]) => ({ key, items }))
   const historyDates = readHistoryDates()
+
+  // New resources are always added as 'managed', so the other two types only
+  // come up when editing a row from the older medical / food-water tables. Those
+  // already carry a unit, which unitOptionsFor keeps at the top of the list.
+  // Food-water stock spans both food and water, so it gets the mixed list.
+  const currentUnit = resourceType === 'medical' ? supplyForm.unit : stockForm.unit
+  const unitOptions = unitOptionsFor(
+    resourceType === 'managed' ? managedCategory : resourceType === 'medical' ? 'Medical' : 'Other',
+    currentUnit,
+  )
 
   const openResourceForm = (type: ResourceType) => {
     setFormError('')
@@ -450,20 +492,25 @@ function ResourceDashboard() {
     }
   }
 
-  const updateRequestStatus = async (id: string, status: 'Accepted' | 'Rejected') => {
+  const setRequestStatus = async (id: string, status: 'Accepted' | 'Rejected') => {
+    const response = await fetch(`${API_BASE}/api/resources/help-requests/${id}/status`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ status }),
+    })
+    if (!response.ok) {
+      const result = await response.json().catch(() => null) as { error?: string } | null
+      throw new Error(result?.error ?? `Unable to update the request (HTTP ${response.status}).`)
+    }
+  }
+
+  const rejectRequest = async (id: string) => {
     setError('')
     setRequestActionError(null)
     setUpdatingRequestId(id)
     try {
-      const response = await fetch(`${API_BASE}/api/resources/help-requests/${id}/status`, {
-        method: 'PATCH',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ status }),
-      })
-      if (!response.ok) {
-        const result = await response.json().catch(() => null) as { error?: string } | null
-        throw new Error(result?.error ?? `Unable to update the request (HTTP ${response.status}).`)
-      }
+      await setRequestStatus(id, 'Rejected')
+      // Rejecting finishes the request, so it moves to history.
       rememberHistoryDates({ [`request:${id}`]: new Date().toISOString() })
       setHelpRequests((current) => current.filter((request) => request.id !== id))
       await loadResources()
@@ -477,18 +524,61 @@ function ResourceDashboard() {
     }
   }
 
-  const getAllocationRecommendation = async (id: string) => {
+  /**
+   * Accepting a request *is* sending it: one click accepts and allocates, so
+   * nobody is asked a second time to do the thing they just asked for.
+   *
+   * The acceptance is recorded first, which is what tells the citizen they were
+   * accepted. If the allocation then cannot go through — no matching stock, no
+   * readable amount, a network failure — the request stays Accepted and visible
+   * with the reason, so it can be sent once that is sorted out. It must never
+   * disappear half-done: that is the state nothing was deducted from.
+   */
+  const acceptRequest = async (request: ResourceHelpRequest) => {
+    setError('')
     setRequestActionError(null)
+    setUpdatingRequestId(request.id)
+    try {
+      await setRequestStatus(request.id, 'Accepted')
+      setHelpRequests((current) => current.map((row) =>
+        row.id === request.id ? { ...row, status: 'Accepted' } : row,
+      ))
+    } catch (statusError) {
+      setRequestActionError({
+        id: request.id,
+        message: statusError instanceof Error ? statusError.message : 'Unable to update the request.',
+      })
+      setUpdatingRequestId(null)
+      return
+    }
+    setUpdatingRequestId(null)
+    await sendResources(request)
+  }
+
+  /**
+   * Asks the allocation agent what to send for one request, and remembers the
+   * answer so the row can show it and the send can act on it without asking
+   * twice. Throws, so a caller mid-send can report why it stopped.
+   */
+  const fetchRecommendation = async (id: string): Promise<AllocationRecommendation> => {
     setLoadingRecommendationId(id)
     try {
       const response = await fetch(`${API_BASE}/api/resources/help-requests/${id}/allocation-recommendation`, { method: 'POST', headers: authHeaders() })
       const result = await response.json().catch(() => null) as AllocationRecommendation | { error?: string } | null
       if (!response.ok) throw new Error((result && 'error' in result ? result.error : undefined) ?? `Unable to get an allocation recommendation (HTTP ${response.status}).`)
       setRecommendation({ id, result: result as AllocationRecommendation })
-    } catch (recommendationError) {
-      setRequestActionError({ id, message: recommendationError instanceof Error ? recommendationError.message : 'Unable to get an allocation recommendation.' })
+      return result as AllocationRecommendation
     } finally {
       setLoadingRecommendationId(null)
+    }
+  }
+
+  const getAllocationRecommendation = async (id: string) => {
+    setRequestActionError(null)
+    try {
+      await fetchRecommendation(id)
+    } catch (recommendationError) {
+      setRequestActionError({ id, message: recommendationError instanceof Error ? recommendationError.message : 'Unable to get an allocation recommendation.' })
     }
   }
 
@@ -555,44 +645,38 @@ function ResourceDashboard() {
     }
   }
 
-  const fulfillRequest = async () => {
-    if (!fulfillmentRequest) return
-    const quantityText = fulfillmentRequest.quantity.trim()
-    const quantity = Number(quantityText)
-    if (!fulfillmentRequest.supplyKey) {
-      setRequestActionError({ id: fulfillmentRequest.id, message: 'Select an available supply.' })
-      return
-    }
-    if (!quantityText || !Number.isFinite(quantity) || quantity <= 0) {
-      setRequestActionError({ id: fulfillmentRequest.id, message: 'Enter a quantity greater than zero.' })
-      return
-    }
-    const [resourceType, resourceId] = fulfillmentRequest.supplyKey.split(':')
-    if (!resourceType || !resourceId) {
-      setRequestActionError({ id: fulfillmentRequest.id, message: 'Select an available supply first.' })
-      return
-    }
-    const selectedSupply = availableSupplies.find((supply) => supply.key === fulfillmentRequest.supplyKey)
-    if (!selectedSupply || quantity > selectedSupply.quantityOnHand) {
-      setRequestActionError({ id: fulfillmentRequest.id, message: 'Quantity exceeds the selected supply available.' })
-      return
-    }
-    if (resourceType === 'MedicalSupply' && !Number.isInteger(quantity)) {
-      setRequestActionError({ id: fulfillmentRequest.id, message: 'Medical supply quantity must be a whole number.' })
-      return
-    }
+  /**
+   * Sends what the request asked for, in one click.
+   *
+   * The agent decides which stock row and how much: it reads the amount off the
+   * request ("Rice - 20 kg") and caps it at what is on hand, and the API refuses
+   * a resource or quantity that does not stand up, so a "Recommend" is always
+   * safe to post as it is. Nothing is asked of the manager, and nothing is
+   * guessed here — a request with no readable amount comes back as NoMatch and
+   * says so rather than sending an invented quantity.
+   */
+  const sendResources = async (request: ResourceHelpRequest) => {
     setError('')
     setRequestActionError(null)
-    setSendingRequestId(fulfillmentRequest.id)
+    setSendingRequestId(request.id)
     try {
+      // Reuse what is already on screen; otherwise ask for it now.
+      const advice = recommendation?.id === request.id
+        ? recommendation.result
+        : await fetchRecommendation(request.id)
+
+      if (advice.decision !== 'Recommend' || !advice.resourceId || !advice.resourceType) {
+        throw new Error(advice.reason || 'No stock matches this request.')
+      }
+
       const response = await fetch(`${API_BASE}/api/resources/allocations`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
-          resourceType,
-          resourceId,
-          quantity,
-          helpRequestId: fulfillmentRequest.id,
+          resourceType: advice.resourceType,
+          resourceId: advice.resourceId,
+          quantity: advice.quantity,
+          helpRequestId: request.id,
           incidentId: null,
         }),
       })
@@ -600,11 +684,10 @@ function ResourceDashboard() {
         const result = await response.json().catch(() => null) as { error?: string } | null
         throw new Error(result?.error ?? `Unable to send resources (HTTP ${response.status}).`)
       }
-      setFulfillmentRequest(null)
       await loadResources()
     } catch (fulfillmentError) {
       setRequestActionError({
-        id: fulfillmentRequest.id,
+        id: request.id,
         message: fulfillmentError instanceof Error ? fulfillmentError.message : 'Unable to send resources.',
       })
     } finally {
@@ -734,7 +817,10 @@ function ResourceDashboard() {
                 )}
                 <label>
                   Unit
-                  <input required placeholder="e.g. boxes, litres, kg, sets" value={resourceType === 'medical' ? supplyForm.unit : stockForm.unit} onChange={(event) => resourceType === 'medical' ? setSupplyForm({ ...supplyForm, unit: event.target.value }) : setStockForm({ ...stockForm, unit: event.target.value })} />
+                  <select required value={currentUnit} onChange={(event) => resourceType === 'medical' ? setSupplyForm({ ...supplyForm, unit: event.target.value }) : setStockForm({ ...stockForm, unit: event.target.value })}>
+                    <option value="" disabled>Select a unit</option>
+                    {unitOptions.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                  </select>
                 </label>
                 <div className="form-row">
                   <label>
@@ -756,7 +842,7 @@ function ResourceDashboard() {
           <section className="metric-grid" aria-label="Resource summary">
             <article className="metric-card accent-teal">
               <span className="metric-label">Pending requests</span>
-              <strong>{isLoading ? '--' : helpRequests.filter(r => r.status === 'Pending').length}</strong>
+              <strong>{isLoading ? '--' : pendingRequests.length}</strong>
               <span className="metric-note">Awaiting manager review</span>
             </article>
             <article className="metric-card accent-amber">
@@ -834,8 +920,8 @@ function ResourceDashboard() {
                 <button className="text-button" type="button" onClick={() => navigate('allocations')}>View all</button>
               </div>
               <div className="activity-list">
-                {helpRequests.length === 0 && !isLoading && <p className="empty-state">No help requests received yet.</p>}
-                {helpRequests.slice(0, 4).map((request) => (
+                {pendingRequests.length === 0 && !isLoading && <p className="empty-state">No help requests received yet.</p>}
+                {pendingRequests.slice(0, 4).map((request) => (
                   <div key={request.id}>
                     <span className="activity-icon">R</span>
                     <p>
@@ -1009,37 +1095,44 @@ function ResourceDashboard() {
                     <span>Request status</span>
                   </div>
                   <div className="request-actions">
+                    {/* Available whatever the request's state, so the manager can
+                        still see what the agent makes of one they have accepted. */}
+                    <button
+                      className="secondary-button compact-button"
+                      type="button"
+                      disabled={loadingRecommendationId === request.id || sendingRequestId === request.id}
+                      onClick={() => void getAllocationRecommendation(request.id)}
+                    >
+                      {loadingRecommendationId === request.id ? 'Thinking...' : 'AI recommendation'}
+                    </button>
                     {request.status === 'Pending' && (
                       <>
+                        {/* Accepting sends the resources, so this is the only
+                            click the normal case needs. */}
                         <button
-                          className="secondary-button compact-button"
+                          className="primary-button compact-button"
                           type="button"
-                          disabled={loadingRecommendationId === request.id}
-                          onClick={() => void getAllocationRecommendation(request.id)}
+                          disabled={busyWith(request.id)}
+                          onClick={() => void acceptRequest(request)}
                         >
-                          {loadingRecommendationId === request.id ? 'Thinking...' : 'AI recommendation'}
+                          {busyWith(request.id) ? 'Sending…' : 'Accept'}
                         </button>
-                        <button className="primary-button compact-button" type="button" disabled={updatingRequestId === request.id} onClick={() => void updateRequestStatus(request.id, 'Accepted')}>{updatingRequestId === request.id ? 'Accepting…' : 'Accept'}</button>
-                        <button className="danger-button compact-button" type="button" disabled={updatingRequestId === request.id} onClick={() => void updateRequestStatus(request.id, 'Rejected')}>{updatingRequestId === request.id ? 'Updating…' : 'Reject'}</button>
+                        <button className="danger-button compact-button" type="button" disabled={busyWith(request.id)} onClick={() => void rejectRequest(request.id)}>{updatingRequestId === request.id ? 'Updating…' : 'Reject'}</button>
                       </>
                     )}
-                    {request.status === 'Accepted' && !fulfillmentRequest && (
+                    {request.status === 'Accepted' && (
                       <>
-                      <button
-                        className="primary-button compact-button"
-                        type="button"
-                        disabled={availableSupplies.length === 0}
-                        onClick={() =>
-                          setFulfillmentRequest({
-                            id: request.id,
-                            supplyKey: preferredSupplyKey(request.needType),
-                            quantity: '1',
-                          })
-                        }
-                      >
-                        Send resources
-                      </button>
-                      {availableSupplies.length === 0 && <span>No supplies in stock</span>}
+                        {/* Only reachable when the send after accepting did not
+                            get through, so this is the way to finish it off. */}
+                        <button
+                          className="primary-button compact-button"
+                          type="button"
+                          disabled={availableSupplies.length === 0 || busyWith(request.id)}
+                          onClick={() => void sendResources(request)}
+                        >
+                          {busyWith(request.id) ? 'Sending…' : 'Send resources'}
+                        </button>
+                        {availableSupplies.length === 0 && <span>No supplies in stock</span>}
                       </>
                     )}
                     {recommendation?.id === request.id && (
@@ -1052,61 +1145,6 @@ function ResourceDashboard() {
                     )}
                     {request.status === 'Fulfilled' && <span className="fulfilled-label">Sent</span>}
                   </div>
-                  {fulfillmentRequest?.id === request.id && (
-                    <div className="fulfillment-form">
-                      <label>
-                        Resource
-                        <select
-                          required
-                          value={fulfillmentRequest.supplyKey}
-                          onChange={(event) =>
-                            setFulfillmentRequest({
-                              ...fulfillmentRequest,
-                              supplyKey: event.target.value,
-                            })
-                          }
-                        >
-                          <option value="" disabled>Select an available supply</option>
-                          {availableSupplies.map((supply) => (
-                            <option key={supply.key} value={supply.key}>
-                              {supply.name} · {supply.quantityOnHand} {supply.unit} · {supply.detail}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Quantity
-                        <input
-                          required
-                          min="1"
-                          step={fulfillmentRequest.supplyKey.startsWith('MedicalSupply:') ? '1' : 'any'}
-                          type="number"
-                          value={fulfillmentRequest.quantity}
-                          onChange={(event) =>
-                            setFulfillmentRequest({
-                              ...fulfillmentRequest,
-                              quantity: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={() => setFulfillmentRequest(null)}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="primary-button"
-                        type="button"
-                        disabled={sendingRequestId === request.id || !fulfillmentRequest.supplyKey}
-                        onClick={() => void fulfillRequest()}
-                      >
-                        {sendingRequestId === request.id ? 'Sending…' : 'Send now'}
-                      </button>
-                    </div>
-                  )}
                   {requestActionError?.id === request.id && (
                     <p className="request-row-error" role="alert">{requestActionError.message}</p>
                   )}

@@ -13,6 +13,13 @@ import 'package:mobile/shared/core/theme.dart';
 import 'package:mobile/shared/models/auth.dart';
 import 'package:mobile/shared/services/auth_service.dart';
 
+/// The item editor holds three dropdowns (Category, Item, Unit), so addressing
+/// them by position breaks whenever one is added. Find them by their label.
+Finder _dropdownLabelled(String label) => find.ancestor(
+  of: find.text(label),
+  matching: find.byType(DropdownButtonFormField<String>),
+);
+
 void main() {
   testWidgets('resource request and donation tabs are available', (
     WidgetTester tester,
@@ -90,7 +97,7 @@ void main() {
     await tester.tap(find.text('Send request'));
     await tester.pumpAndSettle();
     expect(find.text('Enter a positive quantity.'), findsOneWidget);
-    expect(find.text('Enter a unit.'), findsOneWidget);
+    expect(find.text('Select a unit.'), findsOneWidget);
   });
 
   testWidgets('donation categories show medical subcategories and custom item', (
@@ -115,7 +122,7 @@ void main() {
 
     await tester.tap(find.text('Water').last);
     await tester.pumpAndSettle();
-    final waterItemDropdown = find.byType(DropdownButtonFormField<String>).last;
+    final waterItemDropdown = _dropdownLabelled('Item');
     await tester.ensureVisible(waterItemDropdown);
     await tester.tap(waterItemDropdown);
     await tester.pumpAndSettle();
@@ -133,7 +140,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Medical').last);
     await tester.pumpAndSettle();
-    final medicalItemDropdown = find.byType(DropdownButtonFormField<String>).last;
+    final medicalItemDropdown = _dropdownLabelled('Item');
     await tester.ensureVisible(medicalItemDropdown);
     await tester.tap(medicalItemDropdown);
     await tester.pumpAndSettle();
@@ -144,6 +151,47 @@ void main() {
     await tester.tap(find.text('Other').last);
     await tester.pumpAndSettle();
     expect(find.text('Specify item'), findsOneWidget);
+  });
+
+  testWidgets('unit is picked from the food list, not typed', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(theme: buildAppTheme(), home: const ResourceHomePage()),
+    );
+    await tester.pumpAndSettle();
+
+    // Food is the default category, so the unit list is the food one.
+    await tester.ensureVisible(_dropdownLabelled('Unit'));
+    await tester.tap(_dropdownLabelled('Unit'));
+    await tester.pumpAndSettle();
+    expect(find.text('kg'), findsWidgets);
+    expect(find.text('bags'), findsWidgets);
+    expect(find.text('litres'), findsNothing);
+  });
+
+  testWidgets('unit list follows the chosen category', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(theme: buildAppTheme(), home: const ResourceHomePage()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(_dropdownLabelled('Category'));
+    await tester.tap(_dropdownLabelled('Category'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Water').last);
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(_dropdownLabelled('Unit'));
+    await tester.tap(_dropdownLabelled('Unit'));
+    await tester.pumpAndSettle();
+    expect(find.text('litres'), findsWidgets);
+    expect(find.text('bottles'), findsWidgets);
+    // Water is never measured in the food units.
+    expect(find.text('kg'), findsNothing);
+    expect(find.text('bags'), findsNothing);
   });
 
   testWidgets('request and donation forms can add another item row', (

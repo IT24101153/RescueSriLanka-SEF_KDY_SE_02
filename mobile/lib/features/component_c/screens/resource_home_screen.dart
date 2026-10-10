@@ -155,6 +155,22 @@ const _resourceCategories = <String, List<String>>{
   'Other': ['Other'],
 };
 
+/// The units each category may be counted in.
+///
+/// Picked from a list rather than typed because the resource team's stock is
+/// consolidated by item *and* unit: a donation of "5 kg" and one of "5 kgs"
+/// would otherwise land as two separate inventory rows that never add up, and
+/// neither would match a request measured the third way. These spellings are
+/// the ones the stock tables already use.
+const _resourceUnits = <String, List<String>>{
+  'Food': ['kg', 'bags', 'packs', 'boxes'],
+  'Water': ['litres', 'bottles', 'packs', 'containers'],
+  'Medical': ['packs', 'boxes', 'kits', 'pieces', 'bottles'],
+  'Sanitary products': ['packs', 'boxes', 'pieces'],
+  'Hygiene items': ['packs', 'boxes', 'pieces', 'bottles'],
+  'Other': ['packs', 'boxes', 'pieces', 'kg', 'litres'],
+};
+
 bool _hasValidResourcePhone(String? value) => normalizeSriLankaPhone(value) != null;
 
 class _ResourceItemDraft {
@@ -162,7 +178,10 @@ class _ResourceItemDraft {
   String item = 'Dry foods';
   final customItem = TextEditingController();
   final quantity = TextEditingController();
-  final unit = TextEditingController();
+
+  /// Null until one is chosen, so the form asks for it rather than guessing a
+  /// default and sending kilograms of bottled water.
+  String? unit;
 
   bool get needsCustomItem => category == 'Other' || item == 'Other';
 
@@ -170,17 +189,25 @@ class _ResourceItemDraft {
       ? customItem.text.trim()
       : item;
 
+  List<String> get units => _resourceUnits[category] ?? const <String>[];
+
+  /// Called when the category changes: a unit from the old category may not be
+  /// offered by the new one, and a selection that is no longer in the list would
+  /// make the dropdown throw.
+  void resetUnitForCategory() {
+    if (unit != null && !units.contains(unit)) unit = null;
+  }
+
   ResourceSubmissionItem toSubmissionItem() => ResourceSubmissionItem(
     category: category,
     itemName: itemName,
     quantity: double.parse(quantity.text),
-    unit: unit.text.trim(),
+    unit: unit!,
   );
 
   void dispose() {
     customItem.dispose();
     quantity.dispose();
-    unit.dispose();
   }
 }
 
@@ -249,6 +276,7 @@ class _ResourceItemEditor extends StatelessWidget {
                 item.category = category;
                 item.item = _resourceCategories[category]?.first ?? '';
                 item.customItem.clear();
+                item.resetUnitForCategory();
                 onChanged();
               },
             ),
@@ -320,16 +348,33 @@ class _ResourceItemEditor extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.gap),
                 Expanded(
-                  child: TextFormField(
-                    controller: item.unit,
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey(
+                      'unit-${identityHashCode(item)}-${item.category}-${item.unit}',
+                    ),
+                    initialValue: item.unit,
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Unit',
-                      hintText: 'kg, packs, boxes',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.straighten),
                     ),
+                    hint: const Text('Select'),
+                    items: item.units
+                        .map(
+                          (unit) => DropdownMenuItem(
+                            value: unit,
+                            child: Text(unit),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (unit) {
+                      if (unit == null) return;
+                      item.unit = unit;
+                      onChanged();
+                    },
                     validator: (value) =>
-                        (value?.trim() ?? '').isEmpty ? 'Enter a unit.' : null,
+                        value == null ? 'Select a unit.' : null,
                   ),
                 ),
               ],
