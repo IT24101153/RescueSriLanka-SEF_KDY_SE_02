@@ -195,8 +195,26 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             }
 
             // ---- Step 2: Logistics — nearest available rescue team with a recorded base ----
+            // Only a Rescue request is fulfilled by a rescue team. Medical, Water,
+            // Food, Shelter and Other are the Help Request Manager's own work, and
+            // they cannot dispatch a team even if one were offered — naming one
+            // just drags Component D's rescue flow into a request that has
+            // nothing to do with it.
             string? nearestTeamName = null;
-            if (request is not null)
+            bool needsRescueTeam = request is { Type: HelpRequestType.Rescue };
+            if (request is not null && !needsRescueTeam)
+            {
+                step2.ToolResultJson = JsonSerializer.Serialize(new
+                {
+                    found = false,
+                    applicable = false,
+                    reason = $"A {request.Type} request is fulfilled by the Help Request Manager, "
+                        + "not by a rescue team, so no team was looked for."
+                });
+                step2.Status = PlannerStepStatus.Completed;
+                step2.CompletedAt = DateTime.UtcNow;
+            }
+            else if (request is not null)
             {
                 try
                 {
@@ -254,7 +272,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             bool passed = !duplicateActiveWorkflow && requestStillActionable;
 
             // The model's suggestion counts only if a tool actually returned that team in this run.
-            string? suggestedTeam = verdict?.SuggestedTeam;
+            // And only a Rescue request may carry one at all, however confidently the
+            // model volunteers a team for a food parcel.
+            string? suggestedTeam = needsRescueTeam ? verdict?.SuggestedTeam : null;
             bool suggestionVerified = suggestedTeam is not null
                 && verdict is not null
                 && verdict.TeamsOffered.Contains(suggestedTeam, StringComparer.Ordinal);
@@ -262,7 +282,9 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             string? recommendedTeam = suggestionVerified ? suggestedTeam : nearestTeamName;
             string recommendedTeamSource = suggestionVerified
                 ? "model, checked against the team records"
-                : nearestTeamName is not null ? "nearest available team (rule)" : "none";
+                : nearestTeamName is not null ? "nearest available team (rule)"
+                : needsRescueTeam ? "none"
+                : "not applicable — the Help Request Manager fulfils this type";
 
             step3.ValidationResultJson = JsonSerializer.Serialize(new
             {
@@ -324,7 +346,12 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
             // Rescue requests need a rescue team, so approving one hands it to the
             // Rescue Coordinator in Component D instead of assigning it here.
             bool routesToRescue = request is { Type: HelpRequestType.Rescue };
-            if (dto.Approved && (recommendedTeam is not null || routesToRescue) &&
+            // Approving acts on any pending request — a Rescue one by handing it to
+            // the Rescue Coordinator, every other type by assigning it here — so
+            // verification is required either way. Keying this off "a team was
+            // recommended" would let an unverified Medical or Food request through
+            // now that those carry no team.
+            if (dto.Approved &&
                 request is { Status: HelpRequestStatus.Pending } &&
                 request.VerificationStatus != VerificationStatus.Verified)
             {
@@ -367,20 +394,24 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                     approvedAt = DateTime.UtcNow
                 };
             }
-            else if (request is { Status: HelpRequestStatus.Pending } && recommendedTeam is not null)
+            else if (request is { Status: HelpRequestStatus.Pending })
             {
+                // Every other type — Medical, Water, Food, Shelter, Other — is the
+                // Help Request Manager's own work, so approving assigns it to them.
+                // No rescue team is named: only the branch above involves one.
                 _db.RequestStatusHistories.Add(HelpRequestStatusTransition.Apply(
                     request,
                     HelpRequestStatus.Assigned,
                     coordinatorUserId,
-                    $"Plan approved by a coordinator. Recommended team: {recommendedTeam} (not yet dispatched)."));
+                    $"Plan approved by a coordinator. A {request.Type} request is fulfilled by the "
+                    + "Help Request Manager, so no rescue team is involved."));
                 assigned = true;
 
                 outcome = new
                 {
                     outcome = "approved",
                     helpRequestStatus = HelpRequestStatus.Assigned.ToString(),
-                    recommendedTeam,
+                    handledBy = "HelpRequestManager",
                     approvedAt = DateTime.UtcNow
                 };
             }
@@ -390,9 +421,7 @@ namespace RescueSriLanka.Api.Features.ComponentB.Agents.PlannerAgent
                 {
                     outcome = "approved",
                     helpRequestStatus = request?.Status.ToString() ?? "Missing",
-                    note = recommendedTeam is null
-                        ? "No team was recommended, so the request was left as it is."
-                        : "The request is no longer pending, so its status was left as it is.",
+                    note = "The request is no longer pending, so its status was left as it is.",
                     approvedAt = DateTime.UtcNow
                 };
             }

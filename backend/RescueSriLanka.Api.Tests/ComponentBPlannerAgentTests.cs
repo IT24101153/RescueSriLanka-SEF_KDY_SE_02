@@ -128,6 +128,8 @@ public class ComponentBPlannerAgentTests
     {
         await using var db = CreateContext();
         var request = await AddRequest(db, 60, type: HelpRequestType.Shelter);
+        request.VerificationStatus = VerificationStatus.Verified;
+        await db.SaveChangesAsync();
         var (planner, _) = CreatePlanner(db, new ScriptedModel(_ => Final()));
         var workflow = await planner.TriggerAsync(Trigger(request));
         await planner.DecideApprovalAsync(workflow.Id, Guid.NewGuid(), new ApprovalDecisionDto { Approved = true });
@@ -293,9 +295,67 @@ public class ComponentBPlannerAgentTests
         Assert.Equal(HelpRequestStatus.Pending, history.OldStatus);
         Assert.Equal(HelpRequestStatus.Assigned, history.NewStatus);
         Assert.Equal(coordinator, history.ChangedByUserId);
-        Assert.Contains(CoordinatorTeam, history.Notes);
+        // A Shelter request is the Help Request Manager's to fulfil, so no rescue
+        // team is named on it however eagerly the model volunteered one.
+        Assert.DoesNotContain(CoordinatorTeam, history.Notes);
+        Assert.Contains("Help Request Manager", history.Notes);
         Assert.Equal([(request.Id, "Assigned")], emails.HelpRequestStatusChanges);
         Assert.Contains("\"outcome\":\"approved\"", decided!.FinalOutcomeJson);
+    }
+
+    [Fact]
+    public async Task ApprovingANonRescueRequest_AssignsItWithoutLookingForARescueTeam()
+    {
+        await using var db = CreateContext();
+        var componentD = await SeedTeamsAsync();
+        // Medical is the type that was reaching the rescue flow; Water and Food
+        // always behaved this way, and Medical has to behave the same.
+        var request = await AddRequest(db, 80, type: HelpRequestType.Medical);
+        request.VerificationStatus = VerificationStatus.Verified;
+        await db.SaveChangesAsync();
+        var (planner, _) = CreatePlanner(db, new ScriptedModel(_ => Final(CoordinatorTeam)), componentD);
+
+        var workflow = await planner.TriggerAsync(Trigger(request));
+        var logistics = JsonDocument.Parse(workflow.Steps[1].ToolResultJson!).RootElement;
+        var validation = JsonDocument.Parse(workflow.Steps[2].ValidationResultJson!).RootElement;
+
+        // No team was looked for, and none is carried into the plan.
+        Assert.False(logistics.GetProperty("applicable").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, validation.GetProperty("recommendedTeam").ValueKind);
+
+        var decided = await planner.DecideApprovalAsync(
+            workflow.Id, Guid.NewGuid(), new ApprovalDecisionDto { Approved = true });
+
+        // It still gets assigned — to the Help Request Manager, not a rescue team.
+        Assert.Equal(HelpRequestStatus.Assigned,
+            (await db.HelpRequests.AsNoTracking().SingleAsync(r => r.Id == request.Id)).Status);
+        Assert.Contains("\"handledBy\":\"HelpRequestManager\"", decided!.FinalOutcomeJson);
+        Assert.DoesNotContain(CoordinatorTeam, decided.FinalOutcomeJson);
+    }
+
+    [Fact]
+    public async Task ApprovingARescueRequest_StillHandsItToTheRescueCoordinator()
+    {
+        await using var db = CreateContext();
+        var componentD = await SeedTeamsAsync();
+        var request = await AddRequest(db, 90, type: HelpRequestType.Rescue);
+        request.VerificationStatus = VerificationStatus.Verified;
+        await db.SaveChangesAsync();
+        var (planner, _) = CreatePlanner(db, new ScriptedModel(_ => Final(CoordinatorTeam)), componentD);
+
+        var workflow = await planner.TriggerAsync(Trigger(request));
+        var logistics = JsonDocument.Parse(workflow.Steps[1].ToolResultJson!).RootElement;
+
+        // Rescue is the one type a team is found for.
+        Assert.True(logistics.GetProperty("found").GetBoolean());
+
+        var decided = await planner.DecideApprovalAsync(
+            workflow.Id, Guid.NewGuid(), new ApprovalDecisionDto { Approved = true });
+
+        // Stays Pending and Verified, which is what puts it in Component D's queue.
+        Assert.Equal(HelpRequestStatus.Pending,
+            (await db.HelpRequests.AsNoTracking().SingleAsync(r => r.Id == request.Id)).Status);
+        Assert.Contains("RescueCoordinator", decided!.FinalOutcomeJson);
     }
 
     [Fact]
@@ -374,10 +434,14 @@ public class ComponentBPlannerAgentTests
     }
 
     [Fact]
-    public async Task ApprovingWithoutAnyTeamRecordsTheDecisionOnly()
+    public async Task ApprovingARescueRequestWithoutAnyTeamRecordsTheDecisionOnly()
     {
         await using var db = CreateContext();
-        var request = await AddRequest(db, 90, type: HelpRequestType.Shelter);
+        // Rescue with no team on the books: Component D still owns it, so approving
+        // hands it over and leaves the status alone rather than assigning it here.
+        var request = await AddRequest(db, 90, type: HelpRequestType.Rescue);
+        request.VerificationStatus = VerificationStatus.Verified;
+        await db.SaveChangesAsync();
         var (planner, emails) = CreatePlanner(db, new ScriptedModel(_ => Final(null)));
         var workflow = await planner.TriggerAsync(Trigger(request));
 
@@ -386,6 +450,23 @@ public class ComponentBPlannerAgentTests
         Assert.Equal(HelpRequestStatus.Pending, (await db.HelpRequests.AsNoTracking().SingleAsync(r => r.Id == request.Id)).Status);
         Assert.Empty(emails.HelpRequestStatusChanges);
         Assert.Contains("\"helpRequestStatus\":\"Pending\"", decided!.FinalOutcomeJson);
+    }
+
+    [Fact]
+    public async Task ApprovingAnUnverifiedRequestIsRefused()
+    {
+        await using var db = CreateContext();
+        // Approval now assigns every non-Rescue type, so it must not go through on a
+        // report nobody has checked — whether or not a team was ever in the picture.
+        var request = await AddRequest(db, 80, type: HelpRequestType.Medical);
+        var (planner, _) = CreatePlanner(db, new ScriptedModel(_ => Final(null)));
+        var workflow = await planner.TriggerAsync(Trigger(request));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => planner.DecideApprovalAsync(
+            workflow.Id, Guid.NewGuid(), new ApprovalDecisionDto { Approved = true }));
+
+        Assert.Equal(HelpRequestStatus.Pending,
+            (await db.HelpRequests.AsNoTracking().SingleAsync(r => r.Id == request.Id)).Status);
     }
 
     // ---- helpers

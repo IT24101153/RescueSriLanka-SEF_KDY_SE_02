@@ -86,6 +86,9 @@ export default function HelpRequestGuidance({ requestId }: { requestId: string }
   const [note, setNote] = useState("");
   const [doText, setDoText] = useState("");
   const [dontText, setDontText] = useState("");
+  // Which template is showing, so the box names the one in use rather than
+  // snapping back to the placeholder as soon as it is chosen.
+  const [templateLabel, setTemplateLabel] = useState("");
   const [critical, setCritical] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +113,7 @@ export default function HelpRequestGuidance({ requestId }: { requestId: string }
   function applyTemplate(label: string) {
     const template = TEMPLATES.find((candidate) => candidate.label === label);
     if (!template) return;
+    setTemplateLabel(label);
     setDoText(template.doItems.join("\n"));
     setDontText(template.dontItems.join("\n"));
   }
@@ -138,6 +142,8 @@ export default function HelpRequestGuidance({ requestId }: { requestId: string }
       setDoText("");
       setDontText("");
       setCritical(false);
+      // The form is empty again, so the template box goes back to its placeholder.
+      setTemplateLabel("");
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not send the message. Try again.");
@@ -166,7 +172,7 @@ export default function HelpRequestGuidance({ requestId }: { requestId: string }
       <div className="hr-guidance-form">
         <select
           aria-label="Insert a template"
-          value=""
+          value={templateLabel}
           onChange={(event) => applyTemplate(event.target.value)}
         >
           <option value="">Start from a template…</option>

@@ -91,6 +91,36 @@ describe("Help request guidance for the citizen", () => {
     expect((screen.getByLabelText(/Don't \(one per line\)/) as HTMLTextAreaElement).value).toContain("Do not walk or drive through flood water");
   });
 
+  it("keeps showing the template that was chosen", async () => {
+    api.mockResolvedValue(respond([]));
+    render(<HelpRequestGuidance requestId="r-1" />);
+    await screen.findByText("Nothing sent yet.");
+    const picker = screen.getByLabelText("Insert a template") as HTMLSelectElement;
+
+    fireEvent.change(picker, { target: { value: "Medical" } });
+
+    // It used to snap straight back to the placeholder, so the box never said
+    // which template the lists below it had come from.
+    expect(picker.value).toBe("Medical");
+
+    // And switching to another one follows.
+    fireEvent.change(picker, { target: { value: "Fire" } });
+    expect(picker.value).toBe("Fire");
+  });
+
+  it("returns the template box to its placeholder once the message is sent", async () => {
+    api.mockResolvedValue(respond([]));
+    render(<HelpRequestGuidance requestId="r-1" />);
+    await screen.findByText("Nothing sent yet.");
+    const picker = screen.getByLabelText("Insert a template") as HTMLSelectElement;
+
+    fireEvent.change(picker, { target: { value: "Flood" } });
+    fireEvent.click(screen.getByRole("button", { name: /Send/ }));
+
+    // A cleared form should not still claim to be holding a template.
+    await waitFor(() => expect(picker.value).toBe(""));
+  });
+
   it("takes a message back", async () => {
     let deleted = false;
     api.mockImplementation(async (_path: string, options?: RequestInit) => {
