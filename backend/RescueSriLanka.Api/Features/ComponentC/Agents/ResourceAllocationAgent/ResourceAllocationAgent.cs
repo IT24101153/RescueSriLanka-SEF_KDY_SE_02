@@ -111,7 +111,22 @@ public sealed class ResourceAllocationAgent(
             var raw = await llm.GenerateAsync(
                 RecommendSystemInstruction, prompt, RecommendResponseSchema, ct: cancellationToken);
             var recommendation = JsonSerializer.Deserialize<ResourceAllocationRecommendation>(raw, JsonOptions);
-            return ValidateRecommendation(recommendation, candidates);
+            var validated = ValidateRecommendation(recommendation, candidates);
+            if (validated.Decision == "Recommend")
+            {
+                return validated;
+            }
+
+            // The model answered, but with nothing usable — an invented resource
+            // id, an amount above stock, or no match at all. That is the rule
+            // engine's cue just as much as an unreachable model is: the rules can
+            // read the amount off the request and cap it at what is on hand.
+            // Without this a perfectly servable request is simply declined, and
+            // nothing is ever deducted for it.
+            logger.LogInformation(
+                "Gemini gave no usable allocation for request {RequestId} ({Reason}); using the built-in rules.",
+                helpRequestId, validated.Reason);
+            return RulesRecommendation(request, candidates);
         }
         catch (Exception exception) when (exception is LlmUnavailableException or JsonException)
         {
@@ -237,23 +252,7 @@ public sealed class ResourceAllocationAgent(
             .OrderByDescending(ResourceAllocationRules.Urgency)
             .ThenBy(request => request.CreatedAtUtc))
         {
-            var result = ResourceAllocationRules.Recommend(request, candidates, remaining);
-            var priority = items.Count + 1;
-
-            if (result.Decision == "Recommend")
-            {
-                remaining[result.ResourceId!.Value] -= result.Quantity;
-                items.Add(new ResourceAllocationPlanItem(
-                    request.Id, request.NeedType, request.RequesterName, priority, "Recommend",
-                    result.ResourceId, result.ResourceType, result.ResourceName, result.Unit,
-                    result.Quantity, result.AvailableQuantity, result.Confidence,
-                    result.Reason, result.Warnings, true, ResourceAllocationRules.Source));
-                continue;
-            }
-
-            List<string> warnings = [.. result.Warnings];
-            if (StockHint(request, candidates) is { } hint) warnings.Add(hint);
-            items.Add(NoMatchPlanItem(request, priority, result.Reason, warnings, ResourceAllocationRules.Source));
+            items.Add(RulesPlanItem(request, items.Count + 1, candidates, remaining));
         }
 
         var matched = items.Count(item => item.Decision == "Recommend");
@@ -261,6 +260,36 @@ public sealed class ResourceAllocationAgent(
             generatedAtUtc,
             $"{matched} of {items.Count} pending request(s) matched to available stock.",
             items);
+    }
+
+    /// <summary>
+    /// One plan item decided by the deterministic rules, against the stock still
+    /// unclaimed by the requests above it. Claims what it recommends from
+    /// <paramref name="remaining"/>, so a plan never promises the same stock twice.
+    /// </summary>
+    /// <param name="extraWarnings">Why the model's own answer was dropped, when it had one.</param>
+    private static ResourceAllocationPlanItem RulesPlanItem(
+        HelpRequest request,
+        int priority,
+        IReadOnlyList<ResourceAllocationCandidate> candidates,
+        Dictionary<Guid, decimal> remaining,
+        IReadOnlyList<string>? extraWarnings = null)
+    {
+        var result = ResourceAllocationRules.Recommend(request, candidates, remaining);
+        List<string> warnings = [.. extraWarnings ?? [], .. result.Warnings];
+
+        if (result.Decision == "Recommend")
+        {
+            remaining[result.ResourceId!.Value] -= result.Quantity;
+            return new ResourceAllocationPlanItem(
+                request.Id, request.NeedType, request.RequesterName, priority, "Recommend",
+                result.ResourceId, result.ResourceType, result.ResourceName, result.Unit,
+                result.Quantity, result.AvailableQuantity, result.Confidence,
+                result.Reason, warnings, true, ResourceAllocationRules.Source);
+        }
+
+        if (StockHint(request, candidates) is { } hint) warnings.Add(hint);
+        return NoMatchPlanItem(request, priority, result.Reason, warnings, ResourceAllocationRules.Source);
     }
 
     private static ResourceAllocationRecommendation NoMatch(string reason, string warning, string? stockHint = null) =>
@@ -327,36 +356,35 @@ public sealed class ResourceAllocationAgent(
         foreach (var (request, draft, _) in ordered)
         {
             var priority = items.Count + 1;
-            if (draft is null || !string.Equals(draft.Decision, "Recommend", StringComparison.OrdinalIgnoreCase))
+            var candidate = draft is null ? null : candidates.SingleOrDefault(item => item.Id == draft.ResourceId);
+            var usable =
+                draft is not null &&
+                string.Equals(draft.Decision, "Recommend", StringComparison.OrdinalIgnoreCase) &&
+                candidate is not null &&
+                draft.Quantity > 0 &&
+                draft.Quantity <= remaining.GetValueOrDefault(candidate.Id, 0);
+
+            if (!usable)
             {
-                items.Add(NoMatchPlanItem(
-                    request, priority,
-                    draft?.Reason ?? "The AI did not return a recommendation for this request; review manually.",
-                    ["No safe match was recommended."]));
+                // Nothing usable from the model for this request, so the rules
+                // decide it instead — against the stock left after the requests
+                // above it, so one plan never promises the same stock twice.
+                // Why the model's answer was dropped is worth keeping: "already
+                // claimed" tells the manager something the rules cannot.
+                var overClaimed =
+                    candidate is not null &&
+                    draft!.Quantity > 0 &&
+                    draft.Quantity > remaining.GetValueOrDefault(candidate.Id, 0);
+
+                items.Add(RulesPlanItem(
+                    request, priority, candidates, remaining,
+                    overClaimed
+                        ? ["Insufficient remaining stock — already claimed by a higher-priority request."]
+                        : null));
                 continue;
             }
 
-            var candidate = candidates.SingleOrDefault(item => item.Id == draft.ResourceId);
-            if (candidate is null || draft.Quantity <= 0)
-            {
-                items.Add(NoMatchPlanItem(
-                    request, priority,
-                    "The recommendation failed deterministic stock validation.",
-                    ["The AI returned an invalid resource or quantity."]));
-                continue;
-            }
-
-            var left = remaining.GetValueOrDefault(candidate.Id, 0);
-            if (draft.Quantity > left)
-            {
-                items.Add(NoMatchPlanItem(
-                    request, priority,
-                    "The recommendation failed deterministic stock validation.",
-                    ["Insufficient remaining stock — already claimed by a higher-priority request."]));
-                continue;
-            }
-
-            remaining[candidate.Id] = left - draft.Quantity;
+            remaining[candidate!.Id] = remaining.GetValueOrDefault(candidate.Id, 0) - draft!.Quantity;
             items.Add(new ResourceAllocationPlanItem(
                 request.Id,
                 request.NeedType,

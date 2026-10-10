@@ -426,6 +426,103 @@ public class ResourceAllocationAgentTests
         Assert.Equal("AI", result.Source);
     }
 
+    [Fact]
+    public async Task RecommendAsync_UsesTheRulesWhenTheAiNamesAResourceThatDoesNotExist()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Medical", "Bandages - 20 packs");
+        var stock = AddMedical(context, "Bandages", "packs", 50);
+        await context.SaveChangesAsync();
+        // A plausible-looking answer that names a resource id from nowhere. The
+        // model answered, so nothing throws — the id simply is not one of ours.
+        var json = JsonSerializer.Serialize(new
+        {
+            decision = "Recommend", resourceId = Guid.NewGuid(), resourceType = "MedicalSupply", quantity = 20,
+            confidence = 0.9, reason = "Matches.", warnings = Array.Empty<string>(), requiresApproval = true
+        });
+
+        var agent = new ResourceAllocationAgent(context, new FakeLlmClient(json), NullLogger<ResourceAllocationAgent>.Instance);
+        var result = await agent.RecommendAsync(request.Id);
+
+        // An unusable answer is the rule engine's cue, exactly as when the model
+        // is unreachable. Returning NoMatch here strands a request that the rules
+        // can serve perfectly well, and nothing is ever deducted for it.
+        Assert.Equal("Recommend", result.Decision);
+        Assert.Equal("Rules", result.Source);
+        Assert.Equal(stock.Id, result.ResourceId);
+        Assert.Equal(20, result.Quantity);
+    }
+
+    [Fact]
+    public async Task RecommendAsync_UsesTheRulesWhenTheAiAsksForMoreThanIsOnHand()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Medical", "Bandages - 20 packs");
+        var stock = AddMedical(context, "Bandages", "packs", 8);
+        await context.SaveChangesAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            decision = "Recommend", resourceId = stock.Id, resourceType = "MedicalSupply", quantity = 20,
+            confidence = 0.9, reason = "Matches.", warnings = Array.Empty<string>(), requiresApproval = true
+        });
+
+        var agent = new ResourceAllocationAgent(context, new FakeLlmClient(json), NullLogger<ResourceAllocationAgent>.Instance);
+        var result = await agent.RecommendAsync(request.Id);
+
+        // The rules cap at what is on hand rather than declining outright.
+        Assert.Equal("Recommend", result.Decision);
+        Assert.Equal("Rules", result.Source);
+        Assert.Equal(8, result.Quantity);
+    }
+
+    [Fact]
+    public async Task RecommendAsync_StillDeclinesWhenNeitherTheAiNorTheRulesCanMatch()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Medical", "Insulin - 5 vials");
+        AddMedical(context, "Bandages", "packs", 50);
+        await context.SaveChangesAsync();
+        var json = JsonSerializer.Serialize(new
+        {
+            decision = "Recommend", resourceId = Guid.NewGuid(), resourceType = "MedicalSupply", quantity = 5,
+            confidence = 0.9, reason = "Matches.", warnings = Array.Empty<string>(), requiresApproval = true
+        });
+
+        var agent = new ResourceAllocationAgent(context, new FakeLlmClient(json), NullLogger<ResourceAllocationAgent>.Instance);
+        var result = await agent.RecommendAsync(request.Id);
+
+        // Falling back must not invent a match where there is none.
+        Assert.Equal("NoMatch", result.Decision);
+        Assert.Equal("Rules", result.Source);
+    }
+
+    [Fact]
+    public async Task PlanAsync_UsesTheRulesForARequestTheAiAnsweredUnusably()
+    {
+        await using var context = CreateContext();
+        var request = AddRequest(context, "Medical", "Bandages - 20 packs");
+        var stock = AddMedical(context, "Bandages", "packs", 50);
+        await context.SaveChangesAsync();
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                helpRequestId = request.Id, priority = 1, decision = "Recommend", resourceId = Guid.NewGuid(),
+                resourceType = "MedicalSupply", quantity = 20, confidence = 0.9, reason = "Matches.",
+                warnings = Array.Empty<string>(), requiresApproval = true
+            }
+        });
+
+        var agent = new ResourceAllocationAgent(context, new FakeLlmClient(json), NullLogger<ResourceAllocationAgent>.Instance);
+        var plan = await agent.PlanAsync();
+
+        var item = Assert.Single(plan.Items);
+        Assert.Equal("Recommend", item.Decision);
+        Assert.Equal("Rules", item.Source);
+        Assert.Equal(stock.Id, item.ResourceId);
+        Assert.Equal(20, item.Quantity);
+    }
+
     private static ResourceAllocationAgent NewAgent(AppDbContext context) =>
         new(context, new FaultyLlmClient(QuotaUsedUp), NullLogger<ResourceAllocationAgent>.Instance);
 

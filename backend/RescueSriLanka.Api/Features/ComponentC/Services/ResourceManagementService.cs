@@ -854,6 +854,25 @@ public class ResourceManagementService(
         }
 
         var resourceType = NormalizeResourceType(request.ResourceType);
+
+        // Checked before anything is deducted: a request that has already had its
+        // resources sent must not have them sent again. Without this a double
+        // click, or a retry on a row whose first send did get through, takes the
+        // quantity out of stock a second time and nothing says so.
+        HelpRequest? helpRequest = null;
+        if (request.HelpRequestId is Guid helpRequestId)
+        {
+            helpRequest = await dbContext.ResourceHelpRequests
+                .SingleOrDefaultAsync(item => item.Id == helpRequestId, cancellationToken)
+                ?? throw new KeyNotFoundException("Help request was not found.");
+
+            if (helpRequest.Status == "Fulfilled")
+            {
+                throw new InvalidOperationException(
+                    "This request has already been fulfilled, so nothing more was deducted.");
+            }
+        }
+
         var allocation = new ResourceAllocation
         {
             Id = Guid.NewGuid(),
@@ -885,13 +904,9 @@ public class ResourceManagementService(
 
         dbContext.ResourceAllocations.Add(allocation);
         User? dispatchRecipient = null;
-        if (request.HelpRequestId is Guid helpRequestId)
+        if (helpRequest is not null)
         {
-            var helpRequest = await dbContext.ResourceHelpRequests
-                .SingleOrDefaultAsync(item => item.Id == helpRequestId, cancellationToken)
-                ?? throw new KeyNotFoundException("Help request was not found.");
             helpRequest.Status = "Fulfilled";
-
             dispatchRecipient = await FindUserForHelpRequestAsync(helpRequest, cancellationToken);
         }
         await SaveStockChangeAsync(cancellationToken);
