@@ -23,6 +23,10 @@ class MyRequestsMapScreen extends StatefulWidget {
 }
 
 class _MyRequestsMapScreenState extends State<MyRequestsMapScreen> {
+  /// The disaster map's ceiling. MapOptions and the fit both read it, so
+  /// neither can zoom past the detail the tiles have.
+  static const double _maxZoom = 16;
+
   final MapController _mapController = MapController();
   List<HelpRequest> _requests = [];
   bool _loading = true;
@@ -67,6 +71,9 @@ class _MyRequestsMapScreenState extends State<MyRequestsMapScreen> {
       CameraFit.bounds(
         bounds: LatLngBounds.fromPoints(points),
         padding: const EdgeInsets.all(48),
+        // Requests sent from the same spot make a zero-area bounds, which
+        // fits to an infinite zoom unless it is capped.
+        maxZoom: _maxZoom,
       ),
     );
   }
@@ -106,6 +113,7 @@ class _MyRequestsMapScreenState extends State<MyRequestsMapScreen> {
                   options: const MapOptions(
                     initialCenter: LatLng(7.8731, 80.7718),
                     initialZoom: 7,
+                    maxZoom: _maxZoom,
                   ),
                   children: [
                     TileLayer(
