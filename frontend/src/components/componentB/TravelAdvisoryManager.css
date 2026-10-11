@@ -53,7 +53,15 @@
 .b-advisory-form label { display: grid; gap: .4rem; margin: .9rem 0; color: #344d5d; font-size: .8rem; font-weight: 650; }
 .b-advisory-form input, .b-advisory-form select, .b-advisory-form textarea, .b-advisory-filters input, .b-advisory-filters select { box-sizing: border-box; width: 100%; min-height: 42px; border: 1px solid #ccd9e0; border-radius: 7px; background: #fff; color: #19384b; padding: .6rem .7rem; font: inherit; font-size: .9rem; }
 .b-advisory-form textarea { min-height: 90px; resize: vertical; }
-.b-advisory-coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
+.b-advisory-location { margin: .9rem 0; }
+.b-advisory-form .b-advisory-location label { margin: 0; }
+.b-advisory-location ul { margin: .4rem 0 0; padding: 0; overflow: hidden; border: 1px solid #ccd9e0; border-radius: 7px; list-style: none; }
+.b-advisory-location li + li { border-top: 1px solid #edf1f3; }
+.b-advisories .b-advisory-location li button { width: 100%; min-height: 0; border: 0; border-radius: 0; padding: .55rem .7rem; font-size: .85rem; font-weight: 500; line-height: 1.4; text-align: left; }
+.b-advisories .b-advisory-location li button:focus-visible { outline-offset: -3px; }
+.b-advisory-location p, .b-advisory-location small { display: block; margin: .4rem 0 0; color: #718391; font-size: .78rem; line-height: 1.45; }
+.b-advisory-location .b-advisory-location-selected { color: #344d5d; }
+.b-advisory-location a { color: inherit; }
 .b-advisory-form-actions, .b-advisory-actions { display: flex; flex-wrap: wrap; gap: .55rem; }
 .b-advisories .b-advisory-form-actions button:first-child { border-color: #123c54; background: #123c54; color: #fff; }
 .b-advisories .b-advisory-form-actions button:first-child:hover:not(:disabled) { background: #0b2d40; }
