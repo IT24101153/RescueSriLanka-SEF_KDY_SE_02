@@ -75,18 +75,17 @@ public sealed class AgentRunTracer(AppDbContext db, AgentRun run)
         }
     }
 
-    /// <summary>Completes the run with its validated output.</summary>
-    public Task CompleteAsync(
-        AgentRunStatus status, string model, int attempts, string? error,
-        string outputJson, bool usedFallback, CancellationToken ct)
+    /// <summary>
+    /// Completes the run with its validated output. <paramref name="model"/> is
+    /// null when there was nothing to ask the model.
+    /// </summary>
+    public Task CompleteAsync(string? model, int attempts, string outputJson, CancellationToken ct)
     {
         _stopwatch.Stop();
-        run.Status = status;
+        run.Status = AgentRunStatus.Succeeded;
         run.Model = model;
         run.ModelAttempts = attempts;
-        run.ErrorMessage = error is null ? null : Truncate(error, 1000);
         run.OutputJson = outputJson;
-        run.UsedFallback = usedFallback;
         run.DurationMs = (int)_stopwatch.ElapsedMilliseconds;
         run.CompletedAt = DateTime.UtcNow;
         run.PlanJson = SerializePlan();

@@ -255,8 +255,9 @@ builder.Services.AddHostedService(
 // (Gemini) is the one implementation — see docs/adr/0001-llm-provider.md for
 // why, and for the deviation from the proposal that choice represents.
 //
-// An unconfigured or unreachable model is not a failure: the agent falls back
-// to its deterministic rule engine and records that it did.
+// The incident agents work with the model or not at all — no rule engine
+// stands in for it. An unconfigured, unreachable or out-of-quota model fails
+// the run, and the reason recorded on it is what the coordinator is shown.
 builder.Services.AddHttpClient<ILlmClient, GoogleAiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(30));
 
@@ -392,7 +393,7 @@ using (var startupScope = app.Services.CreateScope())
     startupLogger.LogInformation(
         "Agents use {Model}{Unconfigured}.",
         llm.ModelName,
-        llm.IsConfigured ? string.Empty : " — NOT configured, rule engine will run");
+        llm.IsConfigured ? string.Empty : " — NOT configured, the incident agents will fail until GoogleAi:ApiKey is set");
 
     // Which way mail goes, and at what risk level, decides whether anyone is
     // warned at all — never leave that to be discovered mid-demo.

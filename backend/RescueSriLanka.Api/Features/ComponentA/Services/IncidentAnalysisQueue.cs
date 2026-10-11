@@ -71,9 +71,8 @@ public class IncidentAnalysisWorker(
                 var result = await agent.AnalyseAsync(incidentId, stoppingToken);
 
                 logger.LogInformation(
-                    "Auto-analysed incident {IncidentId}: proposed {Severity} ({Score}/100){Fallback}",
-                    incidentId, result.Severity, result.SeverityScore,
-                    result.UsedFallback ? " via rule engine" : string.Empty);
+                    "Auto-analysed incident {IncidentId}: proposed {Severity} ({Score}/100)",
+                    incidentId, result.Severity, result.SeverityScore);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -81,8 +80,9 @@ public class IncidentAnalysisWorker(
             }
             catch (Exception ex)
             {
-                // A failed analysis must never take the worker down — the
-                // incident simply stays unanalysed until someone runs it.
+                // A failed analysis must never take the worker down. With no
+                // rule engine behind the model, the incident stays unanalysed and
+                // the failed run tells the coordinator why (quota used up, say).
                 logger.LogError(ex, "Background analysis failed for incident {IncidentId}", incidentId);
             }
 

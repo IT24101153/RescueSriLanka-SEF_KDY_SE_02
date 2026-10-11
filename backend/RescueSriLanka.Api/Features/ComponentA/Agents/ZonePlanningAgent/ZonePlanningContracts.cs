@@ -88,9 +88,6 @@ public record ZonePlanResult
 
     [JsonPropertyName("summary")]
     public required string Summary { get; init; }
-
-    [JsonPropertyName("usedFallback")]
-    public bool UsedFallback { get; init; }
 }
 
 /// <summary>The raw shape the model is constrained to; every value is re-checked.</summary>

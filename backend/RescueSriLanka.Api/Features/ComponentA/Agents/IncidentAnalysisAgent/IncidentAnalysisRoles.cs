@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using RescueSriLanka.Api.Features.ComponentA.Agents.Shared;
 using RescueSriLanka.Api.Features.ComponentA.Models;
 using RescueSriLanka.Api.Features.ComponentA.Services;
-using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Services.Llm;
 
 namespace RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
@@ -14,7 +14,7 @@ namespace RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
 //
 //   Planner    incident            -> plan             touches nothing
 //   Evidence   incident            -> evidence bundle  allow-listed tools + photo store
-//   Severity   incident + evidence -> proposal         the language model / rule engine
+//   Severity   incident + evidence -> proposal         the language model, and only it
 //   Validator  proposal            -> accepted result  nothing (pure function)
 
 /// <summary>Names of the agent roles, as recorded in a run's plan.</summary>
@@ -54,8 +54,6 @@ public record EvidenceBundle(
 public record SeverityProposal(
     IncidentAnalysisResult Result,
     string Model,
-    AgentRunStatus Status,
-    string? Error,
     int Attempts = 0);
 
 /// <summary>The Validator's verdict on a proposal.</summary>
@@ -186,11 +184,11 @@ public class EvidenceGatheringAgent(IncidentAnalysisTools tools, IImageStorageSe
 }
 
 /// <summary>
-/// Severity agent. Reasons over the evidence with the language model, or with
-/// the deterministic rule engine when the model is unconfigured or unusable.
-/// It has no tools and no database access.
+/// Severity agent. Reasons over the evidence with the language model, and only
+/// with it: when the model cannot answer there is no proposal, and the run
+/// fails with the reason. It has no tools and no database access.
 /// </summary>
-public class SeverityAnalysisAgent(ILlmClient llm, ILogger logger)
+public class SeverityAnalysisAgent(ILlmClient llm)
 {
     private const string SystemInstruction =
         """
@@ -235,42 +233,15 @@ public class SeverityAnalysisAgent(ILlmClient llm, ILogger logger)
         }
     };
 
+    /// <summary>Throws <see cref="LlmUnavailableException"/> when the model cannot answer.</summary>
     public async Task<SeverityProposal> ProposeAsync(
         IncidentAnalysisInput input, EvidenceBundle evidence, CancellationToken ct)
     {
-        if (!llm.IsConfigured)
-        {
-            return RuleEngine(input, evidence,
-                "No language model configured — deterministic rules applied.");
-        }
+        var result = await ModelCall.AskAsync<IncidentAnalysisResult>(
+            llm, SystemInstruction, BuildPrompt(input, evidence), ResponseSchema, evidence.Images, ct);
 
-        try
-        {
-            var raw = await llm.GenerateAsync(
-                SystemInstruction,
-                BuildPrompt(input, evidence),
-                ResponseSchema,
-                evidence.Images,
-                ct);
-
-            var result = JsonSerializer.Deserialize<IncidentAnalysisResult>(raw, AnalysisJson.Options)
-                ?? throw new LlmUnavailableException("Model returned no parseable object.");
-
-            return new SeverityProposal(result, llm.ModelName, AgentRunStatus.Succeeded, null, llm.LastAttempts);
-        }
-        catch (Exception ex) when (ex is LlmUnavailableException or JsonException)
-        {
-            // A safe, clearly recorded failure — never a silent one.
-            logger.LogWarning(ex, "Model unusable for incident {Id}; using rule engine.", input.IncidentId);
-            return RuleEngine(input, evidence, ex.Message, llm.LastAttempts);
-        }
+        return new SeverityProposal(result, llm.ModelName, llm.LastAttempts);
     }
-
-    /// <summary>The deterministic floor, used when the model's answer is not accepted.</summary>
-    public static SeverityProposal RuleEngine(
-        IncidentAnalysisInput input, EvidenceBundle evidence, string reason, int attempts = 0) =>
-        new(SeverityRules.Score(input, evidence.NearbyIncidents, evidence.RainfallMm),
-            "rule-engine", AgentRunStatus.SucceededWithFallback, reason, attempts);
 
     private static string BuildPrompt(IncidentAnalysisInput input, EvidenceBundle evidence) =>
         $"""

@@ -107,9 +107,6 @@ public record EnrichmentResult
     [JsonPropertyName("summary")]
     public required string Summary { get; init; }
 
-    [JsonPropertyName("usedFallback")]
-    public bool UsedFallback { get; init; }
-
     [JsonIgnore]
     public bool HasProposals => Suggestions.Count > 0 || Duplicate is not null;
 }

@@ -155,7 +155,6 @@ export type EnrichmentProposal = {
     reason: string
   } | null
   summary: string
-  usedFallback: boolean
 }
 
 /** One change in a Zone Planning Agent plan. */
@@ -177,7 +176,6 @@ export type ZoneProposal = {
 export type ZonePlan = {
   zones: ZoneProposal[]
   summary: string
-  usedFallback: boolean
 }
 
 /** Agent names as recorded on their runs. */

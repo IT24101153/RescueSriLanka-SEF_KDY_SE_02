@@ -2,16 +2,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import EnrichmentPanel from './EnrichmentPanel'
 import ZonePlanner from './ZonePlanner'
-import { apiFetch } from '../../../shared/api/client'
+import { ApiError, apiFetch } from '../../../shared/api/client'
 import type { AgentRun } from '../../../shared/types'
 import type { EnrichmentProposal, Incident, ZonePlan } from '../types'
 
-vi.mock('../../../shared/api/client', () => ({
+vi.mock('../../../shared/api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../shared/api/client')>()),
   apiFetch: vi.fn(),
   queryString: (params: Record<string, unknown>) =>
     '?' + Object.entries(params).map(([k, v]) => `${k}=${String(v)}`).join('&'),
 }))
 const api = vi.mocked(apiFetch)
+
+const QUOTA = "Google AI's daily quota for this key is used up, so AI recommendations are paused until it resets."
+
+/** A run the model could not serve: no output, and the provider's reason. */
+function failedRun(agentName: string, extra: Partial<AgentRun> = {}): AgentRun {
+  return { ...run(agentName, null), status: 'Failed', model: null, outputJson: null, errorMessage: QUOTA, ...extra }
+}
 
 function run(agentName: string, output: unknown, extra: Partial<AgentRun> = {}): AgentRun {
   return {
@@ -32,7 +40,6 @@ const enrichment: EnrichmentProposal = {
   ],
   duplicate: { incidentId: 'i-0', title: 'Kelani flood', distanceKm: 0.12, similarity: 0.5, reason: 'Same flood.' },
   summary: 'Two fixes and a duplicate.',
-  usedFallback: false,
 }
 
 /** The body sent with the call to `path`, parsed. */
@@ -71,6 +78,33 @@ describe('Enrichment agent panel', () => {
       mergeDuplicate: false,
     })
   })
+
+  it('says why there is no check when the AI quota is used up, with nothing to apply', async () => {
+    api.mockResolvedValue([failedRun('IncidentEnrichmentAgent')])
+    render(<EnrichmentPanel incident={incident} onChanged={() => {}} />)
+
+    expect(await screen.findByText('No AI record check.')).toBeTruthy()
+    expect(screen.getByText(QUOTA, { exact: false })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Apply/ })).toBeNull()
+    expect(screen.queryByText('rule engine')).toBeNull()
+  })
+
+  it('shows the reason once when trying again fails the same way', async () => {
+    api.mockImplementation((path) =>
+      String(path).endsWith('/enrich')
+        ? Promise.reject(new ApiError(503, QUOTA))
+        : Promise.resolve([failedRun('IncidentEnrichmentAgent')]),
+    )
+    const onChanged = vi.fn()
+    render(<EnrichmentPanel incident={incident} onChanged={onChanged} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
+
+    // The failed run already says why, so the 503 raises no second banner.
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getAllByText(QUOTA, { exact: false })).toHaveLength(1)
+  })
 })
 
 const plan: ZonePlan = {
@@ -87,7 +121,6 @@ const plan: ZonePlan = {
     },
   ],
   summary: 'One area zone, one to retire.',
-  usedFallback: true,
 }
 
 describe('Zone planning agent panel', () => {
@@ -118,5 +151,23 @@ describe('Zone planning agent panel', () => {
       expect(body.zones?.[0].name).toBe('Kelani evacuation area')
       expect(body.retireZoneIds).toEqual(['z-1'])
     })
+  })
+
+  it('says why there is no plan when the AI quota is used up, with nothing to approve', async () => {
+    api.mockResolvedValue([failedRun('ZonePlanningAgent', { incidentId: null })])
+    const onPreview = vi.fn()
+    render(<ZonePlanner onPreview={onPreview} onChanged={() => {}} />)
+
+    expect(await screen.findByText('No AI plan.')).toBeTruthy()
+    expect(screen.getByText(QUOTA, { exact: false })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
+    expect(onPreview).toHaveBeenLastCalledWith([])
+  })
+
+  it('still labels a plan recorded by the old rule engine', async () => {
+    api.mockResolvedValue([run('ZonePlanningAgent', plan, { incidentId: null, usedFallback: true, model: 'rule-engine' })])
+    render(<ZonePlanner onPreview={() => {}} onChanged={() => {}} />)
+
+    expect(await screen.findByText('rule engine')).toBeTruthy()
   })
 })

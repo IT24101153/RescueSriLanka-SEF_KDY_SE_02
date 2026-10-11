@@ -6,6 +6,7 @@ using RescueSriLanka.Api.Models;
 using RescueSriLanka.Api.Features.ComponentA.Agents.ZonePlanningAgent;
 using RescueSriLanka.Api.Features.ComponentA.DTOs;
 using RescueSriLanka.Api.Features.ComponentA.Services;
+using RescueSriLanka.Api.Services.Llm;
 
 namespace RescueSriLanka.Api.Features.ComponentA.Controllers;
 /// <summary>Component A — the safe / caution / danger layer.</summary>
@@ -122,11 +123,20 @@ public class SafetyZonesController(
     [EnableRateLimiting("ai")]
     [ProducesResponseType(typeof(ZonePlanResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<ZonePlanResult>> Plan(CancellationToken ct)
     {
         try
         {
             return Ok(await planningAgent.PlanAsync(ct));
+        }
+        catch (LlmUnavailableException ex)
+        {
+            // The plan comes from the AI model or not at all; say why there is none.
+            return Problem(
+                title: "The AI model is unavailable.",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status503ServiceUnavailable);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -48,6 +48,16 @@ describe('Component A agent monitoring', () => {
     expect(screen.getByText('Duplicate report.')).toBeTruthy()
   })
 
+  it('counts a run the AI model could not serve as failed, with the reason in its note', async () => {
+    const reason = "Google AI's daily quota for this key is used up."
+    api.mockResolvedValue([run, { ...run, id: 'r-2', status: 'Failed', model: null, errorMessage: reason }])
+    render(<AgentActivity />)
+
+    expect(await screen.findByText(reason)).toBeTruthy()
+    expect(screen.getByText('No AI result').parentElement?.textContent).toContain('1')
+    expect(screen.queryByText('Rule-engine fallback')).toBeNull()
+  })
+
   it('shows an empty state when there are no runs, and an error when loading fails', async () => {
     api.mockResolvedValueOnce([])
     render(<AgentActivity />)

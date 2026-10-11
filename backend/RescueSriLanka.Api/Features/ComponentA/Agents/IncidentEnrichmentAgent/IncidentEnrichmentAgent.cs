@@ -16,6 +16,7 @@ public interface IIncidentEnrichmentAgent
     /// <summary>
     /// Checks one report for duplicates and for fields it can fill or correct,
     /// and persists the proposal as an agent run. Never changes the incident.
+    /// Throws <see cref="LlmUnavailableException"/> when the model cannot answer.
     /// </summary>
     Task<EnrichmentResult> EnrichAsync(Guid incidentId, CancellationToken ct = default);
 }
@@ -25,7 +26,7 @@ public interface IIncidentEnrichmentAgent
 //
 //   Planner    incident            -> plan             touches nothing
 //   Evidence   incident            -> evidence         allow-listed read-only tools
-//   Reasoning  incident + evidence -> raw proposal     the language model / rule engine
+//   Reasoning  incident + evidence -> raw proposal     the language model, and only it
 //   Validator  raw proposal        -> safe proposal    nothing (pure function)
 
 public static class EnrichmentRoles
@@ -100,13 +101,13 @@ public class IncidentEnrichmentAgent(
 
             var raw = await tracer.StepAsync(1, async () =>
             {
-                var proposal = await new EnrichmentReasoningAgent(llm, logger).ProposeAsync(input, evidence, ct);
+                var proposal = await new EnrichmentReasoningAgent(llm).ProposeAsync(input, evidence, ct);
                 return (proposal, $"{proposal.Model}: {proposal.Answer.Suggestions?.Count ?? 0} suggestion(s)");
             }, ct);
 
             var validated = await tracer.StepAsync(2, () =>
             {
-                var outcome = EnrichmentValidator.Validate(input, evidence, raw.Answer, raw.UsedFallback);
+                var outcome = EnrichmentValidator.Validate(input, evidence, raw.Answer);
                 var detail = outcome.Adjustments.Count == 0
                     ? "accepted"
                     : "accepted with changes: " + string.Join("; ", outcome.Adjustments);
@@ -114,10 +115,7 @@ public class IncidentEnrichmentAgent(
             }, ct);
 
             await tracer.CompleteAsync(
-                raw.UsedFallback ? AgentRunStatus.SucceededWithFallback : AgentRunStatus.Succeeded,
-                raw.Model, raw.Attempts, raw.Error,
-                JsonSerializer.Serialize(validated, AnalysisJson.Options),
-                raw.UsedFallback, ct);
+                raw.Model, raw.Attempts, JsonSerializer.Serialize(validated, AnalysisJson.Options), ct);
 
             logger.LogInformation(
                 "Incident {Id} enriched: {Count} suggestion(s){Duplicate}",
@@ -274,14 +272,14 @@ public class EnrichmentEvidenceAgent(AppDbContext db)
 }
 
 /// <summary>What the Reasoning agent hands to the Validator.</summary>
-public record RawEnrichment(
-    ModelEnrichmentAnswer Answer, string Model, bool UsedFallback, string? Error, int Attempts);
+public record RawEnrichment(ModelEnrichmentAnswer Answer, string Model, int Attempts);
 
 /// <summary>
-/// Reasons over the evidence with the language model, or the rule engine when
-/// the model is unconfigured or unusable. No tools, no database.
+/// Reasons over the evidence with the language model, and only with it: when
+/// the model cannot answer there is no proposal and the run fails with the
+/// reason. No tools, no database.
 /// </summary>
-public class EnrichmentReasoningAgent(ILlmClient llm, ILogger logger)
+public class EnrichmentReasoningAgent(ILlmClient llm)
 {
     private const string SystemInstruction =
         """
@@ -337,44 +335,14 @@ public class EnrichmentReasoningAgent(ILlmClient llm, ILogger logger)
         required = new[] { "suggestions", "duplicateOfIncidentId", "summary" }
     };
 
+    /// <summary>Throws <see cref="LlmUnavailableException"/> when the model cannot answer.</summary>
     public async Task<RawEnrichment> ProposeAsync(
         EnrichmentInput input, EnrichmentEvidence evidence, CancellationToken ct)
     {
-        if (!llm.IsConfigured)
-        {
-            return Fallback(input, evidence, "No language model configured — deterministic rules applied.", 0);
-        }
+        var answer = await ModelCall.AskAsync<ModelEnrichmentAnswer>(
+            llm, SystemInstruction, BuildPrompt(input, evidence), ResponseSchema, null, ct);
 
-        try
-        {
-            var raw = await llm.GenerateAsync(SystemInstruction, BuildPrompt(input, evidence), ResponseSchema, null, ct);
-            var answer = JsonSerializer.Deserialize<ModelEnrichmentAnswer>(raw, AnalysisJson.Options)
-                ?? throw new LlmUnavailableException("Model returned no parseable object.");
-            return new RawEnrichment(answer, llm.ModelName, false, null, llm.LastAttempts);
-        }
-        catch (Exception ex) when (ex is LlmUnavailableException or JsonException)
-        {
-            logger.LogWarning(ex, "Model unusable for enrichment of {Id}; using rule engine.", input.IncidentId);
-            return Fallback(input, evidence, ex.Message, llm.LastAttempts);
-        }
-    }
-
-    /// <summary>The rule engine's answer, in the same raw shape the model gives.</summary>
-    public static RawEnrichment Fallback(
-        EnrichmentInput input, EnrichmentEvidence evidence, string reason, int attempts)
-    {
-        var rules = EnrichmentRules.Propose(input, evidence);
-        var answer = new ModelEnrichmentAnswer
-        {
-            Suggestions = [.. rules.Suggestions.Select(s => new ModelSuggestion
-            {
-                Field = s.Field, Proposed = s.Proposed, Reason = s.Reason
-            })],
-            DuplicateOfIncidentId = rules.Duplicate?.IncidentId.ToString(),
-            DuplicateReason = rules.Duplicate?.Reason,
-            Summary = rules.Summary
-        };
-        return new RawEnrichment(answer, "rule-engine", true, reason, attempts);
+        return new RawEnrichment(answer, llm.ModelName, llm.LastAttempts);
     }
 
     private static string BuildPrompt(EnrichmentInput input, EnrichmentEvidence evidence)
@@ -425,7 +393,7 @@ public static class EnrichmentValidator
     public const double DistrictPlausibilityKm = 40;
 
     public static EnrichmentValidation Validate(
-        EnrichmentInput input, EnrichmentEvidence evidence, ModelEnrichmentAnswer answer, bool usedFallback)
+        EnrichmentInput input, EnrichmentEvidence evidence, ModelEnrichmentAnswer answer)
     {
         var adjustments = new List<string>();
         var accepted = new List<FieldSuggestion>();
@@ -497,8 +465,7 @@ public static class EnrichmentValidator
         {
             Suggestions = accepted,
             Duplicate = duplicate,
-            Summary = summary,
-            UsedFallback = usedFallback
+            Summary = summary
         }, adjustments);
     }
 

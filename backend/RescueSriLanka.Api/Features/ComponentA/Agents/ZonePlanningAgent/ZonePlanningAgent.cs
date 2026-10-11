@@ -16,14 +16,15 @@ public interface IZonePlanningAgent
     /// <summary>
     /// Reviews the whole zone layer against the approved incidents and persists
     /// a plan — new area zones and zones to retire — as an agent run. Changes
-    /// nothing on the map until a coordinator approves.
+    /// nothing on the map until a coordinator approves. Throws
+    /// <see cref="LlmUnavailableException"/> when the model cannot answer.
     /// </summary>
     Task<ZonePlanResult> PlanAsync(CancellationToken ct = default);
 }
 
 //   Planner    snapshot            -> plan             touches nothing
 //   Evidence   snapshot            -> evidence         read-only tools: incidents, clusters, rain, zones
-//   Reasoning  evidence            -> raw plan         the language model / rule engine
+//   Reasoning  evidence            -> raw plan         the language model, and only it
 //   Validator  raw plan            -> safe plan        nothing (pure function)
 
 public static class ZonePlanningRoles
@@ -84,23 +85,22 @@ public class ZonePlanningAgent(
 
             var raw = await tracer.StepAsync(1, async () =>
             {
-                var proposal = await new ZoneReasoningAgent(llm, logger).ProposeAsync(evidence, ct);
-                return (proposal, $"{proposal.Model}: {proposal.Plan.Zones?.Count ?? 0} proposal(s)");
+                var proposal = await new ZoneReasoningAgent(llm).ProposeAsync(evidence, ct);
+                return (proposal, proposal.Model is null
+                    ? "nothing to plan; the model was not asked"
+                    : $"{proposal.Model}: {proposal.Plan.Zones?.Count ?? 0} proposal(s)");
             }, ct);
 
             var validated = await tracer.StepAsync(2, () =>
             {
-                var outcome = ZonePlanValidator.Validate(evidence, raw.Plan, raw.UsedFallback);
+                var outcome = ZonePlanValidator.Validate(evidence, raw.Plan);
                 return Task.FromResult((outcome.Result, outcome.Adjustments.Count == 0
                     ? "accepted"
                     : "accepted with changes: " + string.Join("; ", outcome.Adjustments)));
             }, ct);
 
             await tracer.CompleteAsync(
-                raw.UsedFallback ? AgentRunStatus.SucceededWithFallback : AgentRunStatus.Succeeded,
-                raw.Model, raw.Attempts, raw.Error,
-                JsonSerializer.Serialize(validated, AnalysisJson.Options),
-                raw.UsedFallback, ct);
+                raw.Model, raw.Attempts, JsonSerializer.Serialize(validated, AnalysisJson.Options), ct);
 
             logger.LogInformation("Zone plan proposed {Count} change(s).", validated.Zones.Count);
             return validated;
@@ -241,11 +241,18 @@ public class ZoneEvidenceAgent(AppDbContext db, IncidentAnalysisTools tools)
     }
 }
 
-public record RawZonePlan(ModelZonePlan Plan, string Model, bool UsedFallback, string? Error, int Attempts);
+/// <param name="Model">Null when there was nothing to plan, so the model was not asked.</param>
+public record RawZonePlan(ModelZonePlan Plan, string? Model, int Attempts);
 
-/// <summary>The model, with the rule engine as its floor. No tools, no database.</summary>
-public class ZoneReasoningAgent(ILlmClient llm, ILogger logger)
+/// <summary>
+/// The language model, and only it: when the model cannot answer there is no
+/// plan and the run fails with the reason. No tools, no database.
+/// </summary>
+public class ZoneReasoningAgent(ILlmClient llm)
 {
+    public const string NothingToPlan =
+        "Nothing to plan: there are no clusters of approved incidents and no manual zones.";
+
     private const string SystemInstruction =
         """
         You are the Zone Planning Agent for a Sri Lankan disaster response
@@ -300,55 +307,19 @@ public class ZoneReasoningAgent(ILlmClient llm, ILogger logger)
         required = new[] { "zones", "summary" }
     };
 
+    /// <summary>Throws <see cref="LlmUnavailableException"/> when the model cannot answer.</summary>
     public async Task<RawZonePlan> ProposeAsync(ZonePlanningEvidence evidence, CancellationToken ct)
     {
-        if (!llm.IsConfigured)
-        {
-            return Fallback(evidence, "No language model configured — deterministic rules applied.", 0);
-        }
-
         // Nothing to plan from: asking the model would only invite invention.
         if (evidence.Clusters.Count == 0 && evidence.ManualZones.Count == 0)
         {
-            return Fallback(evidence, null, 0);
+            return new RawZonePlan(new ModelZonePlan { Zones = [], Summary = NothingToPlan }, null, 0);
         }
 
-        try
-        {
-            var raw = await llm.GenerateAsync(SystemInstruction, BuildPrompt(evidence), ResponseSchema, null, ct);
-            var plan = JsonSerializer.Deserialize<ModelZonePlan>(raw, AnalysisJson.Options)
-                ?? throw new LlmUnavailableException("Model returned no parseable object.");
-            return new RawZonePlan(plan, llm.ModelName, false, null, llm.LastAttempts);
-        }
-        catch (Exception ex) when (ex is LlmUnavailableException or JsonException)
-        {
-            logger.LogWarning(ex, "Model unusable for zone planning; using rule engine.");
-            return Fallback(evidence, ex.Message, llm.LastAttempts);
-        }
-    }
+        var plan = await ModelCall.AskAsync<ModelZonePlan>(
+            llm, SystemInstruction, BuildPrompt(evidence), ResponseSchema, null, ct);
 
-    public static RawZonePlan Fallback(ZonePlanningEvidence evidence, string? reason, int attempts)
-    {
-        var rules = ZonePlanningRules.Propose(evidence);
-        var plan = new ModelZonePlan
-        {
-            Summary = rules.Summary,
-            Zones = [.. rules.Zones.Select(zone => new ModelZone
-            {
-                Action = zone.Action,
-                ZoneId = zone.ZoneId?.ToString(),
-                Name = zone.Name,
-                Status = zone.Status.ToString(),
-                CenterLatitude = zone.CenterLatitude,
-                CenterLongitude = zone.CenterLongitude,
-                RadiusMeters = zone.RadiusMeters,
-                District = zone.District,
-                ExpiresInHours = zone.ExpiresInHours,
-                Rationale = zone.Rationale,
-                BasedOnIncidentIds = [.. zone.BasedOnIncidentIds.Select(id => id.ToString())]
-            })]
-        };
-        return new RawZonePlan(plan, "rule-engine", true, reason, attempts);
+        return new RawZonePlan(plan, llm.ModelName, llm.LastAttempts);
     }
 
     private static string BuildPrompt(ZonePlanningEvidence evidence)
@@ -404,8 +375,7 @@ public static class ZonePlanValidator
     public static bool OnIsland(double latitude, double longitude) =>
         latitude is >= MinLatitude and <= MaxLatitude && longitude is >= MinLongitude and <= MaxLongitude;
 
-    public static ZonePlanValidation Validate(
-        ZonePlanningEvidence evidence, ModelZonePlan plan, bool usedFallback)
+    public static ZonePlanValidation Validate(ZonePlanningEvidence evidence, ModelZonePlan plan)
     {
         var adjustments = new List<string>();
         var accepted = new List<ZoneProposal>();
@@ -512,8 +482,7 @@ public static class ZonePlanValidator
             Zones = accepted,
             Summary = string.IsNullOrWhiteSpace(plan.Summary)
                 ? $"{creates} zone(s) to create, {accepted.Count - creates} to retire."
-                : AgentRunTracer.Truncate(plan.Summary.Trim(), 500),
-            UsedFallback = usedFallback
+                : AgentRunTracer.Truncate(plan.Summary.Trim(), 500)
         }, adjustments);
     }
 

@@ -4,6 +4,7 @@ import type { AgentRun } from '../../../shared/types'
 import { AGENTS, type SafetyZoneInput, type ZonePlan, type ZoneProposal, type ZoneStatus } from '../types'
 import { ZONE_TOKEN, timeAgo } from '../severity'
 import { parsePlan } from '../agentPlan'
+import { failureReason, runAgent } from '../agentFailure'
 
 type ZonePlannerProps = {
   /** Draws the pending plan on the zone map, so it is judged by sight. */
@@ -18,7 +19,7 @@ function parse(run: AgentRun | null): ZonePlan | null {
   if (!run?.outputJson) return null
   try {
     const raw = JSON.parse(run.outputJson) as Partial<ZonePlan>
-    return { zones: raw.zones ?? [], summary: raw.summary ?? '', usedFallback: raw.usedFallback ?? false }
+    return { zones: raw.zones ?? [], summary: raw.summary ?? '' }
   } catch {
     return null
   }
@@ -29,6 +30,9 @@ function parse(run: AgentRun | null): ZonePlan | null {
  * really one event, and manual zones whose hazard has passed — and proposes a
  * plan. The coordinator edits any zone, unticks what they disagree with, and
  * approves; only then does anything reach the public map.
+ *
+ * The plan comes from the AI model or not at all: when the model cannot be
+ * used, the panel shows why in place of a plan.
  */
 export default function ZonePlanner({ onPreview, onChanged }: ZonePlannerProps) {
   const [run, setRun] = useState<AgentRun | null>(null)
@@ -103,7 +107,8 @@ export default function ZonePlanner({ onPreview, onChanged }: ZonePlannerProps) 
     })
   }
 
-  const runPlanner = () => act('plan', () => apiFetch('/api/safetyzones/plan', { method: 'POST' }))
+  const runPlanner = () =>
+    act('plan', () => runAgent(() => apiFetch('/api/safetyzones/plan', { method: 'POST' })))
 
   function approve() {
     const unchanged =
@@ -171,14 +176,17 @@ export default function ZonePlanner({ onPreview, onChanged }: ZonePlannerProps) 
         {!run && !error && <p className="empty">No plan yet. Run the agent to review the zone layer.</p>}
 
         {run?.status === 'Failed' && (
-          <p className="agent__error">The last plan failed: {run.errorMessage ?? 'no reason recorded'}.</p>
+          <p className="agent__fallback" role="status">
+            <strong>No AI plan.</strong> {failureReason(run)}
+          </p>
         )}
 
         {run && plan && (
           <>
             <p className="planner__meta">
               {timeAgo(run.startedAt)} · {run.model ?? '—'}
-              {plan.usedFallback && <span className="tag">rule engine</span>}
+              {/* Only plans recorded before the agents became AI-only carry this. */}
+              {run.usedFallback && <span className="tag">rule engine</span>}
               {steps && ` · ${steps.steps.length} steps`}
               {!pending && (
                 <span className={`badge badge--${run.decision === 'Rejected' ? 'bad' : 'ok'}`}>

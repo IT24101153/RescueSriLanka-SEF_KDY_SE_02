@@ -9,6 +9,7 @@ using RescueSriLanka.Api.Features.ComponentA.DTOs;
 using RescueSriLanka.Api.Features.ComponentA.Models;
 using RescueSriLanka.Api.Features.ComponentA.Services;
 using RescueSriLanka.Api.Services.Email;
+using RescueSriLanka.Api.Services.Llm;
 
 namespace RescueSriLanka.Api.Features.ComponentA.Controllers;
 /// <summary>Component A — incidents and the live disaster map.</summary>
@@ -282,6 +283,10 @@ public class IncidentsController(
     /// Runs the Incident Analysis Agent. The agent only ever *proposes* — the
     /// severity in force changes solely through the severity endpoint, which a
     /// coordinator drives. This is the human approval gate.
+    ///
+    /// The grade comes from the AI model or not at all: when the model cannot
+    /// be used (quota used up, no key, unreadable answer) this answers 503 with
+    /// the reason, and the coordinator sets the level by hand.
     /// </summary>
     [HttpPost("{id:guid}/analyse")]
     [Authorize(Roles = Coordinator)]
@@ -289,6 +294,7 @@ public class IncidentsController(
     [ProducesResponseType(typeof(IncidentAnalysisResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<IncidentAnalysisResult>> Analyse(Guid id, CancellationToken ct)
     {
         if (await incidentService.GetAsync(id, ct) is null)
@@ -299,6 +305,10 @@ public class IncidentsController(
         try
         {
             return Ok(await analysisAgent.AnalyseAsync(id, ct));
+        }
+        catch (LlmUnavailableException ex)
+        {
+            return ModelUnavailable(ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -322,6 +332,7 @@ public class IncidentsController(
     [ProducesResponseType(typeof(EnrichmentResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<EnrichmentResult>> Enrich(Guid id, CancellationToken ct)
     {
         if (await incidentService.GetAsync(id, ct) is null)
@@ -333,6 +344,10 @@ public class IncidentsController(
         {
             return Ok(await enrichmentAgent.EnrichAsync(id, ct));
         }
+        catch (LlmUnavailableException ex)
+        {
+            return ModelUnavailable(ex);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return StatusCode(StatusCodes.Status502BadGateway, new
@@ -341,6 +356,16 @@ public class IncidentsController(
             });
         }
     }
+
+    /// <summary>
+    /// The model could not be used and nothing stands in for it. The reason is
+    /// already on the failed agent run; the caller gets it too, as ProblemDetails.
+    /// </summary>
+    private ObjectResult ModelUnavailable(LlmUnavailableException ex) =>
+        Problem(
+            title: "The AI model is unavailable.",
+            detail: ex.Message,
+            statusCode: StatusCodes.Status503ServiceUnavailable);
 
     /// <summary>
     /// Staff review every report; the public (signed out, or a citizen) sees

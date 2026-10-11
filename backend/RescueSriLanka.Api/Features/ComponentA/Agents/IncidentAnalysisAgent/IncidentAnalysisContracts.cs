@@ -41,10 +41,6 @@ public record IncidentAnalysisResult
     [JsonPropertyName("rationale")]
     public required string Rationale { get; init; }
 
-    /// <summary>True when the rule engine produced this because the model was unusable.</summary>
-    [JsonIgnore]
-    public bool UsedFallback { get; init; }
-
     /// <summary>Evidence the agent gathered from its tools, recorded for audit.</summary>
     [JsonIgnore]
     public IReadOnlyDictionary<string, object>? ToolResults { get; init; }

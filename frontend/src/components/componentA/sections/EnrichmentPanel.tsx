@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch, queryString } from '../../../shared/api/client'
 import type { AgentRun } from '../../../shared/types'
 import { AGENTS, type EnrichmentField, type EnrichmentProposal, type Incident } from '../types'
+import { failureReason, runAgent } from '../agentFailure'
 
 type EnrichmentPanelProps = {
   incident: Incident
@@ -28,7 +29,6 @@ function parse(run: AgentRun | null): EnrichmentProposal | null {
       suggestions: raw.suggestions ?? [],
       duplicate: raw.duplicate ?? null,
       summary: raw.summary ?? '',
-      usedFallback: raw.usedFallback ?? false,
     }
   } catch {
     return null
@@ -42,6 +42,9 @@ function parse(run: AgentRun | null): EnrichmentProposal | null {
  * The Incident Enrichment Agent's proposal for this report: fields it would
  * fill or correct, and another report it looks like a duplicate of. Nothing
  * applies until the coordinator ticks what they agree with and approves.
+ *
+ * The proposal comes from the AI model or not at all: when the model cannot be
+ * used, the panel shows why in place of a proposal.
  */
 export default function EnrichmentPanel({ incident, onChanged }: EnrichmentPanelProps) {
   const [run, setRun] = useState<AgentRun | null>(null)
@@ -109,7 +112,9 @@ export default function EnrichmentPanel({ incident, onChanged }: EnrichmentPanel
 
   const runCheck = () => {
     setPolls(0)
-    return act('check', () => apiFetch(`/api/incidents/${incident.id}/enrich`, { method: 'POST' }))
+    return act('check', () =>
+      runAgent(() => apiFetch(`/api/incidents/${incident.id}/enrich`, { method: 'POST' })),
+    )
   }
 
   const approve = () =>
@@ -191,19 +196,24 @@ export default function EnrichmentPanel({ incident, onChanged }: EnrichmentPanel
       )}
 
       {!merged && run?.status === 'Failed' && (
-        <div className="decide__actions">
-          <p className="agent__pending">The record check failed: {run.errorMessage ?? 'no reason recorded'}.</p>
-          <button type="button" className="btn-small" disabled={busy !== null} onClick={() => void runCheck()}>
-            Try again
-          </button>
-        </div>
+        <>
+          <p className="agent__fallback" role="status">
+            <strong>No AI record check.</strong> {failureReason(run)}
+          </p>
+          <div className="decide__actions">
+            <button type="button" className="btn-small" disabled={busy !== null} onClick={() => void runCheck()}>
+              {busy === 'check' ? 'Checking…' : 'Try again'}
+            </button>
+          </div>
+        </>
       )}
 
       {!merged && proposal && run && run.status !== 'Failed' && (
         <>
           <p className="enrich__summary">
             {proposal.summary}
-            {proposal.usedFallback && <span className="tag">rule engine</span>}
+            {/* Only runs recorded before the agents became AI-only carry this. */}
+            {run.usedFallback && <span className="tag">rule engine</span>}
           </p>
 
           {nothingProposed && <p className="agent__pending">Nothing to correct, and no duplicate found.</p>}

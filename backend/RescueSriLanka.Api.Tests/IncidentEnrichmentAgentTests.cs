@@ -12,8 +12,9 @@ namespace RescueSriLanka.Api.Tests;
 /// <summary>
 /// Evaluation of the Incident Enrichment Agent (Component A). The model is a
 /// scripted fake, so each case is repeatable: golden case, structured output,
-/// deterministic validation, prompt-injection resistance, rule-engine fallback
-/// and safe failure — the same list the Incident Analysis Agent is held to.
+/// deterministic validation, prompt-injection resistance and safe failure —
+/// the same list the Incident Analysis Agent is held to. Like it, this agent
+/// proposes with the model or not at all: there is no rule engine.
 /// </summary>
 public class IncidentEnrichmentAgentTests
 {
@@ -98,11 +99,12 @@ public class IncidentEnrichmentAgentTests
 
         Assert.Equal(3, result.Suggestions.Count);
         Assert.Equal(earlier.Id, result.Duplicate?.IncidentId);
-        Assert.False(result.UsedFallback);
 
         var run = await db.AgentRuns.SingleAsync();
         Assert.Equal(IncidentEnrichmentAgent.AgentName, run.AgentName);
         Assert.Equal(AgentRunStatus.Succeeded, run.Status);
+        Assert.Equal("fake-model", run.Model);
+        Assert.False(run.UsedFallback);
         Assert.Equal(AgentRunDecision.Pending, run.Decision);
         Assert.Contains("find_duplicate_candidates", run.ToolCallsJson);
 
@@ -171,52 +173,80 @@ public class IncidentEnrichmentAgentTests
         Assert.Contains("not among the candidates", (await db.AgentRuns.SingleAsync()).PlanJson);
     }
 
-    // ---------- fallback ----------
+    // ---------- model failure: nothing stands in for the model ----------
 
     [Fact]
-    public async Task NoModel_RuleEngineFindsTheDuplicateMissingDistrictAndHeadCount()
+    public async Task NoModelConfigured_FailsTheRun_AndProposesNothing()
     {
         await using var db = NewDb();
-        var earlier = await AddAsync(db, title: "Flooding at Kelani bridge, families cut off",
+        // A duplicate, a missing district and a head-count in the text: all
+        // things rules could have guessed at, and none of them is proposed.
+        await AddAsync(db, title: "Flooding at Kelani bridge, families cut off",
             status: IncidentStatus.Verified, reportedAt: DateTime.UtcNow.AddHours(-3));
         var incident = await AddAsync(db, latitude: 6.9551, longitude: 79.8822, district: null);
+        var llm = new FakeLlm(() => "{}", configured: false);
 
-        var result = await NewAgent(db, new FakeLlm(() => "{}", configured: false)).EnrichAsync(incident.Id);
+        await Assert.ThrowsAsync<LlmUnavailableException>(() => NewAgent(db, llm).EnrichAsync(incident.Id));
 
-        Assert.True(result.UsedFallback);
-        Assert.Equal(earlier.Id, result.Duplicate?.IncidentId);
-        Assert.Contains(result.Suggestions, s => s.Field == EnrichmentFields.District && s.Proposed == "Colombo");
-        Assert.Contains(result.Suggestions, s => s.Field == EnrichmentFields.People && s.Proposed == "160");
-
+        Assert.Equal(0, llm.Calls);
         var run = await db.AgentRuns.SingleAsync();
-        Assert.Equal(AgentRunStatus.SucceededWithFallback, run.Status);
-        Assert.Equal("rule-engine", run.Model);
+        Assert.Equal(AgentRunStatus.Failed, run.Status);
+        Assert.Contains("No AI model is configured", run.ErrorMessage);
+        Assert.Null(run.OutputJson);
+        Assert.False(run.UsedFallback);
     }
 
     [Fact]
-    public async Task UnparseableModelAnswer_FallsBackToTheRuleEngine_AndRecordsWhy()
+    public async Task UnparseableModelAnswer_FailsTheRun_AndRecordsWhy()
     {
         await using var db = NewDb();
         var incident = await AddAsync(db, district: null);
 
-        var result = await NewAgent(db, new FakeLlm(() => "not json")).EnrichAsync(incident.Id);
+        await Assert.ThrowsAsync<LlmUnavailableException>(
+            () => NewAgent(db, new FakeLlm(() => "not json")).EnrichAsync(incident.Id));
 
-        Assert.True(result.UsedFallback);
         var run = await db.AgentRuns.SingleAsync();
-        Assert.Equal(AgentRunStatus.SucceededWithFallback, run.Status);
-        Assert.NotNull(run.ErrorMessage);
+        Assert.Equal(AgentRunStatus.Failed, run.Status);
+        Assert.Contains("could not be read", run.ErrorMessage);
+        Assert.Null(run.OutputJson);
     }
+
+    [Fact]
+    public async Task QuotaUsedUp_FailsTheRun_AndRecordsTheProvidersReason()
+    {
+        const string quota =
+            "Google AI's daily quota for this key is used up, so AI recommendations are paused until it resets.";
+
+        await using var db = NewDb();
+        var incident = await AddAsync(db, district: null);
+        var llm = new FakeLlm(() => throw new LlmUnavailableException(quota));
+
+        var error = await Assert.ThrowsAsync<LlmUnavailableException>(() => NewAgent(db, llm).EnrichAsync(incident.Id));
+
+        Assert.Equal(quota, error.Message);
+        var run = await db.AgentRuns.SingleAsync();
+        Assert.Equal(AgentRunStatus.Failed, run.Status);
+        Assert.Equal(quota, run.ErrorMessage);
+        Assert.Null(run.OutputJson);
+    }
+
+    // ---------- evidence ----------
 
     [Fact]
     public async Task LaterReports_AreNeverCandidates_SoTwoReportsCannotMergeIntoEachOther()
     {
         await using var db = NewDb();
         var first = await AddAsync(db, reportedAt: DateTime.UtcNow.AddHours(-1));
-        await AddAsync(db, reportedAt: DateTime.UtcNow);
+        var later = await AddAsync(db, reportedAt: DateTime.UtcNow);
+        // Even a model that names the later report cannot make it the one kept.
+        var llm = new FakeLlm(() => $$"""
+            { "suggestions": [], "duplicateOfIncidentId": "{{later.Id}}", "summary": "Same flood." }
+            """);
 
-        var result = await NewAgent(db, new FakeLlm(() => "{}", configured: false)).EnrichAsync(first.Id);
+        var result = await NewAgent(db, llm).EnrichAsync(first.Id);
 
         Assert.Null(result.Duplicate);
+        Assert.DoesNotContain(later.Id.ToString(), llm.LastPrompt);
     }
 
     [Fact]
@@ -225,7 +255,7 @@ public class IncidentEnrichmentAgentTests
         await using var db = NewDb();
         var incident = await AddAsync(db, status: IncidentStatus.Resolved);
 
-        await NewAgent(db, new FakeLlm(() => "{}", configured: false)).EnrichAsync(incident.Id);
+        await NewAgent(db, new FakeLlm(() => "{}")).EnrichAsync(incident.Id);
 
         var run = await db.AgentRuns.SingleAsync();
         Assert.Contains("Duplicate search skipped", run.PlanJson);
@@ -241,7 +271,7 @@ public class IncidentEnrichmentAgentTests
         Assert.Empty(db.AgentRuns);
     }
 
-    // ---------- rules ----------
+    // ---------- evidence tools ----------
 
     [Theory]
     [InlineData("About 40 families are stranded.", 160)]
@@ -263,8 +293,4 @@ public class IncidentEnrichmentAgentTests
         Assert.True(EnrichmentRules.TextSimilarity(
             "Flooding at Kelani bridge", "Fire in Pettah market warehouse") < 0.1);
     }
-
-    [Fact]
-    public void DetectType_ReadsTheHazardFromTheText() =>
-        Assert.Equal(IncidentType.Landslide, EnrichmentRules.DetectType("Earth slip blocking the road after rain"));
 }

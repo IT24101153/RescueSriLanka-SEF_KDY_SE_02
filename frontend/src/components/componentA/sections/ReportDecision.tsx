@@ -5,6 +5,7 @@ import type { AgentRun } from '../../../shared/types'
 import type { AnalysisProposal, Incident, IncidentSeverity } from '../types'
 import { AGENTS, SEVERITY_ORDER } from '../types'
 import { SEVERITY_TOKEN } from '../severity'
+import { failureReason, runAgent } from '../agentFailure'
 
 type ReportDecisionProps = {
   incident: Incident
@@ -36,6 +37,10 @@ function parseProposal(run: AgentRun | null): AnalysisProposal | null {
  *
  * The two stay separate on purpose — a report can be true while the AI has
  * graded it wrong.
+ *
+ * The grade comes from the AI model or not at all. When the model cannot be
+ * used (its quota is used up, say) the panel says so in the model's place and
+ * the coordinator sets the level by hand.
  */
 export default function ReportDecision({ incident, onChanged }: ReportDecisionProps) {
   const [runs, setRuns] = useState<AgentRun[]>([])
@@ -55,10 +60,6 @@ export default function ReportDecision({ incident, onChanged }: ReportDecisionPr
   const latest = runs[0] ?? null
   const proposal = parseProposal(latest)
   const agentWorking = !latest || latest.status === 'Running'
-  // Decided once the proposal is approved, or — for one turned down under the
-  // old flow — once a coordinator has set the level themselves.
-  const conditionDecided =
-    latest?.approvedAt != null && (latest.approved || incident.severityOverridden)
 
   // A level already stands when an earlier AI result was approved or a
   // coordinator set one — a re-analysis then proposes a change to it.
@@ -66,6 +67,13 @@ export default function ReportDecision({ incident, onChanged }: ReportDecisionPr
     runs.slice(1).some((run) => run.approved) || incident.severityOverridden
       ? incident.severity
       : null
+
+  // Decided once the proposal is approved, or — for one turned down under the
+  // old flow — once a coordinator has set the level themselves. With no AI
+  // grade to decide on, a level already in force settles it.
+  const conditionDecided = proposal
+    ? latest?.approvedAt != null && (latest.approved || incident.severityOverridden)
+    : !agentWorking && levelInForce !== null
 
   // Until the coordinator decides, show what the AI proposes; afterwards,
   // the level actually applied to the report and its safety zone.
@@ -171,7 +179,7 @@ export default function ReportDecision({ incident, onChanged }: ReportDecisionPr
   function runAnalysis() {
     setPolls(0)
     return act('analyse', () =>
-      apiFetch(`/api/incidents/${incident.id}/analyse`, { method: 'POST' }),
+      runAgent(() => apiFetch(`/api/incidents/${incident.id}/analyse`, { method: 'POST' })),
     )
   }
 
@@ -192,6 +200,28 @@ export default function ReportDecision({ incident, onChanged }: ReportDecisionPr
   const approved = status === 'Verified' || status === 'InProgress' || status === 'Resolved'
   const rejected = status === 'Rejected'
   const merged = status === 'Merged'
+
+  const levelPicker = (
+    <div className="decide__confirm">
+      <p>What condition level is it?</p>
+      <div className="decide__levels">
+        {SEVERITY_ORDER.map((level) => (
+          <button
+            key={level}
+            type="button"
+            className={`level-btn level-btn--${SEVERITY_TOKEN[level]}`}
+            disabled={busy !== null || (conditionDecided && level === incident.severity)}
+            onClick={() => void setCondition(level)}
+          >
+            {busy === level ? 'Saving…' : level}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="btn-link decide__minor" onClick={() => setPickingLevel(false)}>
+        Cancel
+      </button>
+    </div>
+  )
 
   return (
     <section className="decide" aria-label="Report decision">
@@ -374,17 +404,46 @@ export default function ReportDecision({ incident, onChanged }: ReportDecisionPr
           )}
 
           {!agentWorking && !proposal && (
-            <div className="decide__actions">
-              <p className="agent__pending">The AI could not grade this report.</p>
-              <button
-                type="button"
-                className="btn-small"
-                disabled={busy !== null}
-                onClick={() => void runAnalysis()}
-              >
-                {busy === 'analyse' ? 'Analysing…' : 'Try again'}
-              </button>
-            </div>
+            <>
+              {/* Nothing stands in for the model, so say why there is no grade. */}
+              <p className="agent__fallback" role="status">
+                <strong>No AI grade.</strong> {failureReason(latest)}
+              </p>
+
+              {levelInForce && (
+                <div className="decide__condition">
+                  <span className={`chip chip--${SEVERITY_TOKEN[levelInForce]} decide__level`}>
+                    {levelInForce}
+                  </span>
+                  <span className="decide__detail">
+                    {incident.severityOverridden ? 'Set by you' : 'Approved earlier'} · still in force
+                  </span>
+                </div>
+              )}
+
+              {pickingLevel ? (
+                levelPicker
+              ) : (
+                <div className="decide__actions">
+                  <button
+                    type="button"
+                    className="btn-small"
+                    disabled={busy !== null}
+                    onClick={() => void runAnalysis()}
+                  >
+                    {busy === 'analyse' ? 'Analysing…' : 'Try again'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-small"
+                    disabled={busy !== null}
+                    onClick={() => setPickingLevel(true)}
+                  >
+                    {levelInForce ? 'Change level' : 'Set the level myself'}
+                  </button>
+                </div>
+              )}
+            </>
           )}
 
           {!agentWorking && proposal && (
@@ -414,29 +473,7 @@ export default function ReportDecision({ incident, onChanged }: ReportDecisionPr
               )}
 
               {pickingLevel ? (
-                <div className="decide__confirm">
-                  <p>What condition level is it?</p>
-                  <div className="decide__levels">
-                    {SEVERITY_ORDER.map((level) => (
-                      <button
-                        key={level}
-                        type="button"
-                        className={`level-btn level-btn--${SEVERITY_TOKEN[level]}`}
-                        disabled={busy !== null || (conditionDecided && level === incident.severity)}
-                        onClick={() => void setCondition(level)}
-                      >
-                        {busy === level ? 'Saving…' : level}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-link decide__minor"
-                    onClick={() => setPickingLevel(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
+                levelPicker
               ) : conditionDecided ? (
                 <button
                   type="button"

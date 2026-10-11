@@ -9,7 +9,10 @@ using RescueSriLanka.Api.Features.ComponentA.Services;
 namespace RescueSriLanka.Api.Features.ComponentA.Agents.IncidentAnalysisAgent;
 public interface IIncidentAnalysisAgent
 {
-    /// <summary>Analyses an incident and persists the run. Never throws for model failure.</summary>
+    /// <summary>
+    /// Analyses an incident and persists the run. Throws
+    /// <see cref="LlmUnavailableException"/> when the model cannot answer.
+    /// </summary>
     Task<IncidentAnalysisResult> AnalyseAsync(Guid incidentId, CancellationToken ct = default);
 }
 
@@ -24,9 +27,12 @@ public interface IIncidentAnalysisAgent
 /// <see cref="IncidentAnalysisResult"/>. The agent proposes only — it never
 /// writes the incident's severity in force. A coordinator approves that.
 ///
-/// A model failure is recovered by the rule engine and recorded. Any other
-/// failure marks the run <see cref="AgentRunStatus.Failed"/> and rethrows, so a
-/// run is never left "Running" and nothing is applied to the incident.
+/// The severity comes from the language model or not at all — no rule engine
+/// stands in for it. A model that is unconfigured, out of quota or unusable
+/// fails the run like any other error: the run is marked
+/// <see cref="AgentRunStatus.Failed"/> with the reason and the exception is
+/// rethrown, so a run is never left "Running" and nothing is applied to the
+/// incident. The coordinator sees that reason and grades the report by hand.
 /// </summary>
 public class IncidentAnalysisAgent(
     AppDbContext db,
@@ -39,7 +45,7 @@ public class IncidentAnalysisAgent(
 
     private readonly AnalysisPlannerAgent planner = new();
     private readonly EvidenceGatheringAgent evidenceAgent = new(tools, imageStorage);
-    private readonly SeverityAnalysisAgent severityAgent = new(llm, logger);
+    private readonly SeverityAnalysisAgent severityAgent = new(llm);
     private readonly ProposalValidationAgent validator = new();
 
     /// <summary>One plan step plus how it went; serialised to the run's PlanJson.</summary>
@@ -106,7 +112,7 @@ public class IncidentAnalysisAgent(
             });
             run.ToolCallsJson = JsonSerializer.Serialize(evidence.ToolCalls);
 
-            // ---- Step 2: Severity agent — model, with a deterministic floor ----
+            // ---- Step 2: Severity agent — the model, with nothing standing in for it ----
             var proposal = await RunStepAsync(run, traces, notes, 1, ct, async () =>
             {
                 var result = await severityAgent.ProposeAsync(input, evidence, ct);
@@ -118,20 +124,15 @@ public class IncidentAnalysisAgent(
             var accepted = await RunStepAsync(run, traces, notes, 2, ct, () =>
             {
                 var outcome = validator.Validate(proposal.Result);
-                if (outcome.Accepted)
+                if (!outcome.Accepted)
                 {
-                    return Task.FromResult((proposal with { Result = outcome.Result! },
-                        outcome.Adjustments.Count == 0 ? "accepted" : "accepted: " + string.Join("; ", outcome.Adjustments)));
+                    // An answer nobody can explain is no answer: the run fails with the reason.
+                    throw new LlmUnavailableException(
+                        $"The AI model's answer was rejected: {outcome.Rejection} Try again.");
                 }
 
-                // The model's answer is unusable; the rule engine takes over and the
-                // reason is recorded.
-                logger.LogWarning(
-                    "Proposal rejected for incident {Id}: {Reason}; using rule engine.",
-                    incident.Id, outcome.Rejection);
-                var fallback = SeverityAnalysisAgent.RuleEngine(input, evidence, outcome.Rejection!, proposal.Attempts);
-                return Task.FromResult((fallback with { Result = validator.Validate(fallback.Result).Result! },
-                    "rejected: " + outcome.Rejection + " — rule engine applied"));
+                return Task.FromResult((proposal with { Result = outcome.Result! },
+                    outcome.Adjustments.Count == 0 ? "accepted" : "accepted: " + string.Join("; ", outcome.Adjustments)));
             });
 
             var result = accepted.Result with
@@ -141,12 +142,10 @@ public class IncidentAnalysisAgent(
 
             // ---- Persist the proposal (never the severity in force) ----
             stopwatch.Stop();
-            run.Status = accepted.Status;
+            run.Status = AgentRunStatus.Succeeded;
             run.Model = accepted.Model;
             run.ModelAttempts = accepted.Attempts;
-            run.ErrorMessage = accepted.Error;
             run.OutputJson = JsonSerializer.Serialize(result, AnalysisJson.Options);
-            run.UsedFallback = result.UsedFallback;
             run.DurationMs = (int)stopwatch.ElapsedMilliseconds;
             run.CompletedAt = DateTime.UtcNow;
 
@@ -159,9 +158,8 @@ public class IncidentAnalysisAgent(
             await db.SaveChangesAsync(ct);
 
             logger.LogInformation(
-                "Incident {Id} analysed: {Severity} ({Score}/100){Fallback}",
-                incident.Id, result.Severity, result.SeverityScore,
-                result.UsedFallback ? " via rule engine" : string.Empty);
+                "Incident {Id} analysed: {Severity} ({Score}/100)",
+                incident.Id, result.Severity, result.SeverityScore);
 
             return result;
         }

@@ -30,7 +30,8 @@ export default function AgentActivity() {
   }, [])
 
   const succeeded = runs.filter((run) => run.status === 'Succeeded').length
-  const fallback = runs.filter((run) => run.usedFallback).length
+  // No rule engine stands in for the model, so a run it could not serve fails.
+  const failed = runs.filter((run) => run.status === 'Failed').length
   const approved = runs.filter((run) => run.approved).length
   const avgMs = runs.length
     ? Math.round(runs.reduce((sum, run) => sum + run.durationMs, 0) / runs.length)
@@ -50,9 +51,9 @@ export default function AgentActivity() {
           <p className="stat__hint">completed on the LLM</p>
         </article>
         <article className="stat stat--caution">
-          <p className="stat__label">Rule-engine fallback</p>
-          <p className="stat__value">{fallback}</p>
-          <p className="stat__hint">model unavailable</p>
+          <p className="stat__label">No AI result</p>
+          <p className="stat__value">{failed}</p>
+          <p className="stat__hint">failed — see the note</p>
         </article>
         <article className="stat">
           <p className="stat__label">Approved</p>
